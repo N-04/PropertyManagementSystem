@@ -1,19 +1,22 @@
+# 导入 DRF Response
 from rest_framework.response import Response
 
 
-def success_response(data=None, msg='success', code=200):
+# 成功响应
+class ResponseSuccess(Response):
 
-    return Response({
-        'code': code,
-        'msg': msg,
-        'data': data
-    })
+    def __init__(self, data=None, msg="success", code=200, status=200):
+
+        result = {"code": code, "msg": msg, "data": data}
+
+        super().__init__(data=result, status=status)
 
 
-def error_response(msg='error', code=400, errors=None):
+# 失败响应
+class ResponseError(Response):
 
-    return Response({
-        'code': code,
-        'msg': msg,
-        'errors': errors
-    })
+    def __init__(self, msg="error", code=500, status=200, data=None):
+
+        result = {"code": code, "msg": msg, "data": data}
+
+        super().__init__(data=result, status=status)

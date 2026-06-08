@@ -1,112 +1,167 @@
+from django.shortcuts import get_object_or_404
+from rest_framework.response import Response
+from common.response.response import ResponseSuccess, ResponseError
 from rest_framework.views import APIView
+
 from apps.users.models.role import Role
-
 from apps.users.serializers.role_serializer import RoleSerializer
-from apps.users.serializers.role_serializer import RoleSerializer
-from apps.users.services.role_service import RoleService
-
-from common.response.response import (
-    success_response,
-    error_response
-)
-
-from common.pagination.base_pagination import BasePagination
 
 
+# =====================================================
+# 新增角色
+# =====================================================
 class RoleCreateView(APIView):
 
     def post(self, request):
 
-        serializer = RoleSerializer(
-            data = request.data
+        # 获取角色名称
+        name = request.data.get("name")
+
+        # 获取角色编码
+        code = request.data.get("code")
+
+        # =====================================================
+        # 数据校验
+        # =====================================================
+
+        # 角色名称不能为空
+        if not name:
+
+            return Response({"code": 400, "msg": "角色名称不能为空"})
+
+        # 角色编码不能为空
+        if not code:
+
+            return Response({"code": 400, "msg": "角色编码不能为空"})
+
+        # =====================================================
+        # 判断角色编码是否存在
+        # =====================================================
+
+        if Role.objects.filter(code=code).exists():
+
+            return Response({"code": 400, "msg": "角色编码已存在"})
+
+        # =====================================================
+        # 创建角色
+        # =====================================================
+
+        Role.objects.create(
+            # 角色名称
+            name=name,
+            # 角色编码
+            code=code,
         )
 
-        if serializer.is_valid():
+        # =====================================================
+        # 返回结果
+        # =====================================================
 
-            role_obj = RoleService.create_role(
-                serializer
-            )
-
-            return success_response(
-                data = RoleSerializer(role_obj).data,
-                msg = '创建成功'
-            )
-
-        return error_response(
-            msg = '参数错误',
-            errors = serializer.errors
-        )
+        return Response({"code": 200, "msg": "创建成功"})
 
 
+# =====================================================
+# 角色列表
+# =====================================================
 class RoleListView(APIView):
 
     def get(self, request):
 
-        queryset = RoleService.get_role_list()
+        # 查询全部角色
+        roles = Role.objects.all()
 
-        paginator = BasePagination()
+        # 序列化
+        serializer = RoleSerializer(roles, many=True)
 
-        page_queryset = paginator.paginate_queryset(
-            queryset,
-            request
-        )
-
-        serializer = RoleSerializer(
-            page_queryset,
-            many = True
-        )
-
-        return paginator.get_paginated_response({
-            'code': 200,
-            'msg': 'success',
-            'data': serializer.data
-        })
+        # 返回结果
+        return Response({"code": 200, "data": serializer.data})
 
 
 class RoleDetailView(APIView):
 
     def get(self, request, pk):
 
-        role_obj = RoleService.get_role_by_id(pk)
+        role = get_object_or_404(Role, id=pk)
 
-        if not role_obj:
+        serializer = RoleSerializer(role)
 
-            return error_response(
-                code = 404,
-                msg='角色不存在'
-            )
+        return Response({"code": 200, "data": serializer.data})
 
-        return success_response(
-            data=RoleSerializer(role_obj).data
-        )
 
+# 编辑角色接口
 class RoleUpdateView(APIView):
 
+    # 修改角色
     def put(self, request, pk):
 
-        try:
-            role = Role.objects.get(pk=pk)
-        except Role.DoesNotExist:
+        # 获取角色对象
+        role = get_object_or_404(Role, id=pk)
 
-            return error_response(
-                msg='角色不存在'
-            )
+        # 序列化器
+        serializer = RoleSerializer(instance=role, data=request.data)
 
-        serializer = RoleSerializer(
-            role,
-            data=request.data
-        )
+        # 验证
+        serializer.is_valid(raise_exception=True)
 
-        if serializer.is_valid():
+        # 保存
+        serializer.save()
 
-            serializer.save()
+        return Response({"code": 200, "msg": "修改成功"})
 
-            return success_response(
-                data=serializer.data,
-                msg='更新成功'
-            )
 
-        return error_response(
-            msg='参数错误',
-            errors=serializer.errors
-        )
+# =====================================================
+# 删除角色
+# =====================================================
+
+
+class RoleDeleteView(APIView):
+
+    # 删除角色
+    def delete(self, request, pk):
+
+        # 获取角色对象
+        role = get_object_or_404(Role, id=pk)
+
+        # 删除
+        role.delete()
+
+        # 返回结果
+        return Response({"code": 200, "msg": "删除成功"})
+
+
+class RolePermissionAssignView(APIView):
+    """
+    角色分配权限
+    """
+
+    def post(self, request):
+
+        # ==================================
+        # 获取参数
+        # ==================================
+
+        role_id = request.data.get("role_id")
+
+        permission_ids = request.data.get("permission_ids", [])
+
+        # ==================================
+        # 查询角色
+        # ==================================
+
+        role = Role.objects.filter(id=role_id).first()
+
+        if not role:
+
+            return ResponseError(msg="角色不存在")
+
+        # ==================================
+        # 重新绑定权限
+        # ==================================
+
+        role.permissions.set(permission_ids)
+
+        # ==================================
+        # 返回结果
+        # ==================================
+
+        return ResponseSuccess(msg="授权成功")

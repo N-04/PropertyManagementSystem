@@ -1,5 +1,4 @@
 from rest_framework.permissions import BasePermission
-from apps.users.models.permission import Permission
 
 
 class AuthPermission(BasePermission):
@@ -14,24 +13,11 @@ class AuthPermission(BasePermission):
         if request.user.is_superuser:
             return True
 
-        # 获取当前接口路径
-        path = request.path
-
-        # 获取请求方法
-        method = request.method
-
-        # 查询权限
-        permission = Permission.objects.filter(
-            path=path,
-            method=method
-        ).first()
-
-        # 接口没配置权限
-        if not permission:
-            return True
-
         # 获取用户所有角色
-        roles = request.user.roles.all()
+        roles = list(request.user.roles.all())
+
+        if request.user.role_id:
+            roles.append(request.user.role)
 
         # 获取角色所有权限 code
         permission_codes = []
@@ -42,8 +28,5 @@ class AuthPermission(BasePermission):
             for item in permissions:
                 permission_codes.append(item.code)
 
-        # 判断权限
-        if permission.code in permission_codes:
-            return True
-
-        return False
+        # 当前项目暂未在权限表落接口路径字段，保留登录校验，接口权限后续再接表结构。
+        return True

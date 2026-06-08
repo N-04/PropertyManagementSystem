@@ -1,0 +1,42 @@
+# Black 配置
+[tool.black]
+
+# 每行最大长度
+line-length = 88
+
+# Python 版本
+target-version = ['py311']
+
+
+# isort 配置
+[tool.isort]
+
+# 使用 black 风格
+profile = "black"
+
+# 每行长度
+line_length = 88
+
+
+# Ruff 配置
+[tool.ruff]
+
+# 每行长度
+line-length = 88
+
+# Python 版本
+target-version = "py311"
+
+
+# Ruff 检查规则
+[tool.ruff.lint]
+
+select = [
+    "E",
+    "F",
+    "I"
+]
+
+ignore = [
+    "E501"
+]

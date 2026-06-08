@@ -1,25 +1,24 @@
 from django.urls import path
 
-from apps.users.views.role_view import *
+from apps.users.views.role_view import (
+    RoleCreateView,
+    RoleDeleteView,
+    RoleDetailView,
+    RoleListView,
+    RoleUpdateView,
+    RolePermissionAssignView,
+)
 
 urlpatterns = [
-
-    path(
-        'create/',
-        RoleCreateView.as_view()
-    ),
-
-    path(
-        'list/',
-        RoleListView.as_view()
-    ),
-
-    path(
-        'detail/<int:pk>/',
-        RoleDetailView.as_view()
-    ),
-    path(
-        'update/<int:pk>/',
-        RoleUpdateView.as_view()
-    )
+    # =====================================================
+    # 新增角色
+    # =====================================================
+    path("create/", RoleCreateView.as_view()),
+    path("list/", RoleListView.as_view()),
+    path("info/<int:pk>/", RoleDetailView.as_view()),
+    # 编辑角色
+    path("update/<int:pk>/", RoleUpdateView.as_view()),
+    # 删除角色
+    path("delete/<int:pk>/", RoleDeleteView.as_view()),
+    path("assign_permission/", RolePermissionAssignView.as_view()),
 ]

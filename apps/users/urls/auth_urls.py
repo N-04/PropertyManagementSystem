@@ -1,11 +1,40 @@
+# 导入 path
 from django.urls import path
 
-from apps.users.views.auth_view import LoginView
+# 导入 view
+from apps.users.views.auth_view import (
+    CaptchaView,
+    LoginView,
+    LogoutView,
+    PasswordResetView,
+    PhoneLoginView,
+    RegisterView,
+    SmsCodeView,
+)
 from apps.users.views.user_view import UserInfoView
 
-
 urlpatterns = [
-    path('login/', LoginView.as_view()),
+    # 图形验证码
+    path("captcha/", CaptchaView.as_view()),
 
-    path('userinfo/', UserInfoView.as_view()),
+    # 短信验证码
+    path("sms-code/", SmsCodeView.as_view()),
+
+    # 登录接口
+    path("login/", LoginView.as_view()),
+
+    # 手机号验证码登录
+    path("login/phone/", PhoneLoginView.as_view()),
+
+    # 退出登录
+    path("logout/", LogoutView.as_view()),
+
+    # 注册
+    path("register/", RegisterView.as_view()),
+
+    # 找回密码
+    path("password/reset/", PasswordResetView.as_view()),
+
+    # 当前用户信息
+    path("userinfo/", UserInfoView.as_view()),
 ]

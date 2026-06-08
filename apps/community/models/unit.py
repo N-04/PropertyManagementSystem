@@ -2,46 +2,27 @@ from django.db import models
 
 
 class Unit(models.Model):
+    """
+    单元
+    """
 
     building = models.ForeignKey(
-        'Building',
+        "Building",
         on_delete=models.CASCADE,
-        verbose_name='所属楼栋'
+        related_name="units",
+        verbose_name="所属楼栋",
     )
 
-    name = models.CharField(
-        '单元名称',
-        max_length=32
-    )
+    name = models.CharField(max_length=50, verbose_name="单元名称")
 
-    code = models.CharField(
-        '单元编码',
-        max_length=32
-    )
+    code = models.CharField(max_length=50, unique=True, verbose_name="单元编码")
 
-    floor_count = models.IntegerField(
-        '楼层数',
-        default=1
-    )
+    floor_count = models.IntegerField(default=0, verbose_name="楼层数")
 
-    house_count = models.IntegerField(
-        '房屋数量',
-        default=1
-    )
-
-    status = models.SmallIntegerField(
-        '状态',
-        default=1
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'unit'
-        verbose_name = '单元'
-        verbose_name_plural = verbose_name
+        db_table = "unit"
 
     def __str__(self):
         return self.name

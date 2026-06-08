@@ -1,137 +1,96 @@
+# =====================================================
+# 导入 DRF APIView
+# =====================================================
+
 from rest_framework.views import APIView
 
-from apps.users.serializers.permission_serializer import PermissionSerializer
-from apps.users.services.permission_service import PermissionService
+# =====================================================
+# 导入响应
+# =====================================================
 
-from common.pagination.base_pagination import BasePagination
-from common.response.response import error_response
-from common.response.response import success_response
+from rest_framework.response import Response
+
+# =====================================================
+# 导入权限模型
+# =====================================================
+
+from apps.users.models.permission import Permission
+
+# =====================================================
+# 导入序列化器
+# =====================================================
+
+from apps.users.serializers.permission_serializer import PermissionSerializer
+from common.response.response import ResponseSuccess
+
+# =====================================================
+# 权限列表
+# =====================================================
 
 
 class PermissionListView(APIView):
 
     def get(self, request):
 
-        queryset = PermissionService.get_permission_list(
-            request.GET
-        )
+        # 查询全部权限
+        queryset = Permission.objects.all()
 
-        paginator = BasePagination()
+        # 序列化
+        serializer = PermissionSerializer(queryset, many=True)
 
-        page_queryset = paginator.paginate_queryset(
-            queryset,
-            request
-        )
+        # 返回结果
+        return Response({"code": 200, "data": serializer.data})
 
-        serializer = PermissionSerializer(
-            page_queryset,
-            many=True
-        )
 
-        return paginator.get_paginated_response(
-            success_response(
-                data=serializer.data
-            ).data
-        )
+# =====================================================
+# 权限新增
+# =====================================================
+
+
 class PermissionCreateView(APIView):
 
     def post(self, request):
 
-        serializer = PermissionSerializer(
-            data=request.data
-        )
+        # 获取请求数据
+        serializer = PermissionSerializer(data=request.data)
 
+        # 验证数据
         if serializer.is_valid():
 
-            permission_obj = PermissionService.create_permission(
-                serializer
+            # 保存
+            serializer.save()
+
+            # 返回成功
+            return Response({"code": 200, "msg": "新增成功"})
+
+        # 返回错误
+        return Response({"code": 400, "msg": serializer.errors})
+
+
+class PermissionTreeView(APIView):
+    """
+    权限树接口
+    """
+
+    def get(self, request):
+
+        queryset = (
+            Permission.objects.select_related("menu")
+            .all()
+            .order_by("menu__sort", "name")
+        )
+
+        data = []
+
+        for item in queryset:
+
+            data.append(
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "code": item.code,
+                    "menu": item.menu.title if item.menu else "",
+                }
             )
 
-            return success_response(
-                data=PermissionSerializer(permission_obj).data,
-                msg='创建成功'
-            )
-
-        return error_response(
-            msg='参数错误',
-            errors=serializer.errors
-        )
-class PermissionDetailView(APIView):
-
-    def get(self, request, pk):
-
-        permission_obj = PermissionService.get_permission_by_id(
-            pk
-        )
-
-        if not permission_obj:
-
-            return error_response(
-                msg='权限不存在',
-                code=404
-            )
-
-        serializer = PermissionSerializer(
-            permission_obj
-        )
-
-        return success_response(
-            data=serializer.data
-        )
-class PermissionUpdateView(APIView):
-
-    def put(self, request, pk):
-
-        permission_obj = PermissionService.get_permission_by_id(
-            pk
-        )
-
-        if not permission_obj:
-
-            return error_response(
-                msg='权限不存在',
-                code=404
-            )
-
-        serializer = PermissionSerializer(
-            permission_obj,
-            data=request.data
-        )
-
-        if serializer.is_valid():
-
-            permission_obj = PermissionService.update_permission(
-                serializer
-            )
-
-            return success_response(
-                data=PermissionSerializer(permission_obj).data,
-                msg='更新成功'
-            )
-
-        return error_response(
-            msg='参数错误',
-            errors=serializer.errors
-        )
-class PermissionDeleteView(APIView):
-
-    def delete(self, request, pk):
-
-        permission_obj = PermissionService.get_permission_by_id(
-            pk
-        )
-
-        if not permission_obj:
-
-            return error_response(
-                msg='权限不存在',
-                code=404
-            )
-
-        PermissionService.delete_permission(
-            permission_obj
-        )
-
-        return success_response(
-            msg='删除成功'
-        )
+        return ResponseSuccess(data=data)

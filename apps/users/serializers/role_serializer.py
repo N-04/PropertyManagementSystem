@@ -2,24 +2,47 @@ from rest_framework import serializers
 
 from apps.users.models.role import Role
 from apps.users.models.permission import Permission
-from apps.users.models.menu import Menu
+
+
+class PermissionSimpleSerializer(serializers.ModelSerializer):
+    """
+    权限简易序列化器
+
+    用于角色详情展示
+    """
+
+    class Meta:
+        model = Permission
+
+        fields = [
+            "id",
+            "name",
+            "code",
+        ]
 
 
 class RoleSerializer(serializers.ModelSerializer):
+    """
+    角色序列化器
+    """
 
-    permissions = serializers.PrimaryKeyRelatedField(
-        queryset = Permission.objects.all(),
-        many = True,
-        required = False
-    )
-
-    menus = serializers.PrimaryKeyRelatedField(
-        queryset = Menu.objects.all(),
-        many = True,
-        required = False
+    # 角色拥有的权限
+    permissions = PermissionSimpleSerializer(
+        many=True,
+        read_only=True,
     )
 
     class Meta:
         model = Role
 
-        fields = '__all__'
+        fields = [
+            "id",
+            "name",
+            "code",
+            "permissions",
+            "created_at",
+        ]
+
+        read_only_fields = [
+            "created_at",
+        ]

@@ -2,46 +2,29 @@ from django.db import models
 
 
 class Building(models.Model):
+    """
+    楼栋
+    """
 
     community = models.ForeignKey(
-        'Community',
+        "Community",
         on_delete=models.CASCADE,
-        verbose_name='所属小区'
+        related_name="buildings",
+        verbose_name="所属小区",
     )
 
-    name = models.CharField(
-        '楼栋名称',
-        max_length=32
-    )
+    name = models.CharField(max_length=50, verbose_name="楼栋名称")
 
-    code = models.CharField(
-        '楼栋编码',
-        max_length=32
-    )
+    code = models.CharField(max_length=50, unique=True, verbose_name="楼栋编码")
 
-    floor_count = models.IntegerField(
-        '楼层数',
-        default=1
-    )
+    floor_count = models.IntegerField(default=0, verbose_name="总楼层")
 
-    unit_count = models.IntegerField(
-        '单元数',
-        default=1
-    )
+    unit_count = models.IntegerField(default=0, verbose_name="单元数")
 
-    status = models.SmallIntegerField(
-        '状态',
-        default=1
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'building'
-        verbose_name = '楼栋'
-        verbose_name_plural = verbose_name
+        db_table = "building"
 
     def __str__(self):
         return self.name

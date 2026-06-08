@@ -2,49 +2,40 @@ from django.db import models
 
 
 class Community(models.Model):
+    """
+    小区表
+    """
 
-    name = models.CharField(
-        '小区名称',
-        max_length=64
-    )
+    # 小区名称
+    name = models.CharField(max_length=100, unique=True, verbose_name="小区名称")
 
-    code = models.CharField(
-        '小区编码',
-        max_length=32,
-        unique=True
-    )
+    # 小区编码
+    code = models.CharField(max_length=50, unique=True, verbose_name="小区编码")
 
+    # 小区地址
     address = models.CharField(
-        '地址',
-        max_length=255
+        max_length=255, null=True, blank=True, verbose_name="小区地址"
     )
 
-    contact_person = models.CharField(
-        '联系人',
-        max_length=32,
-        null=True,
-        blank=True
+    # 联系人
+    contact_name = models.CharField(
+        max_length=50, null=True, blank=True, verbose_name="联系人"
     )
 
+    # 联系电话
     contact_phone = models.CharField(
-        '联系电话',
-        max_length=11,
-        null=True,
-        blank=True
+        max_length=20, null=True, blank=True, verbose_name="联系电话"
     )
 
-    status = models.SmallIntegerField(
-        '状态',
-        default=1
-    )
+    # 备注
+    remark = models.TextField(null=True, blank=True, verbose_name="备注")
 
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
+    # 创建时间
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
 
     class Meta:
-        db_table = 'community'
-        verbose_name = '小区'
+        db_table = "community"
+        verbose_name = "小区"
         verbose_name_plural = verbose_name
 
     def __str__(self):

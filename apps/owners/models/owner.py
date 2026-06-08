@@ -2,74 +2,94 @@ from django.db import models
 
 
 class Owner(models.Model):
+    """
+    业主
+    """
 
     house = models.ForeignKey(
-        'community.House',
+        "community.House",
         on_delete=models.CASCADE,
-        verbose_name='所属房屋'
+        related_name="owners",
+        verbose_name="所属房屋",
     )
 
     name = models.CharField(
-        '业主姓名',
-        max_length=32
+        max_length=50,
+        verbose_name="姓名",
     )
 
     phone = models.CharField(
-        '手机号',
-        max_length=11
+        max_length=20,
+        unique=True,
+        verbose_name="手机号",
     )
 
+    # 头像
+    avatar = models.ImageField(
+        upload_to="owner/", null=True, blank=True, verbose_name="头像"
+    )
+
+    relationship = models.CharField(
+        max_length=20,
+        choices=(
+            ("self", "本人"),
+            ("spouse", "配偶"),
+            ("child", "子女"),
+            ("parent", "父母"),
+            ("other", "其他"),
+        ),
+        default="self",
+        verbose_name="与主业主关系",
+    )
+
+    # 身份证号
     id_card = models.CharField(
-        '身份证号',
         max_length=18,
-        unique=True
+        unique=True,
+        verbose_name="身份证号",
     )
 
-    gender = models.SmallIntegerField(
-        '性别',
-        default=1
+    # 身份证照片
+    id_card_image = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="身份证照片",
+    )
+
+    gender = models.CharField(
+        max_length=10,
+        choices=(
+            ("male", "男"),
+            ("female", "女"),
+        ),
+        default="male",
+        verbose_name="性别",
     )
 
     birthday = models.DateField(
-        '出生日期',
         null=True,
-        blank=True
+        blank=True,
+        verbose_name="出生日期",
     )
 
-    address = models.CharField(
-        '联系地址',
-        max_length=255,
-        null=True,
-        blank=True
+    is_primary = models.BooleanField(
+        default=False,
+        verbose_name="是否主业主",
     )
 
-    emergency_contact = models.CharField(
-        '紧急联系人',
-        max_length=32,
+    remark = models.TextField(
         null=True,
-        blank=True
-    )
-
-    emergency_phone = models.CharField(
-        '紧急联系电话',
-        max_length=11,
-        null=True,
-        blank=True
-    )
-
-    status = models.SmallIntegerField(
-        '状态',
-        default=1
+        blank=True,
+        verbose_name="备注",
     )
 
     created_at = models.DateTimeField(
-        auto_now_add=True
+        auto_now_add=True,
     )
 
     class Meta:
-        db_table = 'owner'
-        verbose_name = '业主'
-        verbose_name_plural = verbose_name
+        db_table = "owner"
 
     def __str__(self):
         return self.name
