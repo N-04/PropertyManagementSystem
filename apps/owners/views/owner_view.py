@@ -1,3 +1,5 @@
+# 文件说明：处理 apps/owners/views/owner_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from django.db.migrations import serializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -89,10 +91,14 @@ class OwnerListView(APIView):
                 Q(name__icontains=keyword) | Q(phone__icontains=keyword)
             )
 
+        page = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 10))
         queryset = Owner.objects.all().order_by("-id")
+        start = (page - 1) * page_size
+        end = start + page_size
 
         serializer = OwnerSerializer(
-            queryset,
+            queryset[start:end],
             many=True,
         )
 

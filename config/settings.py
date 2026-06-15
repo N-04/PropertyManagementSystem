@@ -1,3 +1,5 @@
+# 文件说明：维护 Django 项目配置，包括应用、中间件、数据库、JWT 和缓存。
+
 """
 Django settings for config project.
 
@@ -60,6 +62,7 @@ INSTALLED_APPS = [
     "apps.logs",
     "apps.upload",
     "apps.visitors",
+    "apps.complaints",
     "django_extensions",
     "rest_framework",
     "corsheaders",

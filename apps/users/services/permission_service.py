@@ -1,3 +1,5 @@
+# 文件说明：封装 apps/users/services/permission_service.py 对应业务的可复用服务逻辑。
+
 from django.db.models import Q
 
 from apps.users.models.permission import Permission

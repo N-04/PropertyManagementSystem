@@ -1,3 +1,5 @@
+# 文件说明：配置 apps/cars/urls/cars_url.py 对应业务模块的接口路由。
+
 from django.urls import path
 
 from apps.cars.views import (
@@ -6,6 +8,8 @@ from apps.cars.views import (
     CarUpdateView,
     CarDeleteView,
     CarDetailView,
+    CarDisableView,
+    CarEnableView,
 )
 
 urlpatterns = [
@@ -29,5 +33,10 @@ urlpatterns = [
         "delete/<int:pk>/",
         CarDeleteView.as_view(),
     ),
+    # 车辆详情
     path("detail/<int:pk>/", CarDetailView.as_view()),
+    # 禁用车辆
+    path("disable/<int:pk>/", CarDisableView.as_view()),
+    # 启用车辆
+    path("enable/<int:pk>/", CarEnableView.as_view()),
 ]

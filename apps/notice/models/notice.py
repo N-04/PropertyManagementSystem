@@ -1,3 +1,5 @@
+# 文件说明：定义 apps/notice/models/notice.py 对应业务的数据模型和数据库映射。
+
 from django.db import models
 
 

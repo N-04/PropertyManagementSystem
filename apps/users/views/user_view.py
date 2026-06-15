@@ -1,3 +1,5 @@
+# 文件说明：处理 apps/users/views/user_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
@@ -9,9 +11,14 @@ from apps.users.models import Role
 from apps.users.models.menu import Menu
 from apps.users.models.user import User
 from apps.users.serializers.login_serializer import LoginSerializer
-from apps.users.serializers.menu_serializer import MenuSerializer
-from apps.users.serializers.user_serializer import UserAuditSerializer, UserSerializer
-from apps.users.utils.validators import mask_id_card
+from apps.users.serializers.user_serializer import (
+    CurrentUserPasswordSerializer,
+    CurrentUserProfileSerializer,
+    UserAuditSerializer,
+    UserInfoSerializer,
+    UserSerializer,
+)
+from apps.users.views.menu_view import _build_menu_tree, _get_user_menu_ids
 from common.pagination.page_pagination import CustomPageNumberPagination
 from common.response.response import ResponseError, ResponseSuccess
 from common.views.base_view import BaseView
@@ -242,27 +249,35 @@ class UserInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        serializer = UserInfoSerializer(request.user)
+        return ResponseSuccess(data=serializer.data)
 
-        user = request.user
-        roles = list(user.roles.values_list("name", flat=True))
-
-        if user.role_id and user.role.name not in roles:
-            roles.append(user.role.name)
-
-        return Response(
-            {
-                "code": 200,
-                "data": {
-                    "id": user.id,
-                    "username": user.username,
-                    "nickname": user.nickname,
-                    "avatar": user.avatar,
-                    "status": user.status,
-                    "id_card_masked": mask_id_card(user.id_card),
-                    "roles": roles,
-                },
-            }
+    def put(self, request):
+        serializer = CurrentUserProfileSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
         )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        return ResponseSuccess(data=UserInfoSerializer(user).data, msg="资料修改成功")
+
+
+class CurrentUserPasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        serializer = CurrentUserPasswordSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["password"])
+        request.user.save(update_fields=["password"])
+
+        return ResponseSuccess(msg="密码修改成功，请重新登录")
 
 
 class UserMenusView(BaseView):
@@ -270,20 +285,17 @@ class UserMenusView(BaseView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user_roles = list(request.user.roles.all())
+        menu_ids = _get_user_menu_ids(request.user)
 
-        if request.user.role_id:
-            user_roles.append(request.user.role)
+        root_menus = Menu.objects.filter(
+            parent__isnull=True,
+            id__in=menu_ids,
+            hidden=False,
+        ).order_by("sort", "id")
 
-        menus = (
-            Menu.objects.filter(roles__in=user_roles, parent=None)
-            .distinct()
-            .order_by("sort")
-        )
+        data = [_build_menu_tree(menu, menu_ids) for menu in root_menus]
 
-        serializer = MenuSerializer(menus, many=True)
-
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=data)
 
 
 class UserListView(APIView):
@@ -312,6 +324,14 @@ class UserAuditView(APIView):
         serializer = UserAuditSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        if serializer.validated_data["audit_status"] == "approved" and not user.roles.exists():
+            owner_role = Role.objects.filter(code="owner").first()
+
+            if owner_role:
+                user.role = owner_role
+                user.roles.set([owner_role])
+                user.save(update_fields=["role"])
 
         return ResponseSuccess(data=UserSerializer(user).data, msg="审核完成")
 

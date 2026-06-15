@@ -1,8 +1,12 @@
+# 文件说明：负责 apps/users/serializers/user_serializer.py 对应接口的数据序列化、反序列化和参数校验。
+
 from rest_framework import serializers
 
 from apps.users.models.user import User
 from apps.users.serializers.role_serializer import RoleSerializer
-from apps.users.utils.validators import mask_id_card
+from apps.users.utils.validators import mask_id_card, validate_password_strength, validate_phone_format
+from apps.users.utils.role_access import is_owner_user
+from apps.owners.models import Owner
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -22,6 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
             "id_card_masked",
             "roles",
             "status",
+            "is_active",
             "created_at",
         ]
 
@@ -48,6 +53,8 @@ class UserInfoSerializer(serializers.ModelSerializer):
     """当前登录用户信息序列化器。"""
 
     id_card_masked = serializers.SerializerMethodField()
+    roles = serializers.SerializerMethodField()
+    role_codes = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -55,14 +62,121 @@ class UserInfoSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+            "real_name",
+            "phone",
             "nickname",
             "avatar",
             "status",
             "id_card_masked",
+            "roles",
+            "role_codes",
         ]
 
     def get_id_card_masked(self, obj):
-        return mask_id_card(obj.id_card)
+        if obj.id_card:
+            return mask_id_card(obj.id_card)
+
+        if is_owner_user(obj) and obj.phone:
+            owner = Owner.objects.filter(phone=obj.phone).first()
+
+            if owner:
+                return mask_id_card(owner.id_card)
+
+        return ""
+
+    def get_roles(self, obj):
+        roles = list(obj.roles.values_list("name", flat=True))
+
+        if obj.role_id and obj.role.name not in roles:
+            roles.append(obj.role.name)
+
+        return roles
+
+    def get_role_codes(self, obj):
+        role_codes = list(obj.roles.values_list("code", flat=True))
+
+        if obj.role_id and obj.role.code not in role_codes:
+            role_codes.append(obj.role.code)
+
+        if obj.is_superuser and "super_admin" not in role_codes:
+            role_codes.append("super_admin")
+
+        return role_codes
+
+
+class CurrentUserProfileSerializer(serializers.Serializer):
+    """当前用户资料修改校验。"""
+
+    real_name = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    nickname = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    avatar = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+
+        phone = validate_phone_format(value)
+        user = self.context["request"].user
+
+        if User.objects.exclude(id=user.id).filter(phone=phone).exists():
+            raise serializers.ValidationError("手机号已被其他账号使用")
+
+        if is_owner_user(user):
+            owner_queryset = Owner.objects.filter(phone=user.phone)
+            owner_ids = list(owner_queryset.values_list("id", flat=True))
+
+            if Owner.objects.exclude(id__in=owner_ids).filter(phone=phone).exists():
+                raise serializers.ValidationError("手机号已被其他业主使用")
+
+        return phone
+
+    def update(self, instance, validated_data):
+        old_phone = instance.phone
+        owner_updates = {}
+
+        for field in ["real_name", "nickname", "phone", "avatar"]:
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+
+        if "real_name" in validated_data:
+            owner_updates["name"] = validated_data["real_name"]
+
+        if "phone" in validated_data and validated_data["phone"]:
+            owner_updates["phone"] = validated_data["phone"]
+
+        if "avatar" in validated_data:
+            owner_updates["avatar"] = validated_data["avatar"]
+
+        if validated_data:
+            instance.save(update_fields=list(validated_data.keys()))
+
+        if owner_updates and is_owner_user(instance):
+            Owner.objects.filter(phone=old_phone).update(**owner_updates)
+
+        return instance
+
+
+class CurrentUserPasswordSerializer(serializers.Serializer):
+    """当前用户修改密码校验。"""
+
+    old_password = serializers.CharField()
+    password = serializers.CharField()
+    confirm_password = serializers.CharField()
+
+    def validate_password(self, value):
+        return validate_password_strength(value)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if not user.check_password(attrs["old_password"]):
+            raise serializers.ValidationError("原密码不正确")
+
+        if attrs["password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError("两次密码不一致")
+
+        return attrs
 
 
 class UserAuditSerializer(serializers.Serializer):

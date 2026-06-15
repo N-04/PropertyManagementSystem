@@ -1,7 +1,11 @@
+# 文件说明：处理 apps/finance/views/fee_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from rest_framework.views import APIView
+from django.utils import timezone
 
 from apps.finance.models import Fee
 from apps.finance.serializers.fee_serializer import FeeSerializer
+from apps.users.utils.role_access import is_owner_user
 
 from common.response.response import (
     ResponseSuccess,
@@ -58,6 +62,9 @@ class FeeListView(APIView):
     def get(self, request):
 
         queryset = Fee.objects.all().order_by("-id")
+
+        if is_owner_user(request.user):
+            queryset = queryset.filter(owner__phone=request.user.phone)
 
         serializer = FeeSerializer(
             queryset,
@@ -129,9 +136,13 @@ class FeePayView(APIView):
         if not fee:
             return ResponseError(msg="账单不存在")
 
-        fee.status = "paid"
+        if is_owner_user(request.user) and fee.owner.phone != request.user.phone:
+            return ResponseError(msg="无权操作该账单")
 
-        fee.save()
+        fee.status = "paid"
+        fee.pay_time = timezone.now()
+
+        fee.save(update_fields=["status", "pay_time"])
 
         save_log(
             username="admin2",

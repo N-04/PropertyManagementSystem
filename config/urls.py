@@ -1,3 +1,5 @@
+# 文件说明：汇总项目根路由，把各业务模块接口挂载到统一 API 前缀下。
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -5,10 +7,6 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),  # 用户认证
-    path(
-        "api/auth/",
-        include("apps.users.urls.auth_urls"),
-    ),
     path("api/auth/", include("apps.users.urls.auth_urls")),
     path("api/menu/", include("apps.users.urls.menu_urls")),
     # 公告管理
@@ -64,6 +62,10 @@ urlpatterns = [
     path(
         "api/visitor/",
         include("apps.visitors.urls.visitor_url"),
+    ),
+    path(
+        "api/complaint/",
+        include("apps.complaints.urls.complaint_urls"),
     ),
 ]
 

@@ -1,3 +1,5 @@
+# 文件说明：配置 apps/parking/urls/parking_urls.py 对应业务模块的接口路由。
+
 from django.urls import path
 
 from apps.parking.views.parking_view import (

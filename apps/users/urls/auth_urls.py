@@ -1,3 +1,5 @@
+# 文件说明：配置 apps/users/urls/auth_urls.py 对应业务模块的接口路由。
+
 # 导入 path
 from django.urls import path
 

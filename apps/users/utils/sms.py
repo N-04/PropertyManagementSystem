@@ -1,9 +1,11 @@
+# 文件说明：封装 apps/users/utils/sms.py 中跨接口复用的工具函数。
+
 import random
 
 from django.core.cache import cache
 
-# 短信验证码有效期：10 分钟；重复发送冷却：60 秒。
-SMS_TTL = 600
+# 短信验证码有效期：5 分钟；重复发送冷却：60 秒。
+SMS_TTL = 300
 SMS_COOLDOWN = 60
 
 # 允许发送验证码的业务场景，防止前端随意传 purpose。

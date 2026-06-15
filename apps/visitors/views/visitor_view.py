@@ -1,8 +1,11 @@
+# 文件说明：处理 apps/visitors/views/visitor_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from rest_framework.views import APIView
 from apps.visitors.models.visitor import Visitor
 from common.response.response import ResponseSuccess, ResponseError
 from apps.visitors.serializers.visitor_serializer import VisitorSerializer
 from apps.logs.services.log_service import save_operation_log
+from django.utils import timezone
 
 
 class VisitorCreateView(APIView):
@@ -42,10 +45,14 @@ class VisitorListView(APIView):
 
     def get(self, request):
 
+        page = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 10))
         queryset = Visitor.objects.all().order_by("-id")
+        start = (page - 1) * page_size
+        end = start + page_size
 
         serializer = VisitorSerializer(
-            queryset,
+            queryset[start:end],
             many=True,
         )
 
@@ -127,3 +134,86 @@ class VisitorDetailView(APIView):
         serializer = VisitorSerializer(visitor)
 
         return ResponseSuccess(data=serializer.data)
+
+
+class VisitorApproveView(APIView):
+    """
+    访客审批
+    """
+
+    def put(self, request, pk):
+        """
+        更新访客审批结果
+        """
+
+        # 查询访客
+        visitor = Visitor.objects.filter(id=pk).first()
+
+        if not visitor:
+            return ResponseError(msg="访客不存在")
+
+        # 更新审批状态
+        visitor.status = request.data.get("status")
+
+        # 更新审批备注
+        visitor.approve_remark = request.data.get("approve_remark")
+
+        # 更新审批时间
+        visitor.approve_time = timezone.now()
+
+        # 更新审批人
+        visitor.approve_user = request.user
+
+        visitor.save()
+
+        return ResponseSuccess(msg="审批成功")
+
+
+class VisitorEnterView(APIView):
+    """
+    访客到访登记
+    """
+
+    def put(self, request, pk):
+
+        visitor = Visitor.objects.filter(id=pk).first()
+        visitor.status = "entered"
+        visitor.enter_time = timezone.now()
+        visitor.save()
+
+        if not visitor:
+            return ResponseError(msg="访客不存在")
+
+        # 必须审批通过才能登记
+        if visitor.status != "approved":
+            return ResponseError(msg="当前访客不能登记到访")
+
+        visitor.status = "entered"
+
+        visitor.save()
+
+        return ResponseSuccess(msg="登记成功")
+
+
+class VisitorLeaveView(APIView):
+    """
+    登记离开
+    """
+
+    def put(self, request, pk):
+
+        visitor = Visitor.objects.filter(id=pk).first()
+
+        if not visitor:
+            return ResponseError(msg="访客不存在")
+
+        if visitor.status != "entered":
+            return ResponseError(msg="访客未到访")
+
+        visitor.status = "left"
+
+        visitor.leave_time = timezone.now()
+
+        visitor.save()
+
+        return ResponseSuccess(msg="登记成功")

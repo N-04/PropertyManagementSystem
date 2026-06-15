@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# 文件说明：Django 项目命令入口，用于启动服务、迁移数据库和执行管理命令。
+
 """Django's command-line utility for administrative tasks."""
 import os
 import sys

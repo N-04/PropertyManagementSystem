@@ -1,3 +1,5 @@
+# 文件说明：封装接口列表分页返回格式。
+
 # 导入 DRF 分页类
 from rest_framework.pagination import PageNumberPagination
 

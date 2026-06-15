@@ -1,3 +1,5 @@
+# 文件说明：封装接口访问权限校验逻辑。
+
 from rest_framework.permissions import BasePermission
 
 

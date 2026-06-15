@@ -1,3 +1,5 @@
+# 文件说明：封装接口列表分页返回格式。
+
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 

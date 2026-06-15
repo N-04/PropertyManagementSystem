@@ -1,3 +1,5 @@
+# 文件说明：配置 apps/visitors/urls/visitor_url.py 对应业务模块的接口路由。
+
 from django.urls import path
 
 from apps.visitors.views.visitor_view import (
@@ -6,6 +8,9 @@ from apps.visitors.views.visitor_view import (
     VisitorUpdateView,
     VisitorDeleteView,
     VisitorDetailView,
+    VisitorApproveView,
+    VisitorEnterView,
+    VisitorLeaveView,
 )
 
 urlpatterns = [
@@ -28,5 +33,17 @@ urlpatterns = [
     path(
         "detail/<int:pk>/",
         VisitorDetailView.as_view(),
+    ),
+    path(
+        "approve/<int:pk>/",
+        VisitorApproveView.as_view(),
+    ),
+    path(
+        "enter/<int:pk>/",
+        VisitorEnterView.as_view(),
+    ),
+    path(
+        "leave/<int:pk>/",
+        VisitorLeaveView.as_view(),
     ),
 ]

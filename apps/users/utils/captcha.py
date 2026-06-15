@@ -1,3 +1,5 @@
+# 文件说明：封装 apps/users/utils/captcha.py 中跨接口复用的工具函数。
+
 import base64
 import random
 import string

@@ -1,3 +1,5 @@
+# 文件说明：处理 apps/users/views/auth_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from django.conf import settings
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
@@ -26,12 +28,21 @@ def _build_token_data(user):
     refresh token 用于后续刷新 token 或退出登录时加入黑名单。
     """
     refresh = RefreshToken.for_user(user)
+    role_codes = list(user.roles.values_list("code", flat=True))
+
+    if user.role_id and user.role.code not in role_codes:
+        role_codes.insert(0, user.role.code)
+
+    if user.is_superuser and not role_codes:
+        role_codes = ["super_admin"]
 
     return {
         "token": str(refresh.access_token),
         "refresh": str(refresh),
         "username": user.username,
         "phone": user.phone,
+        "role": role_codes[0] if role_codes else "",
+        "roles": role_codes,
     }
 
 
@@ -43,7 +54,7 @@ def _ensure_user_can_login(user):
     普通用户需要同时满足 is_active=True 和 status=1。
     """
     if not user:
-        return "用户名或密码错误"
+        return "账号不存在或密码错误"
 
     if user.is_superuser:
         return None
@@ -133,26 +144,17 @@ class LoginView(APIView):
         if login_error:
             return ResponseError(msg=login_error)
 
-        # ======================
-        # 登录日志
-        # ======================
-        # 导入登录日志模型
-        from apps.logs.models import LoginLog
-
-        # 记录登录日志
-        LoginLog.objects.create(
-            username=user.username,
-            ip=request.META.get("REMOTE_ADDR"),
-        )
-        # 生成 token
-
-        refresh = RefreshToken.for_user(user)
-
         # Django 的 authenticate 仍然用 username 字段验证密码。
         auth_user = authenticate(username=user.username, password=password)
 
         if not auth_user:
-            return ResponseError(msg="用户名或密码错误")
+            return ResponseError(msg="账号不存在或密码错误")
+
+        # 密码验证成功后再记录登录日志，避免失败密码也被记成成功登录。
+        LoginLog.objects.create(
+            username=auth_user.username,
+            ip=request.META.get("REMOTE_ADDR"),
+        )
 
         return ResponseSuccess(data=_build_token_data(auth_user), msg="登录成功")
 
@@ -177,6 +179,11 @@ class PhoneLoginView(APIView):
         if login_error:
             return ResponseError(msg=login_error)
 
+        LoginLog.objects.create(
+            username=user.username,
+            ip=request.META.get("REMOTE_ADDR"),
+        )
+
         return ResponseSuccess(data=_build_token_data(user), msg="登录成功")
 
 
@@ -192,17 +199,38 @@ class RegisterView(APIView):
     permission_classes = []
 
     def post(self, request):
+
+        print("注册请求数据：", request.data)
+
         serializer = RegisterSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+
+        if not serializer.is_valid():
+
+            print("注册参数错误：", serializer.errors)
+
+            return ResponseError(
+                msg="注册失败",
+                data=serializer.errors,
+            )
+
+        serializer.save()
 
         return ResponseSuccess(
-            data={
-                "id": user.id,
-                "phone": user.phone,
-            },
-            msg="注册提交成功，请等待管理员审核",
+            msg="注册成功，请等待管理员审核",
+            data=serializer.data,
         )
+
+        # serializer = RegisterSerializer(data=request.data)
+        # serializer.is_valid(raise_exception=True)
+        # user = serializer.save()
+        #
+        # return ResponseSuccess(
+        #     data={
+        #         "id": user.id,
+        #         "phone": user.phone,
+        #     },
+        #     msg="注册提交成功，请等待管理员审核",
+        # )
 
 
 class PasswordResetView(APIView):

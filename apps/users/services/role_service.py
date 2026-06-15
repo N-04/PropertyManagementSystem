@@ -1,3 +1,5 @@
+# 文件说明：封装 apps/users/services/role_service.py 对应业务的可复用服务逻辑。
+
 from apps.users.models.role import Role
 
 

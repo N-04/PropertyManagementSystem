@@ -1,3 +1,5 @@
+# 文件说明：处理 apps/cars/views/cars_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from django.db.models import Q
 from rest_framework.views import APIView
 
@@ -151,3 +153,42 @@ class CarDetailView(APIView):
         serializer = CarSerializer(instance)
 
         return ResponseSuccess(data=serializer.data)
+
+
+class CarDisableView(APIView):
+    """
+    禁用车辆
+    """
+
+    def put(self, request, pk):
+        # 根据主键查询车辆
+        car = Car.objects.filter(id=pk).first()
+
+        # 判断车辆是否存在
+        if not car:
+            return ResponseError(msg="车辆不存在")
+
+        # 修改车辆状态为禁用
+        car.status = "disabled"
+        car.save()
+
+        # 返回成功结果
+        return ResponseSuccess(msg="禁用成功")
+
+
+class CarEnableView(APIView):
+    """
+    启用车辆
+    """
+
+    def put(self, request, pk):
+        car = Car.objects.filter(id=pk).first()
+
+        if not car:
+            return ResponseError(msg="车辆不存在")
+
+        # 修改车辆状态为启用
+        car.status = "enabled"
+        car.save()
+
+        return ResponseSuccess(msg="启用成功")

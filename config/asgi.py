@@ -1,3 +1,5 @@
+# 文件说明：Django 项目运行配置文件。
+
 """
 ASGI config for config project.
 

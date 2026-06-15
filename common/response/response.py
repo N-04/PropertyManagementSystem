@@ -1,3 +1,5 @@
+# 文件说明：封装统一接口响应格式。
+
 # 导入 DRF Response
 from rest_framework.response import Response
 

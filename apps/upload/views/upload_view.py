@@ -1,6 +1,10 @@
+# 文件说明：处理 apps/upload/views/upload_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 import os
 
 import uuid
+
+from django.conf import settings
 
 from PIL import Image
 
@@ -31,27 +35,33 @@ class UploadView(APIView):
         if not file:
             return ResponseError(msg="请选择文件")
 
-        # 保存目录
-
         ext = os.path.splitext(file.name)[1]
+        image_types = {"avatar", "id_card", "repair_image", "image"}
+        image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+        if upload_type in image_types:
+            if ext.lower() not in image_exts or not file.content_type.startswith("image/"):
+                return ResponseError(msg="只能上传 jpg、png、gif、webp 图片")
 
         filename = f"{uuid.uuid4().hex}{ext}"
 
-        save_path = os.path.join(
-            "media",
+        save_dir = os.path.join(
+            settings.MEDIA_ROOT,
             "upload",
-            filename,
         )
+        os.makedirs(save_dir, exist_ok=True)
 
-        # 身份证才加水印
+        save_path = os.path.join(save_dir, filename)
+
+        # 先写入文件，再按上传类型做后处理。
+        with open(save_path, "wb+") as f:
+
+            for chunk in file.chunks():
+                f.write(chunk)
 
         if upload_type == "id_card":
 
             try:
-                from PIL import Image
-                from PIL import ImageDraw
-                from PIL import ImageFont
-
                 image = Image.open(save_path)
 
                 if image.mode != "RGBA":
@@ -93,10 +103,4 @@ class UploadView(APIView):
             except Exception as e:
                 print("水印失败：", e)
 
-        # 写入文件
-        with open(save_path, "wb+") as f:
-
-            for chunk in file.chunks():
-                f.write(chunk)
-
-        return ResponseSuccess(data={"url": f"/media/upload/{filename}"})
+        return ResponseSuccess(data={"url": f"{settings.MEDIA_URL}upload/{filename}"})

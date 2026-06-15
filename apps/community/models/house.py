@@ -1,3 +1,5 @@
+# 文件说明：定义 apps/community/models/house.py 对应业务的数据模型和数据库映射。
+
 from django.db import models
 
 
@@ -41,6 +43,12 @@ class House(models.Model):
 
     class Meta:
         db_table = "house"
+        # 增加联合唯一约束，避免同一单元下出现重复房号
+        constraints = [
+            models.UniqueConstraint(
+                fields=["unit", "room_no"], name="unique_room_per_unit"
+            )
+        ]
 
     def __str__(self):
         return self.room_no

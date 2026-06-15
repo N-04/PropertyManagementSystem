@@ -1,8 +1,11 @@
+# 文件说明：处理 apps/users/views/role_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from common.response.response import ResponseSuccess, ResponseError
 from rest_framework.views import APIView
 
+from apps.users.models.permission import Permission
 from apps.users.models.role import Role
 from apps.users.serializers.role_serializer import RoleSerializer
 
@@ -144,6 +147,9 @@ class RolePermissionAssignView(APIView):
 
         permission_ids = request.data.get("permission_ids", [])
 
+        if not isinstance(permission_ids, list):
+            return ResponseError(msg="permission_ids 必须是数组")
+
         # ==================================
         # 查询角色
         # ==================================
@@ -158,10 +164,32 @@ class RolePermissionAssignView(APIView):
         # 重新绑定权限
         # ==================================
 
-        role.permissions.set(permission_ids)
+        try:
+            permission_ids = [int(item) for item in permission_ids]
+        except (TypeError, ValueError):
+            return ResponseError(msg="权限ID必须是数字")
+
+        permissions = Permission.objects.filter(id__in=permission_ids)
+        existing_ids = set(permissions.values_list("id", flat=True))
+        invalid_ids = sorted(set(permission_ids) - existing_ids)
+
+        if invalid_ids:
+            return ResponseError(msg=f"权限不存在：{invalid_ids}")
+
+        role.permissions.set(permissions)
 
         # ==================================
         # 返回结果
         # ==================================
 
-        return ResponseSuccess(msg="授权成功")
+        return ResponseSuccess(
+            data={
+                "role_id": role.id,
+                "permission_ids": sorted(existing_ids),
+            },
+            msg="授权成功",
+        )
+
+    def put(self, request):
+        # 前端保存角色时可用 PUT 或 POST，统一复用同一套授权逻辑。
+        return self.post(request)

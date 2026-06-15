@@ -1,7 +1,10 @@
+# 文件说明：处理 apps/parking/views/parking_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 from rest_framework.views import APIView
 
 from apps.parking.models import Parking
 from apps.parking.serializers.parking_serializer import ParkingSerializer
+from apps.users.utils.role_access import is_owner_user
 
 from common.response.response import (
     ResponseSuccess,
@@ -47,10 +50,17 @@ class ParkingListView(APIView):
 
     def get(self, request):
 
+        page = int(request.GET.get("page", 1))
+        page_size = int(request.GET.get("page_size", 10))
         queryset = Parking.objects.all().order_by("-id")
 
+        if is_owner_user(request.user):
+            queryset = queryset.filter(owner__phone=request.user.phone)
+        start = (page - 1) * page_size
+        end = start + page_size
+
         serializer = ParkingSerializer(
-            queryset,
+            queryset[start:end],
             many=True,
         )
 

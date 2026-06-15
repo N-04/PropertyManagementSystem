@@ -1,3 +1,5 @@
+# 文件说明：封装 apps/logs/services/log_service.py 对应业务的可复用服务逻辑。
+
 # 操作日志模型
 from apps.logs.models import OperationLog
 

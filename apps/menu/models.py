@@ -1,3 +1,5 @@
+# 文件说明：社区物业管理系统后端源码文件：apps/menu/models.py。
+
 from django.db import models
 
 

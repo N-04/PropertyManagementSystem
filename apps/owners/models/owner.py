@@ -1,3 +1,5 @@
+# 文件说明：定义 apps/owners/models/owner.py 对应业务的数据模型和数据库映射。
+
 from django.db import models
 
 
@@ -21,6 +23,7 @@ class Owner(models.Model):
     phone = models.CharField(
         max_length=20,
         unique=True,
+        db_index=True,
         verbose_name="手机号",
     )
 
@@ -46,6 +49,7 @@ class Owner(models.Model):
     id_card = models.CharField(
         max_length=18,
         unique=True,
+        db_index=True,
         verbose_name="身份证号",
     )
 
@@ -83,6 +87,8 @@ class Owner(models.Model):
         blank=True,
         verbose_name="备注",
     )
+
+    status = models.CharField(max_length=20, default="pending")
 
     created_at = models.DateTimeField(
         auto_now_add=True,

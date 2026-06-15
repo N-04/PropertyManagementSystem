@@ -1,3 +1,5 @@
+# 文件说明：处理 apps/users/views/permission_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
+
 # =====================================================
 # 导入 DRF APIView
 # =====================================================
@@ -89,6 +91,7 @@ class PermissionTreeView(APIView):
                     "id": item.id,
                     "name": item.name,
                     "code": item.code,
+                    "menu_id": item.menu_id,
                     "menu": item.menu.title if item.menu else "",
                 }
             )

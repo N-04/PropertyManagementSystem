@@ -1,3 +1,5 @@
+# 文件说明：负责 apps/users/serializers/user_create_serializer.py 对应接口的数据序列化、反序列化和参数校验。
+
 from rest_framework import serializers
 from apps.users.serializers.role_serializer import RoleSerializer
 from apps.users.models.user import User
