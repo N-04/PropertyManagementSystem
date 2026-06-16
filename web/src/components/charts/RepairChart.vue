@@ -1,76 +1,93 @@
-<!-- 文件说明：封装可复用前端组件。 -->
+<!-- 文件说明：报修统计图表，在首页按角色展示工单状态数量。 -->
 <script setup lang="ts">
-// 引入 ECharts
 import * as echarts from 'echarts'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-// Vue生命周期
-import { onMounted, ref } from 'vue'
+type DashboardData = {
+    repair_pending: number
+    repair_processing: number
+    repair_finished: number
+}
 
-// Dashboard接口
-import { getDashboard } from '@/api/dashboard'
+const props = defineProps<{
+    dashboardData: DashboardData
+}>()
 
-// 图表DOM对象
-const chartRef = ref()
+const chartRef = ref<HTMLElement>()
+let chart: echarts.ECharts | null = null
 
-// 页面加载完成执行
-onMounted(async () => {
-    // 获取Dashboard统计数据
-    const res = await getDashboard()
+const renderChart = () => {
+    if (!chartRef.value) {
+        return
+    }
 
-    // 后端返回数据
-    const data = res.data.data
+    if (!chart) {
+        chart = echarts.init(chartRef.value)
+    }
 
-    // 初始化图表
-    const chart = echarts.init(chartRef.value)
-
-    // 设置图表配置
     chart.setOption({
-        // 标题
         title: {
             text: '报修统计',
             left: 'center',
         },
-
-        // 鼠标提示
         tooltip: {
             trigger: 'item',
+            formatter: '{b}: {c} 单 ({d}%)',
         },
-
-        // 图例
         legend: {
             bottom: '0%',
         },
-
-        // 饼图数据
         series: [
             {
-                // 图表类型
                 type: 'pie',
-
-                radius: '60%',
-
-                // 数据来源
+                radius: '58%',
+                label: {
+                    show: true,
+                    formatter: '{b}\n{c} 单',
+                },
                 data: [
                     {
-                        value: data.repair_pending,
+                        value: Number(props.dashboardData.repair_pending || 0),
                         name: '待派单',
                     },
                     {
-                        value: data.repair_processing,
+                        value: Number(props.dashboardData.repair_processing || 0),
                         name: '进行中',
                     },
                     {
-                        value: data.repair_finished,
+                        value: Number(props.dashboardData.repair_finished || 0),
                         name: '已完成',
                     },
                 ],
             },
         ],
     })
+}
+
+const resizeChart = () => {
+    chart?.resize()
+}
+
+onMounted(() => {
+    nextTick(renderChart)
+    window.addEventListener('resize', resizeChart)
+})
+
+watch(() => props.dashboardData, renderChart, { deep: true })
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', resizeChart)
+    chart?.dispose()
+    chart = null
 })
 </script>
 
 <template>
-    <!-- 图表容器 -->
-    <div ref="chartRef" style="height: 400px" />
+    <div ref="chartRef" class="chart-container" />
 </template>
+
+<style scoped>
+.chart-container {
+    height: 400px;
+}
+</style>

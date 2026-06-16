@@ -10,6 +10,7 @@ import {
     sendChatMessage,
     updateChatConversationStatus,
 } from '@/api/chat'
+import { clearAuthState, getStoredRefresh, getStoredUsername } from '@/utils/authState'
 
 type Conversation = {
     id: number
@@ -20,6 +21,12 @@ type Conversation = {
     created_by_real_name?: string
     participant_names?: string[]
     status: 'active' | 'resolved' | 'closed'
+    end_reason?: 'manual' | 'timeout' | null
+    end_reason_text?: string
+    ended_at?: string
+    rating_score?: number | string | null
+    rating_comment?: string | null
+    rating_at?: string | null
     last_message?: string
     messages?: ChatMessage[]
     created_at?: string
@@ -37,7 +44,7 @@ type ChatMessage = {
 }
 
 const router = useRouter()
-const username = localStorage.getItem('username') || '客服'
+const username = getStoredUsername() || '客服'
 const conversations = ref<Conversation[]>([])
 const activeId = ref<number | null>(null)
 const loading = ref(false)
@@ -61,6 +68,10 @@ const statusTypeMap: Record<string, 'warning' | 'primary' | 'success' | 'info'> 
 
 const activeConversation = computed(() => {
     return conversations.value.find((item) => item.id === activeId.value) || null
+})
+
+const activeConversationEnded = computed(() => {
+    return Boolean(activeConversation.value && activeConversation.value.status !== 'active')
 })
 
 const filteredConversations = computed(() => {
@@ -97,8 +108,12 @@ const chatMessages = computed<ChatMessage[]>(() => {
     }))
 })
 
-const loadConversations = async () => {
-    loading.value = true
+const loadConversations = async (options: { silent?: boolean } = {}) => {
+    const { silent = false } = options
+
+    if (!silent) {
+        loading.value = true
+    }
 
     try {
         const res = await getChatConversationList({})
@@ -112,7 +127,9 @@ const loadConversations = async () => {
             activeId.value = conversations.value[0]?.id || null
         }
     } finally {
-        loading.value = false
+        if (!silent) {
+            loading.value = false
+        }
     }
 }
 
@@ -120,6 +137,11 @@ const appendServiceMessage = async (content: string, status?: 'active' | 'resolv
     const current = activeConversation.value
 
     if (!current || !content.trim()) {
+        return
+    }
+
+    if (current.status !== 'active') {
+        ElMessage.warning('会话已结束，不能继续发送消息')
         return
     }
 
@@ -143,7 +165,7 @@ const appendServiceMessage = async (content: string, status?: 'active' | 'resolv
         }
 
         replyText.value = ''
-        await loadConversations()
+        await loadConversations({ silent: true })
     } finally {
         sending.value = false
     }
@@ -162,24 +184,22 @@ const markDone = () => {
 }
 
 const handleLogout = async () => {
-    const refresh = localStorage.getItem('refresh') || ''
+    const refresh = getStoredRefresh()
 
     try {
         await logoutApi(refresh)
     } finally {
-        localStorage.removeItem('token')
-        localStorage.removeItem('refresh')
-        localStorage.removeItem('username')
-        localStorage.removeItem('role')
-        localStorage.removeItem('permissions')
-        localStorage.removeItem('userInfo')
+        clearAuthState()
         router.push('/login')
     }
 }
 
 onMounted(() => {
     loadConversations()
-    refreshTimer = setInterval(loadConversations, 15000)
+    // 客服工作台保持轮询刷新，让新会话和新消息能自动进入当前列表。
+    refreshTimer = setInterval(() => {
+        loadConversations({ silent: true })
+    }, 8000)
 })
 
 onBeforeUnmount(() => {
@@ -201,7 +221,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="header-actions">
-                <el-button :icon="Refresh" :loading="loading" @click="loadConversations">刷新</el-button>
+                <el-button :icon="Refresh" :loading="loading" @click="loadConversations()">刷新</el-button>
                 <el-button :icon="SwitchButton" type="primary" plain @click="handleLogout">退出登录</el-button>
             </div>
         </header>
@@ -267,12 +287,31 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div class="channel-row">
-                        <el-button :icon="ChatDotRound" @click="transferTo('业主')">业主</el-button>
-                        <el-button @click="transferTo('财务人员')">财务</el-button>
-                        <el-button @click="transferTo('维修员')">维修</el-button>
-                        <el-button @click="transferTo('管理员')">管理员</el-button>
-                        <el-button :icon="Finished" type="success" plain @click="markDone">完成</el-button>
+                        <el-button :icon="ChatDotRound" :disabled="activeConversationEnded" @click="transferTo('业主')">
+                            业主
+                        </el-button>
+                        <el-button :disabled="activeConversationEnded" @click="transferTo('财务人员')">财务</el-button>
+                        <el-button :disabled="activeConversationEnded" @click="transferTo('维修员')">维修</el-button>
+                        <el-button :disabled="activeConversationEnded" @click="transferTo('管理员')">管理员</el-button>
+                        <el-button
+                            :icon="Finished"
+                            type="success"
+                            plain
+                            :disabled="activeConversationEnded"
+                            @click="markDone"
+                        >
+                            完成
+                        </el-button>
                     </div>
+
+                    <el-alert
+                        v-if="activeConversationEnded"
+                        class="ended-alert"
+                        type="warning"
+                        :closable="false"
+                        :title="activeConversation.end_reason === 'timeout' ? '会话已超时结束' : '会话已结束'"
+                        :description="activeConversation.rating_score ? `用户评分：${activeConversation.rating_score} 分` : '等待会话发起人评分。'"
+                    />
 
                     <div class="message-list">
                         <div
@@ -301,10 +340,13 @@ onBeforeUnmount(() => {
                             :rows="3"
                             maxlength="500"
                             show-word-limit
-                            placeholder="输入回复内容"
+                            :disabled="activeConversationEnded"
+                            :placeholder="activeConversationEnded ? '会话已结束，不能继续发送消息' : '输入回复内容'"
                             @keyup.enter.exact.prevent="sendReply"
                         />
-                        <el-button type="primary" :loading="sending" @click="sendReply">发送</el-button>
+                        <el-button type="primary" :loading="sending" :disabled="activeConversationEnded" @click="sendReply">
+                            发送
+                        </el-button>
                     </div>
                 </template>
 
@@ -445,6 +487,10 @@ onBeforeUnmount(() => {
     display: flex;
     gap: 10px;
     border-bottom: 1px solid #dfe5ee;
+}
+
+.ended-alert {
+    margin: 12px 0 0;
 }
 
 .message-list {

@@ -5,8 +5,22 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.users.models.menu import Menu
 from apps.users.serializers.menu_serializer import MenuSerializer
+from apps.users.utils.role_access import has_any_role
 from common.response.response import ResponseError, ResponseSuccess
 from rest_framework.response import Response
+
+
+RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
+
+
+def _can_manage_rbac(user):
+    """RBAC 菜单管理只允许管理员角色访问，避免普通角色绕过前端直接调用。"""
+
+    return has_any_role(user, *RBAC_MANAGE_ROLES) or getattr(user, "is_superuser", False)
+
+
+def _rbac_forbidden_response():
+    return ResponseError(msg="无权访问权限管理")
 
 
 def _with_parent_menu_ids(menu_ids):
@@ -77,8 +91,11 @@ def _build_menu_tree(menu, menu_ids):
 
 
 class MenuCreateView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         serializer = MenuSerializer(data=request.data)
 
@@ -92,8 +109,11 @@ class MenuCreateView(APIView):
 
 
 class MenuListView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         queryset = Menu.objects.all().order_by("sort", "id")
 

@@ -87,11 +87,11 @@ const filterMenuChildrenByRule = (menus: AppMenuItem[], rule: RoleMenuRule): App
 }
 
 export function filterMenusByRole(menus: AppMenuItem[], role: string): AppMenuItem[] {
-    if (!role) {
-        return menus
-    }
+    const rule = roleMenuMap[role]
 
-    const rule = roleMenuMap[role] ?? adminMenuRule
+    if (!rule) {
+        return []
+    }
 
     return filterMenuChildrenByRule(menus, rule)
 }
@@ -180,6 +180,7 @@ const adminDisplayMenus = (menus: AppMenuItem[], role: string): AppMenuItem[] =>
     return [
         leafMenu('role-user-list', '用户列表', '/user/list'),
         leafMenu('role-role-list', '角色列表', '/role/list'),
+        leafMenu('role-visitor-list', '访客列表', '/visitor/list'),
         leafMenu('role-repair-list', '报修列表', '/repair/list'),
         leafMenu('role-permission-list', '权限管理', '/permission/list'),
         adminModule,
@@ -206,7 +207,6 @@ export function buildDisplayMenusByRole(menus: AppMenuItem[], role: string): App
         return [
             leafMenu('role-repair-list', '报修列表', '/repair/list'),
             noticePublishMenu(),
-            contactServiceMenu(),
         ]
     }
 
@@ -219,7 +219,6 @@ export function buildDisplayMenusByRole(menus: AppMenuItem[], role: string): App
         return [
             financeMenu,
             noticePublishMenu(),
-            contactServiceMenu(),
         ]
     }
 

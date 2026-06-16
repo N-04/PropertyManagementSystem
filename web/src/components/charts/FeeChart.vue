@@ -1,79 +1,95 @@
-<!-- 文件说明：封装可复用前端组件。 -->
+<!-- 文件说明：费用统计图表，在首页按角色展示已缴费和未缴费金额。 -->
 <script setup lang="ts">
-// 引入 ECharts
 import * as echarts from 'echarts'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-// Vue生命周期
-import { onMounted, ref } from 'vue'
+type DashboardData = {
+    fee_total: number
+    fee_paid: number
+    fee_unpaid: number
+}
 
-// Dashboard接口
-import { getDashboard } from '@/api/dashboard'
+const props = defineProps<{
+    dashboardData: DashboardData
+}>()
 
-// 图表DOM对象
-const chartRef = ref()
+const chartRef = ref<HTMLElement>()
+let chart: echarts.ECharts | null = null
 
-// 页面加载完成执行
-onMounted(async () => {
-    // 获取Dashboard统计数据
-    const res = await getDashboard()
+const moneyText = (value: number) => `¥ ${Number(value || 0).toFixed(2)}`
 
-    // 后端返回数据
-    const data = res.data.data
+const renderChart = () => {
+    if (!chartRef.value) {
+        return
+    }
 
-    // 初始化图表
-    const chart = echarts.init(chartRef.value)
+    if (!chart) {
+        chart = echarts.init(chartRef.value)
+    }
 
-    // 设置图表配置
+    const paid = Number(props.dashboardData.fee_paid || 0)
+    const unpaid = Number(props.dashboardData.fee_unpaid || 0)
+
     chart.setOption({
-        // 标题
         title: {
-            text: '缴费统计',
+            text: '费用统计',
+            subtext: `总额 ${moneyText(props.dashboardData.fee_total)}`,
             left: 'center',
         },
-
-        // 鼠标提示
         tooltip: {
             trigger: 'item',
+            formatter: (params: any) => `${params.name}: ${moneyText(params.value)} (${params.percent}%)`,
         },
-
-        // 图例
         legend: {
             bottom: '0%',
         },
-
-        // 饼图数据
         series: [
             {
-                // 图表类型
                 type: 'pie',
-
-                // 饼图大小
-                radius: '60%',
-
-                // 数据来源
+                radius: '58%',
+                label: {
+                    show: true,
+                    formatter: (params: any) => `${params.name}\n${moneyText(params.value)}`,
+                },
                 data: [
                     {
-                        // 已缴费数量
-                        value: data.paid_count,
-
-                        // 名称
-                        name: '已缴费',
+                        value: paid,
+                        name: '已缴费金额',
                     },
                     {
-                        // 未缴费数量
-                        value: data.unpaid_count,
-
-                        // 名称
-                        name: '未缴费',
+                        value: unpaid,
+                        name: '未缴费金额',
                     },
                 ],
             },
         ],
     })
+}
+
+const resizeChart = () => {
+    chart?.resize()
+}
+
+onMounted(() => {
+    nextTick(renderChart)
+    window.addEventListener('resize', resizeChart)
+})
+
+watch(() => props.dashboardData, renderChart, { deep: true })
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', resizeChart)
+    chart?.dispose()
+    chart = null
 })
 </script>
 
 <template>
-    <!-- 图表容器 -->
-    <div ref="chartRef" style="height: 400px" />
+    <div ref="chartRef" class="chart-container" />
 </template>
+
+<style scoped>
+.chart-container {
+    height: 400px;
+}
+</style>

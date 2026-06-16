@@ -1,11 +1,13 @@
 # 文件说明：处理 apps/visitors/views/visitor_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework.views import APIView
+
 from apps.visitors.models.visitor import Visitor
 from common.response.response import ResponseSuccess, ResponseError
 from apps.visitors.serializers.visitor_serializer import VisitorSerializer
 from apps.logs.services.log_service import save_operation_log
-from django.utils import timezone
 
 
 class VisitorCreateView(APIView):
@@ -45,9 +47,24 @@ class VisitorListView(APIView):
 
     def get(self, request):
 
-        page = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 10))
-        queryset = Visitor.objects.all().order_by("-id")
+        try:
+            page = max(int(request.GET.get("page", 1)), 1)
+            page_size = min(max(int(request.GET.get("page_size", 1000)), 1), 1000)
+        except (TypeError, ValueError):
+            return ResponseError(msg="分页参数错误")
+
+        keyword = (request.GET.get("keyword") or "").strip()
+        queryset = Visitor.objects.select_related("owner", "approve_user").all().order_by("-id")
+
+        if keyword:
+            # 支持访客、手机号、被访业主和来访事由搜索，供前端列表筛选使用。
+            queryset = queryset.filter(
+                Q(name__icontains=keyword)
+                | Q(phone__icontains=keyword)
+                | Q(owner__name__icontains=keyword)
+                | Q(reason__icontains=keyword)
+            )
+
         start = (page - 1) * page_size
         end = start + page_size
 
@@ -105,14 +122,15 @@ class VisitorDeleteView(APIView):
     def delete(self, request, pk):
 
         instance = Visitor.objects.filter(id=pk).first()
+
+        if not instance:
+            return ResponseError(msg="访客记录不存在")
+
         save_operation_log(
             username=request.user.username,
             module="访客管理",
             action=f"删除访客：{instance.name}",
         )
-
-        if not instance:
-            return ResponseError(msg="访客记录不存在")
 
         instance.delete()
 
@@ -152,11 +170,19 @@ class VisitorApproveView(APIView):
         if not visitor:
             return ResponseError(msg="访客不存在")
 
+        status = request.data.get("status")
+
+        if status not in {"approved", "rejected"}:
+            return ResponseError(msg="审批状态只能为通过或拒绝")
+
+        if visitor.status != "waiting":
+            return ResponseError(msg="当前访客不能重复审批")
+
         # 更新审批状态
-        visitor.status = request.data.get("status")
+        visitor.status = status
 
         # 更新审批备注
-        visitor.approve_remark = request.data.get("approve_remark")
+        visitor.approve_remark = request.data.get("approve_remark") or ""
 
         # 更新审批时间
         visitor.approve_time = timezone.now()
@@ -164,9 +190,9 @@ class VisitorApproveView(APIView):
         # 更新审批人
         visitor.approve_user = request.user
 
-        visitor.save()
+        visitor.save(update_fields=["status", "approve_remark", "approve_time", "approve_user"])
 
-        return ResponseSuccess(msg="审批成功")
+        return ResponseSuccess(data=VisitorSerializer(visitor).data, msg="审批成功")
 
 
 class VisitorEnterView(APIView):
@@ -177,9 +203,6 @@ class VisitorEnterView(APIView):
     def put(self, request, pk):
 
         visitor = Visitor.objects.filter(id=pk).first()
-        visitor.status = "entered"
-        visitor.enter_time = timezone.now()
-        visitor.save()
 
         if not visitor:
             return ResponseError(msg="访客不存在")
@@ -189,10 +212,11 @@ class VisitorEnterView(APIView):
             return ResponseError(msg="当前访客不能登记到访")
 
         visitor.status = "entered"
+        visitor.enter_time = timezone.now()
 
-        visitor.save()
+        visitor.save(update_fields=["status", "enter_time"])
 
-        return ResponseSuccess(msg="登记成功")
+        return ResponseSuccess(data=VisitorSerializer(visitor).data, msg="登记成功")
 
 
 class VisitorLeaveView(APIView):
@@ -214,6 +238,6 @@ class VisitorLeaveView(APIView):
 
         visitor.leave_time = timezone.now()
 
-        visitor.save()
+        visitor.save(update_fields=["status", "leave_time"])
 
-        return ResponseSuccess(msg="登记成功")
+        return ResponseSuccess(data=VisitorSerializer(visitor).data, msg="登记成功")

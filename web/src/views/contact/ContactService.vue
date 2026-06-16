@@ -1,14 +1,16 @@
 <!-- 文件说明：侧边栏“联系客服”模块，供业主、管理员、财务和维修角色发起站内会话。 -->
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
     createChatConversation,
     getChatConversationList,
+    rateChatConversation,
     sendChatMessage,
 } from '@/api/chat'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole, getStoredUsername } from '@/utils/authState'
 
 type ChatMessage = {
     id: number | string
@@ -25,27 +27,45 @@ type Conversation = {
     target_role_text?: string
     status: 'active' | 'resolved' | 'closed'
     status_text?: string
+    end_reason?: 'manual' | 'timeout' | null
+    end_reason_text?: string
+    created_by?: number
     created_by_name?: string
     created_by_real_name?: string
     participant_names?: string[]
     last_message?: string
     messages?: ChatMessage[]
+    ended_at?: string
+    rating_score?: number | string | null
+    rating_comment?: string | null
+    rating_at?: string | null
     updated_at?: string
 }
 
-const role = localStorage.getItem('role') || ''
-const username = localStorage.getItem('username') || ''
+const role = getStoredRole()
+const username = getStoredUsername()
 const loading = ref(false)
 const creating = ref(false)
 const sending = ref(false)
 const conversations = ref<Conversation[]>([])
 const activeId = ref<number | null>(null)
 const replyText = ref('')
+const ratingDialogVisible = ref(false)
+const ratingSubmitting = ref(false)
+const pendingRatingConversation = ref<Conversation | null>(null)
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+const ratingDismissedIds = new Set<number>()
+const ratingCompletedIds = new Set<number>()
 
 const form = reactive({
     target_role: 'customer_service',
     title: '',
     content: '',
+})
+
+const ratingForm = reactive({
+    score: 5,
+    comment: '',
 })
 
 const targetOptions = computed(() => {
@@ -86,25 +106,99 @@ const messageRows = computed(() => {
     }))
 })
 
+const activeConversationEnded = computed(() => {
+    return Boolean(activeConversation.value && activeConversation.value.status !== 'active')
+})
+
 const statusTypeMap: Record<string, 'primary' | 'success' | 'info'> = {
     active: 'primary',
     resolved: 'success',
     closed: 'info',
 }
 
-const loadConversations = async () => {
-    loading.value = true
+const isCurrentUserCreator = (conversation: Conversation) => {
+    return conversation.created_by_name === username
+}
+
+const canRateConversation = (conversation: Conversation | null) => {
+    return Boolean(
+        conversation
+        && conversation.status !== 'active'
+        && isCurrentUserCreator(conversation)
+        && !conversation.rating_score
+        && !ratingCompletedIds.has(conversation.id)
+    )
+}
+
+const openRatingDialog = (conversation: Conversation | null) => {
+    if (!conversation) {
+        return
+    }
+
+    pendingRatingConversation.value = conversation
+    ratingForm.score = Number(conversation.rating_score || 5)
+    ratingForm.comment = conversation.rating_comment || ''
+    ratingDialogVisible.value = true
+}
+
+const maybePromptRating = () => {
+    if (ratingDialogVisible.value) {
+        return
+    }
+
+    const active = activeConversation.value
+    const candidate = canRateConversation(active) && !ratingDismissedIds.has(active!.id)
+        ? active
+        : conversations.value.find((item) => canRateConversation(item) && !ratingDismissedIds.has(item.id))
+
+    if (candidate) {
+        openRatingDialog(candidate)
+    }
+}
+
+const mergeUpdatedConversation = (conversation: Conversation) => {
+    const index = conversations.value.findIndex((item) => item.id === conversation.id)
+
+    if (index >= 0) {
+        conversations.value[index] = {
+            ...conversations.value[index],
+            ...conversation,
+        }
+    }
+}
+
+const loadConversations = async (
+    options: { silent?: boolean; resetPageAfterLoad?: boolean; promptRating?: boolean } = {}
+) => {
+    const { silent = false, resetPageAfterLoad = true, promptRating = true } = options
+
+    if (!silent) {
+        loading.value = true
+    }
 
     try {
         const res = await getChatConversationList({})
         conversations.value = res.data.data || []
-        resetPage()
+
+        if (resetPageAfterLoad) {
+            resetPage()
+        }
 
         if (!activeId.value && conversations.value[0]) {
             activeId.value = conversations.value[0].id
         }
+
+        if (activeId.value && !conversations.value.some((item) => item.id === activeId.value)) {
+            activeId.value = conversations.value[0]?.id || null
+        }
+
+        if (promptRating) {
+            maybePromptRating()
+        }
     } finally {
-        loading.value = false
+        if (!silent) {
+            loading.value = false
+        }
     }
 }
 
@@ -144,6 +238,16 @@ const sendReply = async () => {
         return
     }
 
+    if (activeConversation.value.status !== 'active') {
+        ElMessage.warning('会话已结束，不能继续发送消息')
+
+        if (canRateConversation(activeConversation.value)) {
+            openRatingDialog(activeConversation.value)
+        }
+
+        return
+    }
+
     sending.value = true
 
     try {
@@ -157,14 +261,72 @@ const sendReply = async () => {
         }
 
         replyText.value = ''
-        await loadConversations()
+        await loadConversations({ silent: true, resetPageAfterLoad: false })
     } finally {
         sending.value = false
     }
 }
 
+const submitRating = async () => {
+    if (ratingSubmitting.value || !pendingRatingConversation.value) {
+        return
+    }
+
+    if (!ratingForm.score) {
+        ElMessage.warning('请选择服务评分')
+        return
+    }
+
+    ratingSubmitting.value = true
+
+    try {
+        const res = await rateChatConversation(pendingRatingConversation.value.id, {
+            rating_score: Number(ratingForm.score.toFixed(1)),
+            rating_comment: ratingForm.comment.trim(),
+        })
+
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '评分失败')
+            return
+        }
+
+        // 先本地标记为已评分，再关闭弹窗和刷新列表，避免轮询拿到旧数据时重复弹出评分框。
+        ratingCompletedIds.add(pendingRatingConversation.value.id)
+
+        if (res.data.data) {
+            mergeUpdatedConversation(res.data.data as Conversation)
+        }
+
+        ratingDialogVisible.value = false
+        pendingRatingConversation.value = null
+        ElMessage.success('评分已提交')
+        await loadConversations({ silent: true, resetPageAfterLoad: false, promptRating: false })
+    } finally {
+        ratingSubmitting.value = false
+    }
+}
+
+const handleRatingLater = () => {
+    if (pendingRatingConversation.value) {
+        ratingDismissedIds.add(pendingRatingConversation.value.id)
+    }
+
+    ratingDialogVisible.value = false
+    pendingRatingConversation.value = null
+}
+
 onMounted(() => {
     loadConversations()
+    // 联系客服模块保持轻量轮询，让双方新消息能自动出现在当前会话里。
+    refreshTimer = setInterval(() => {
+        loadConversations({ silent: true, resetPageAfterLoad: false })
+    }, 8000)
+})
+
+onBeforeUnmount(() => {
+    if (refreshTimer) {
+        clearInterval(refreshTimer)
+    }
 })
 </script>
 
@@ -193,7 +355,7 @@ onMounted(() => {
                     <el-button type="primary" :loading="creating" @click="createConversation">
                         发起联系
                     </el-button>
-                    <el-button :loading="loading" @click="loadConversations">刷新</el-button>
+                    <el-button :loading="loading" @click="loadConversations()">刷新</el-button>
                 </el-form-item>
             </el-form>
         </section>
@@ -238,6 +400,15 @@ onMounted(() => {
                     </el-tag>
                 </div>
 
+                <el-alert
+                    v-if="activeConversationEnded"
+                    class="ended-alert"
+                    type="warning"
+                    :closable="false"
+                    :title="activeConversation.end_reason === 'timeout' ? '会话已超时结束' : '会话已结束'"
+                    :description="activeConversation.rating_score ? `已评分：${activeConversation.rating_score} 分` : '请对本次服务进行评分。'"
+                />
+
                 <div class="message-list">
                     <div
                         v-for="message in messageRows"
@@ -262,14 +433,66 @@ onMounted(() => {
                         :rows="3"
                         maxlength="500"
                         show-word-limit
-                        placeholder="输入回复内容"
+                        :disabled="activeConversationEnded"
+                        :placeholder="activeConversationEnded ? '会话已结束，不能继续发送消息' : '输入回复内容'"
                     />
-                    <el-button type="primary" :loading="sending" @click="sendReply">发送</el-button>
+                    <el-button
+                        v-if="canRateConversation(activeConversation)"
+                        type="warning"
+                        @click="openRatingDialog(activeConversation)"
+                    >
+                        评分
+                    </el-button>
+                    <el-button v-else type="primary" :loading="sending" :disabled="activeConversationEnded" @click="sendReply">
+                        发送
+                    </el-button>
                 </div>
             </template>
 
             <el-empty v-else description="请选择会话" :image-size="100" />
         </section>
+
+        <el-dialog
+            v-model="ratingDialogVisible"
+            title="服务评分"
+            width="520px"
+            :show-close="false"
+            :close-on-click-modal="false"
+        >
+            <el-form label-width="92px">
+                <el-form-item label="服务评分">
+                    <el-rate
+                        v-model="ratingForm.score"
+                        :max="5"
+                        allow-half
+                        show-score
+                        text-color="#ff9900"
+                        score-template="{value} 分"
+                    />
+                </el-form-item>
+                <el-form-item label="评价内容">
+                    <el-input
+                        v-model="ratingForm.comment"
+                        type="textarea"
+                        :rows="4"
+                        maxlength="500"
+                        show-word-limit
+                        placeholder="请输入对本次服务的评价"
+                    />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="handleRatingLater">稍后评价</el-button>
+                <el-button
+                    type="primary"
+                    :loading="ratingSubmitting"
+                    :disabled="ratingSubmitting"
+                    @click="submitRating"
+                >
+                    提交评分
+                </el-button>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
@@ -311,6 +534,10 @@ onMounted(() => {
     padding: 10px 4px;
     background: #f8fafc;
     border-radius: 6px;
+}
+
+.ended-alert {
+    margin-bottom: 12px;
 }
 
 .message-row {

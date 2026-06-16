@@ -8,6 +8,13 @@ class Notice(models.Model):
     公告
     """
 
+    TYPE_CHOICES = (
+        ("general", "系统公告"),
+        ("activity", "活动通知"),
+        ("finance", "财务公告"),
+        ("repair", "维修公告"),
+    )
+
     title = models.CharField(
         max_length=200,
         verbose_name="公告标题",
@@ -15,6 +22,13 @@ class Notice(models.Model):
 
     content = models.TextField(
         verbose_name="公告内容",
+    )
+
+    notice_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default="general",
+        verbose_name="公告类型",
     )
 
     status = models.CharField(

@@ -5,7 +5,7 @@
 // =====================================================
 
 // vue
-import { reactive, onMounted } from 'vue'
+import { computed, reactive, onMounted } from 'vue'
 
 // API
 import { getNoticeDetail, updateNotice } from '@/api/notice'
@@ -15,6 +15,7 @@ import { useRoute } from 'vue-router'
 import { useRouter } from 'vue-router'
 
 import { ElMessage } from 'element-plus'
+import { getStoredRole } from '@/utils/authState'
 
 // =====================================================
 // 路由对象
@@ -23,6 +24,26 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 
 const route = useRoute()
+const role = getStoredRole()
+
+const noticeTypeOptions = computed(() => {
+    const options = [
+        { label: '系统公告', value: 'general' },
+        { label: '活动通知', value: 'activity' },
+        { label: '财务公告', value: 'finance' },
+        { label: '维修公告', value: 'repair' },
+    ]
+
+    if (['finance_staff', 'finance'].includes(role)) {
+        return options.filter((item) => item.value === 'finance')
+    }
+
+    if (['repair_staff', 'repairer', 'repair'].includes(role)) {
+        return options.filter((item) => item.value === 'repair')
+    }
+
+    return options
+})
 // =====================================================
 // 表单数据
 // =====================================================
@@ -33,6 +54,9 @@ const form = reactive({
 
     // 公告内容
     content: '',
+
+    // 公告类型
+    notice_type: 'general',
 })
 
 // =====================================================
@@ -47,6 +71,8 @@ const getDetail = async () => {
     form.title = res.data.data.title
 
     form.content = res.data.data.content
+
+    form.notice_type = res.data.data.notice_type || noticeTypeOptions.value[0]?.value || 'general'
 }
 
 // =====================================================
@@ -99,6 +125,17 @@ onMounted(() => {
                 <!-- 公告内容 -->
                 <el-form-item label="公告内容">
                     <el-input v-model="form.content" type="textarea" />
+                </el-form-item>
+
+                <el-form-item label="公告类型">
+                    <el-select v-model="form.notice_type" placeholder="请选择公告类型">
+                        <el-option
+                            v-for="item in noticeTypeOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
                 </el-form-item>
 
                 <!-- 按钮 -->

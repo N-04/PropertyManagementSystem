@@ -7,9 +7,10 @@ import { deleteParking } from '@/api/parking'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole } from '@/utils/authState'
 
 const tableData = ref<any[]>([])
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const isOwner = computed(() => role === 'owner')
 const {
     page,

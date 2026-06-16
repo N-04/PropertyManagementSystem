@@ -8,6 +8,7 @@ from apps.parking.views.parking_view import (
     ParkingUpdateView,
     ParkingDeleteView,
     ParkingDetailView,
+    ParkingBindView,
 )
 
 urlpatterns = [
@@ -30,5 +31,9 @@ urlpatterns = [
     path(
         "detail/<int:pk>/",
         ParkingDetailView.as_view(),
+    ),
+    path(
+        "bind/<int:pk>/",
+        ParkingBindView.as_view(),
     ),
 ]

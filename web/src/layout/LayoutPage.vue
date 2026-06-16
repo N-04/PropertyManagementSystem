@@ -1,19 +1,30 @@
-<!-- 文件说明：实现二级侧栏、悬浮三级菜单、四级顶部菜单和功能下拉的后台主布局。 -->
+<!-- 文件说明：实现左侧一/二级菜单、顶部三级功能菜单和内容区的后台主布局。 -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
+import { getComplaintList } from '@/api/complaint'
+import { getFeeList } from '@/api/fee'
+import { getNoticeList } from '@/api/notice'
+import { getRepairList } from '@/api/repair'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
+import {
+    AUTH_STATE_CHANGED_EVENT,
+    clearAuthState,
+    getStoredRefresh,
+    getStoredRole,
+    getStoredUsername,
+} from '@/utils/authState'
 
 defineOptions({
     name: 'LayoutPage',
 })
 
 const router = useRouter()
-const username = localStorage.getItem('username')
-const role = localStorage.getItem('role') || ''
+const username = ref(getStoredUsername())
+const role = ref(getStoredRole())
 const menuItems = ref<AppMenuItem[]>([])
 const menuLoaded = ref(false)
 const selectedSecondId = ref('')
@@ -22,6 +33,8 @@ const selectedFourthId = ref('')
 const selectedFunctionTitle = ref('')
 const hoveredSecondId = ref('')
 const thirdFlyoutTop = ref(60)
+const noticeMessages = ref<string[]>([])
+const roleMessages = ref<string[]>([])
 
 const menuKey = (menu: AppMenuItem) => String(menu.id)
 
@@ -129,9 +142,42 @@ const activeFourthMenu = computed(() => {
     return fourthMenus.value.find((item) => menuKey(item) === selectedFourthId.value)
 })
 
-const functionMenus = computed(() => {
-    return activeFourthMenu.value?.children || []
+const canReceiveNotice = computed(() => {
+    // 公告接收方只包含管理员和业主；财务/维修只进入公告发布列表。
+    return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role.value)
 })
+
+const rollingMessages = computed(() => {
+    const messages = [...noticeMessages.value, ...roleMessages.value].filter(Boolean)
+
+    if (messages.length) {
+        return messages.slice(0, 8)
+    }
+
+    return ['系统运行正常，欢迎使用社区物业管理系统']
+})
+
+const rollingText = computed(() => rollingMessages.value.join('　　'))
+
+const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
+    if (!menu) {
+        return undefined
+    }
+
+    if (menu.path) {
+        return menu
+    }
+
+    for (const child of childrenOf(menu)) {
+        const target = firstReachableMenu(child)
+
+        if (target) {
+            return target
+        }
+    }
+
+    return undefined
+}
 
 const resetFourthSelection = () => {
     selectedFourthId.value = fourthMenus.value[0] ? menuKey(fourthMenus.value[0]) : ''
@@ -177,7 +223,7 @@ const navigateMenu = (menu?: AppMenuItem) => {
 const handleSecondSelect = (id: string) => {
     selectedSecondId.value = id
     resetThirdSelection()
-    navigateMenu(activeThirdMenu.value || activeSecondMenu.value)
+    navigateMenu(firstReachableMenu(activeThirdMenu.value || activeSecondMenu.value))
 }
 
 const handleSecondMouseEnter = (item: AppMenuItem, event: MouseEvent) => {
@@ -197,8 +243,7 @@ const closeThirdFlyout = () => {
 const handleThirdSelect = (id: string) => {
     selectedThirdId.value = id
     resetFourthSelection()
-    navigateMenu(activeThirdMenu.value)
-    closeThirdFlyout()
+    navigateMenu(firstReachableMenu(activeFourthMenu.value || activeThirdMenu.value))
 }
 
 const handleThirdFlyoutClick = (item: AppMenuItem) => {
@@ -207,12 +252,13 @@ const handleThirdFlyoutClick = (item: AppMenuItem) => {
     }
 
     handleThirdSelect(menuKey(item))
+    closeThirdFlyout()
 }
 
 const handleFourthSelect = (menu: AppMenuItem) => {
     selectedFourthId.value = menuKey(menu)
     selectedFunctionTitle.value = ''
-    navigateMenu(menu)
+    navigateMenu(firstReachableMenu(menu))
 }
 
 const handleFunctionSelect = (id: string) => {
@@ -227,16 +273,18 @@ const handleFunctionSelect = (id: string) => {
 }
 
 const loadMenus = async () => {
+    const currentRole = role.value
+
     try {
         const res = await getUserMenus()
 
         if (res.data.code === 200 && res.data.data?.length) {
-            menuItems.value = buildDisplayMenusByRole(visibleMenus(res.data.data), role)
+            menuItems.value = buildDisplayMenusByRole(visibleMenus(res.data.data), currentRole)
             return
         }
 
         // 后端菜单还没配置时，使用本地菜单，并根据角色过滤
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), role)
+        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), currentRole)
     } catch (error: any) {
         const status = error?.response?.status
 
@@ -246,58 +294,161 @@ const loadMenus = async () => {
         }
 
         // 后端菜单接口异常时，使用本地兜底菜单
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), role)
+        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), currentRole)
     } finally {
         menuLoaded.value = true
         syncSelectionByCurrentRoute()
     }
 }
 
+const loadNoticeMessages = async () => {
+    if (!canReceiveNotice.value) {
+        noticeMessages.value = []
+        return
+    }
+
+    try {
+        const res = await getNoticeList()
+        const list = res.data.data || []
+
+        noticeMessages.value = list
+            .filter((item: any) => item.status !== 'draft')
+            .slice(0, 3)
+            .map((item: any) => `公告通知：${item.title}`)
+    } catch (error) {
+        noticeMessages.value = []
+    }
+}
+
+const loadRoleMessages = async () => {
+    const messages: string[] = []
+    const currentRole = role.value
+
+    try {
+        if (['owner', 'finance', 'finance_staff', 'admin', 'super_admin'].includes(currentRole)) {
+            const feeRes = await getFeeList()
+            const fees = feeRes.data.data || []
+            const unpaidFees = fees.filter((item: any) => item.status === 'unpaid' || item.status === 'overdue')
+
+            if (unpaidFees.length) {
+                messages.push(`缴费提醒：当前有 ${unpaidFees.length} 条待缴或逾期账单`)
+            }
+        }
+    } catch (error) {
+        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+    }
+
+    try {
+        if (['owner', 'repair_staff', 'repair', 'property_admin', 'admin', 'super_admin'].includes(currentRole)) {
+            const repairRes = await getRepairList({})
+            const repairs = repairRes.data.data || []
+            const activeRepairs = repairs.filter((item: any) => item.status !== 'finished')
+
+            if (activeRepairs.length) {
+                messages.push(`工单通知：当前有 ${activeRepairs.length} 条待处理或进行中工单`)
+            }
+        }
+    } catch (error) {
+        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+    }
+
+    try {
+        if (['property_admin', 'customer_service', 'service', 'admin', 'super_admin'].includes(currentRole)) {
+            const complaintRes = await getComplaintList({ status: 'pending' })
+            const complaints = complaintRes.data.data || []
+
+            if (complaints.length) {
+                messages.push(`投诉提醒：当前有 ${complaints.length} 条投诉/建议待处理`)
+            }
+        }
+    } catch (error) {
+        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+    }
+
+    roleMessages.value = messages
+}
+
+const loadRollingMessages = () => {
+    loadNoticeMessages()
+    loadRoleMessages()
+}
+
+const reloadMenusForCurrentRole = () => {
+    selectedSecondId.value = ''
+    selectedThirdId.value = ''
+    selectedFourthId.value = ''
+    selectedFunctionTitle.value = ''
+    menuLoaded.value = false
+    loadMenus()
+}
+
+const refreshLayoutAuthState = () => {
+    const nextUsername = getStoredUsername()
+    const nextRole = getStoredRole()
+    const roleChanged = nextRole !== role.value
+
+    username.value = nextUsername
+    role.value = nextRole
+
+    if (roleChanged) {
+        reloadMenusForCurrentRole()
+        loadRollingMessages()
+    }
+}
+
 // 退出登录清除role权限
 const handleLogout = async () => {
-    const refresh = localStorage.getItem('refresh') || ''
+    const refresh = getStoredRefresh()
 
     try {
         await logoutApi(refresh)
     } finally {
-        localStorage.removeItem('token')
-        localStorage.removeItem('refresh')
-        localStorage.removeItem('username')
-        localStorage.removeItem('role')
-        localStorage.removeItem('permissions')
-        localStorage.removeItem('userInfo')
+        clearAuthState()
 
         router.push('/login')
     }
 }
 
 onMounted(() => {
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
     loadMenus()
+    loadRollingMessages()
 })
+
+onBeforeUnmount(() => {
+    window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
+})
+
+watch(
+    () => router.currentRoute.value.fullPath,
+    () => {
+        if (menuLoaded.value) {
+            // 页面内跳转、浏览器前进后退后，同步二/三/四级菜单和功能下拉选中态。
+            syncSelectionByCurrentRoute()
+        }
+    }
+)
 </script>
 
 <template>
-    <!-- 鼠标从二级菜单移动到三级浮窗不会立刻消失 -->
     <div class="layout-container" @mouseleave="closeThirdFlyout">
         <aside class="second-sidebar">
             <div class="logo">{{ appMenuTitle }}</div>
 
-            <el-menu
-                :default-active="selectedSecondId"
-                class="second-menu"
-                @select="handleSecondSelect"
-            >
-                <!-- 三级悬浮菜单增加箭头提示 -->
-                <el-menu-item
-                    v-for="item in secondMenus"
-                    :key="item.id"
-                    :index="menuKey(item)"
-                    @mouseover="handleSecondMouseEnter(item, $event)"
-                >
-                    <span>{{ item.title }}</span>
-                    <span v-if="childrenOf(item).length" class="menu-arrow"> > </span>
-                </el-menu-item>
-            </el-menu>
+            <div class="sidebar-menu">
+                <section v-for="item in secondMenus" :key="item.id" class="sidebar-group">
+                    <button
+                        type="button"
+                        class="first-menu-item"
+                        :class="{ active: selectedSecondId === menuKey(item) }"
+                        @click="handleSecondSelect(menuKey(item))"
+                        @mouseover="handleSecondMouseEnter(item, $event)"
+                    >
+                        <span>{{ item.title }}</span>
+                        <span v-if="childrenOf(item).length" class="menu-arrow"> > </span>
+                    </button>
+                </section>
+            </div>
 
             <div
                 v-if="hoveredSecondId && flyoutThirdMenus.length"
@@ -327,7 +478,7 @@ onMounted(() => {
         <main class="layout-main">
             <header class="layout-header">
                 <div class="header-title">
-                    {{ activeThirdMenu?.title || '后台管理系统' }}
+                    {{ activeThirdMenu?.title || activeSecondMenu?.title || '后台管理系统' }}
                 </div>
 
                 <div class="header-user">
@@ -336,7 +487,7 @@ onMounted(() => {
                 </div>
             </header>
 
-            <div v-if="fourthMenus.length" class="fourth-bar">
+            <div v-if="fourthMenus.length" class="third-bar">
                 <el-dropdown
                     v-for="item in fourthMenus"
                     :key="item.id"
@@ -376,6 +527,13 @@ onMounted(() => {
                 </span>
             </div>
 
+            <div class="notice-marquee" aria-label="滚动通知">
+                <div class="notice-label">滚动通知</div>
+                <div class="notice-track">
+                    <div class="notice-content">{{ rollingText }}</div>
+                </div>
+            </div>
+
             <section class="layout-content">
                 <router-view />
             </section>
@@ -412,10 +570,31 @@ onMounted(() => {
     border-bottom: 1px solid #e4e7ed;
 }
 
-.second-menu :deep(.el-menu-item) {
+.sidebar-menu {
+    height: calc(100vh - 60px);
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.sidebar-group + .sidebar-group {
+    margin-top: 6px;
+}
+
+.first-menu-item {
+    width: 100%;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #303133;
+    cursor: pointer;
+    text-align: left;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 0 14px;
+    font-size: 16px;
+    font-weight: 700;
 }
 
 .menu-arrow {
@@ -423,11 +602,17 @@ onMounted(() => {
     font-size: 10px;
 }
 
+.first-menu-item:hover,
+.first-menu-item.active {
+    color: #409eff;
+    background: #ecf5ff;
+}
+
 .menu-empty {
     padding: 24px 8px;
 }
 
-/* 悬浮菜单 */
+/* 二级菜单保持悬浮样式，避免左侧栏被深层菜单撑开。 */
 .third-flyout {
     position: absolute;
     left: 102%;
@@ -440,14 +625,6 @@ onMounted(() => {
     border: 1px solid #e4e7ed;
     box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
     overflow-y: auto;
-}
-
-.third-flyout-title {
-    padding: 8px 10px 10px;
-    margin-bottom: 4px;
-    font-weight: 600;
-    color: #303133;
-    border-bottom: 1px solid #ebeef5;
 }
 
 .third-flyout-item {
@@ -498,7 +675,7 @@ onMounted(() => {
     gap: 15px;
 }
 
-.fourth-bar {
+.third-bar {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -518,6 +695,48 @@ onMounted(() => {
     margin-left: 8px;
     color: #606266;
     font-size: 15px;
+}
+
+.notice-marquee {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    padding: 0 20px;
+    border-bottom: 1px solid #e4e7ed;
+    background: #f8fafc;
+    overflow: hidden;
+}
+
+.notice-label {
+    flex: 0 0 auto;
+    color: #409eff;
+    font-weight: 600;
+}
+
+.notice-track {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.notice-content {
+    display: inline-block;
+    min-width: 100%;
+    color: #606266;
+    text-align: left;
+    animation: notice-scroll 22s linear infinite;
+}
+
+@keyframes notice-scroll {
+    0% {
+        transform: translateX(100%);
+    }
+
+    100% {
+        transform: translateX(-100%);
+    }
 }
 
 .layout-content {

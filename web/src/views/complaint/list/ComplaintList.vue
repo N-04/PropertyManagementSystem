@@ -5,8 +5,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteComplaint, getComplaintList, updateComplaint } from '@/api/complaint'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole } from '@/utils/authState'
 
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const isOwner = role === 'owner'
 const tableData = ref<any[]>([])
 const dialogVisible = ref(false)

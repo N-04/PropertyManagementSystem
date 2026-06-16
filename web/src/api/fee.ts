@@ -2,10 +2,11 @@
 import request from '@/utils/request'
 
 // 物业费列表
-export function getFeeList() {
+export function getFeeList(params?: any) {
     return request({
         url: '/fee/list/',
         method: 'get',
+        params,
     })
 }
 

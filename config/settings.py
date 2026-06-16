@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "apps.upload",
     "apps.visitors",
     "apps.complaints",
+    "apps.chat",
     "django_extensions",
     "rest_framework",
     "corsheaders",

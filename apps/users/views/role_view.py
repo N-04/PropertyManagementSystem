@@ -2,20 +2,38 @@
 
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from common.response.response import ResponseSuccess, ResponseError
 from rest_framework.views import APIView
 
 from apps.users.models.permission import Permission
 from apps.users.models.role import Role
 from apps.users.serializers.role_serializer import RoleSerializer
+from apps.users.utils.role_access import has_any_role
+
+
+RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
+
+
+def _can_manage_rbac(user):
+    """角色和权限分配只允许管理员角色操作。"""
+
+    return has_any_role(user, *RBAC_MANAGE_ROLES) or getattr(user, "is_superuser", False)
+
+
+def _rbac_forbidden_response():
+    return ResponseError(msg="无权访问权限管理")
 
 
 # =====================================================
 # 新增角色
 # =====================================================
 class RoleCreateView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 获取角色名称
         name = request.data.get("name")
@@ -67,8 +85,11 @@ class RoleCreateView(APIView):
 # 角色列表
 # =====================================================
 class RoleListView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 查询全部角色
         roles = Role.objects.all()
@@ -81,8 +102,11 @@ class RoleListView(APIView):
 
 
 class RoleDetailView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         role = get_object_or_404(Role, id=pk)
 
@@ -93,9 +117,12 @@ class RoleDetailView(APIView):
 
 # 编辑角色接口
 class RoleUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
 
     # 修改角色
     def put(self, request, pk):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 获取角色对象
         role = get_object_or_404(Role, id=pk)
@@ -118,9 +145,12 @@ class RoleUpdateView(APIView):
 
 
 class RoleDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
 
     # 删除角色
     def delete(self, request, pk):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 获取角色对象
         role = get_object_or_404(Role, id=pk)
@@ -137,7 +167,11 @@ class RolePermissionAssignView(APIView):
     角色分配权限
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # ==================================
         # 获取参数

@@ -1,5 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isCustomerServiceRole } from '@/api/menu'
+import { appMenuTitle } from '@/menu/fallbackMenus'
+import {
+    AUTH_STATE_CHANGED_EVENT,
+    getStoredRole,
+    getStoredToken,
+    isAuthStorageKey,
+    syncSessionAuthStateFromLocal,
+} from '@/utils/authState'
 
 const routes = [
     // 登录页：系统入口，不显示后台菜单
@@ -250,10 +258,123 @@ const router = createRouter({
     routes,
 })
 
+const roleTitleMap: Record<string, string> = {
+    admin: '管理员',
+    super_admin: '超级管理员',
+    property_admin: '物业管理员',
+    finance_staff: '财务人员',
+    finance: '财务人员',
+    customer_service: '客服人员',
+    service: '客服人员',
+    repair_staff: '维修员',
+    repairer: '维修员',
+    repair: '维修员',
+    owner: '业主',
+}
+
+const routeTitleMap: Record<string, string> = {
+    '/dashboard': '首页',
+    '/user/list': '用户列表',
+    '/user/create': '新增用户',
+    '/role/list': '角色列表',
+    '/role/create': '新增角色',
+    '/permission/list': '权限管理',
+    '/community/list': '小区信息',
+    '/building/list': '楼栋管理',
+    '/unit/list': '单元管理',
+    '/house/list': '房产信息',
+    '/owner/list': '业主管理',
+    '/parking/list': '车位管理',
+    '/parking/create': '新增车位',
+    '/car/list': '车辆管理',
+    '/repair/list': '报修列表',
+    '/repair/create': '提交报修',
+    '/complaint/list': '投诉列表',
+    '/complaint/create': '提交投诉',
+    '/fee/list': '费用管理',
+    '/fee/create': '新增账单',
+    '/notice/list': '消息通知',
+    '/notice/create': '发布公告',
+    '/visitor/list': '访客管理',
+    '/profile': '个人中心',
+    '/message/center': '消息中心',
+    '/contact/service': '联系客服',
+    '/service/chat': '即时通讯',
+    '/upload': '文件上传',
+    '/upload/test': '文件上传',
+    '/log/list': '操作审计日志',
+    '/log/login/list': '登录日志',
+}
+
+const publicTitleMap: Record<string, string> = {
+    '/login': '登录',
+    '/register': '注册',
+    '/forgot-password': '找回密码',
+}
+
+const normalizePath = (path: string) => {
+    return path.replace(/\/\d+(?=\/|$)/g, '/:id')
+}
+
+const getModuleTitle = (path: string) => {
+    const normalizedPath = normalizePath(path)
+
+    if (routeTitleMap[path]) {
+        return routeTitleMap[path]
+    }
+
+    if (normalizedPath.includes('/edit/:id')) {
+        return '编辑信息'
+    }
+
+    if (normalizedPath.includes('/detail/:id')) {
+        return '详情'
+    }
+
+    if (normalizedPath.includes('/assign/:id')) {
+        return '派单管理'
+    }
+
+    if (normalizedPath.includes('/approve/:id')) {
+        return '审核'
+    }
+
+    return '后台'
+}
+
+const updateBrowserTitle = (path: string) => {
+    if (publicTitleMap[path]) {
+        document.title = `${publicTitleMap[path]} - ${appMenuTitle}`
+        return
+    }
+
+    const role = getStoredRole()
+    const roleTitle = roleTitleMap[role] || '用户'
+    const moduleTitle = getModuleTitle(path)
+
+    // 浏览器标签展示当前角色和访问模块，方便多角色、多页面调试和使用。
+    document.title = `${roleTitle} - ${moduleTitle}`
+}
+
+export const refreshBrowserTitle = () => {
+    updateBrowserTitle(router.currentRoute.value.path)
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshBrowserTitle)
+    window.addEventListener('storage', (event) => {
+        if (isAuthStorageKey(event.key)) {
+            // 复制标签页会复制 sessionStorage；跨标签切换用户后先同步版本，标题和菜单才会跟随当前登录角色。
+            syncSessionAuthStateFromLocal()
+            refreshBrowserTitle()
+        }
+    })
+}
+
 // 路由拦截，未登录不允许进入后台。
 router.beforeEach((to) => {
-    const token = localStorage.getItem('token')
-    const role = localStorage.getItem('role') || ''
+    const token = getStoredToken()
+    const role = getStoredRole()
 
     const publicPaths = ['/login', '/register', '/forgot-password']
 
@@ -270,6 +391,10 @@ router.beforeEach((to) => {
     }
 
     return true
+})
+
+router.afterEach((to) => {
+    updateBrowserTitle(to.path)
 })
 
 export default router

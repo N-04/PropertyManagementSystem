@@ -5,6 +5,8 @@ export function getVisitorList(keyword = '') {
     return request.get('/visitor/list/', {
         params: {
             keyword,
+            // 访客列表前端使用统一分页组件，这里拉取足量数据供页面本地分页和搜索。
+            page_size: 1000,
         },
     })
 }

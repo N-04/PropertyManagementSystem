@@ -7,6 +7,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.crypto import get_random_string
 
+from apps.community.models import House
+from apps.owners.models import Owner
 from apps.users.models.menu import Menu
 from apps.users.models.permission import Permission
 from apps.users.models.role import Role
@@ -144,7 +146,7 @@ MENU_TREE = [
         children=[
             menu_node("rbac-user", "用户管理", "/user/list"),
             menu_node("rbac-role", "角色管理", "/role/list"),
-            menu_node("rbac-permission", "权限管理", "/permission/list", hidden=True),
+            menu_node("rbac-permission", "权限管理", "/permission/list"),
             menu_node("rbac-menu", "菜单管理", "/menu/list", hidden=True),
             menu_node("rbac-api", "接口权限", "/permission/list", hidden=True),
         ],
@@ -199,6 +201,15 @@ MENU_TREE = [
                             menu_node("admin-property-parking-bind", "车位绑定", "/parking/list"),
                             menu_node("admin-property-parking-status", "车位状态", "/parking/list"),
                             menu_node("admin-property-parking-temp", "临时停车", "/parking/list"),
+                        ],
+                    ),
+                    menu_node(
+                        "admin-property-visitor",
+                        "访客管理",
+                        children=[
+                            menu_node("admin-property-visitor-list", "访客列表", "/visitor/list"),
+                            menu_node("admin-property-visitor-create", "访客登记", "/visitor/create"),
+                            menu_node("admin-property-visitor-approve", "访客审批", "/visitor/list"),
                         ],
                     ),
                     menu_node(
@@ -378,6 +389,11 @@ MENU_TREE = [
         ],
     ),
     menu_node(
+        "contact-service",
+        "联系客服",
+        "/contact/service",
+    ),
+    menu_node(
         "message",
         "消息通知模块",
         children=[
@@ -428,7 +444,9 @@ ROLE_DEFINITIONS = [
         "roots": [
             "rbac-user",
             "rbac-role",
+            "rbac-permission",
             "admin-property",
+            "contact-service",
         ],
         "is_staff": True,
     },
@@ -438,7 +456,7 @@ ROLE_DEFINITIONS = [
         "username": "finance_demo",
         "real_name": "财务人员",
         "phone": "13800000002",
-        "roots": ["finance", "message"],
+        "roots": ["finance", "message", "contact-service"],
     },
     {
         "code": "repair_staff",
@@ -446,7 +464,7 @@ ROLE_DEFINITIONS = [
         "username": "repairer_demo",
         "real_name": "维修员",
         "phone": "13800000003",
-        "roots": ["repairer", "message"],
+        "roots": ["repairer", "message", "contact-service"],
     },
     {
         "code": "owner",
@@ -454,7 +472,7 @@ ROLE_DEFINITIONS = [
         "username": "owner_demo",
         "real_name": "业主",
         "phone": "13800000004",
-        "roots": ["owner"],
+        "roots": ["owner", "contact-service"],
     },
     {
         "code": "customer_service",
@@ -462,7 +480,7 @@ ROLE_DEFINITIONS = [
         "username": "customer_service_demo",
         "real_name": "客服人员",
         "phone": "13800000005",
-        "roots": ["message"],
+        "roots": [],
     },
 ]
 
@@ -542,6 +560,9 @@ class Command(BaseCommand):
 
             user.save()
 
+            if role_data["code"] == "owner":
+                self._ensure_owner_profile(user)
+
             result.append(
                 {
                     "role": role.name,
@@ -562,6 +583,36 @@ class Command(BaseCommand):
                 ensure_ascii=False,
                 indent=2,
             )
+        )
+
+    def _ensure_owner_profile(self, user):
+        """给业主演示账号补齐业主资料，保证车位绑定和缴费流程可运行。"""
+
+        if Owner.objects.filter(phone=user.phone).exists():
+            return
+
+        house = House.objects.order_by("id").first()
+
+        if not house:
+            return
+
+        id_card_index = 1
+        id_card = f"110101199001{id_card_index:06d}"
+
+        while Owner.objects.filter(id_card=id_card).exists():
+            id_card_index += 1
+            id_card = f"110101199001{id_card_index:06d}"
+
+        Owner.objects.create(
+            house=house,
+            name=user.real_name or user.username,
+            phone=user.phone,
+            relationship="self",
+            id_card=id_card,
+            gender="male",
+            is_primary=False,
+            status="approved",
+            remark="演示账号自动补齐的业主资料",
         )
 
     def _sync_menu_node(

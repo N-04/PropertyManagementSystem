@@ -9,12 +9,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
 import Upload from '@/views/upload/Upload.vue'
+import { getStoredRole } from '@/utils/authState'
 
 const router = useRouter()
 const route = useRoute()
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const isOwner = role === 'owner'
-const isRepairer = role === 'repairer'
+const isRepairer = ['repair_staff', 'repairer', 'repair'].includes(role)
 
 const startRef = ref()
 const endRef = ref()

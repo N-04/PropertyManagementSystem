@@ -7,8 +7,10 @@ class Parking(models.Model):
 
     owner = models.ForeignKey(
         "owners.Owner",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="parkings",
+        null=True,
+        blank=True,
         verbose_name="所属业主",
     )
 

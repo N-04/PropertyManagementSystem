@@ -26,6 +26,40 @@ const form = reactive({
     agreed: false,
 })
 
+const getResponseMessage = (data: any, fallback: string) => {
+    if (!data) {
+        return fallback
+    }
+
+    if (typeof data === 'string') {
+        return data
+    }
+
+    if (data.msg) {
+        return data.msg
+    }
+
+    if (data.detail) {
+        return data.detail
+    }
+
+    if (Array.isArray(data.non_field_errors)) {
+        return data.non_field_errors.join('、')
+    }
+
+    const firstValue = Object.values(data)[0]
+
+    if (Array.isArray(firstValue)) {
+        return firstValue.join('、')
+    }
+
+    if (typeof firstValue === 'string') {
+        return firstValue
+    }
+
+    return fallback
+}
+
 const loadCaptcha = async () => {
     const res = await getCaptchaApi()
     captchaKey.value = res.data.data.captcha_key
@@ -166,6 +200,12 @@ const sendSmsCode = async () => {
             captcha_code: form.captcha_code,
         })
 
+        if (res.data.code !== 200) {
+            ElMessage.error(getResponseMessage(res.data, '短信验证码发送失败'))
+            await loadCaptcha()
+            return
+        }
+
         smsDebugCode.value = res.data.data.debug_code || ''
         if (smsDebugCode.value) {
             form.sms_code = smsDebugCode.value
@@ -175,6 +215,10 @@ const sendSmsCode = async () => {
         }
 
         startSmsCountdown(res.data.data.cooldown_seconds || 60)
+        await loadCaptcha()
+    } catch (error: any) {
+        ElMessage.error(getResponseMessage(error?.response?.data, '短信验证码发送失败'))
+        await loadCaptcha()
     } finally {
         isSendingSms.value = false
     }
@@ -208,7 +252,7 @@ const handleRegister = async () => {
     })
 
     if (res.data.code !== 200) {
-        ElMessage.error(res.data.msg)
+        ElMessage.error(getResponseMessage(res.data, '注册失败'))
         await loadCaptcha()
         return
     }

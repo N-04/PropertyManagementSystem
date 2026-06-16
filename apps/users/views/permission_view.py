@@ -5,6 +5,7 @@
 # =====================================================
 
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
 # =====================================================
 # 导入响应
@@ -23,7 +24,21 @@ from apps.users.models.permission import Permission
 # =====================================================
 
 from apps.users.serializers.permission_serializer import PermissionSerializer
-from common.response.response import ResponseSuccess
+from apps.users.utils.role_access import has_any_role
+from common.response.response import ResponseError, ResponseSuccess
+
+
+RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
+
+
+def _can_manage_rbac(user):
+    """权限数据只供管理员角色维护和分配。"""
+
+    return has_any_role(user, *RBAC_MANAGE_ROLES) or getattr(user, "is_superuser", False)
+
+
+def _rbac_forbidden_response():
+    return ResponseError(msg="无权访问权限管理")
 
 # =====================================================
 # 权限列表
@@ -31,8 +46,11 @@ from common.response.response import ResponseSuccess
 
 
 class PermissionListView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 查询全部权限
         queryset = Permission.objects.all()
@@ -50,8 +68,11 @@ class PermissionListView(APIView):
 
 
 class PermissionCreateView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         # 获取请求数据
         serializer = PermissionSerializer(data=request.data)
@@ -74,7 +95,11 @@ class PermissionTreeView(APIView):
     权限树接口
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
+        if not _can_manage_rbac(request.user):
+            return _rbac_forbidden_response()
 
         queryset = (
             Permission.objects.select_related("menu")

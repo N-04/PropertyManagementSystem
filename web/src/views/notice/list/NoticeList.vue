@@ -5,12 +5,13 @@ import { getNoticeList, deleteNotice } from '@/api/notice'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole } from '@/utils/authState'
 // =====================================================
 // 响应式数据
 // =====================================================
 
 const router = useRouter()
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const canPublishNotice = computed(() => {
     // 管理员、财务和维修角色只负责发布公告；业主只能接收查看。
     return [
@@ -85,6 +86,8 @@ onMounted(() => {
             <el-table-column prop="title" label="公告标题" />
 
             <el-table-column prop="content" label="公告内容" />
+
+            <el-table-column prop="notice_type_display" label="公告类型" width="110" />
 
             <el-table-column prop="created_at" label="创建时间" />
 

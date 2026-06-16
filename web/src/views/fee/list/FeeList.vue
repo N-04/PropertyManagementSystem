@@ -1,19 +1,36 @@
 <!-- 文件说明：实现 src/views/fee/list/FeeList.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
-import { getFeeList } from '@/api/fee'
+import { computed, nextTick, ref, onMounted } from 'vue'
+import { getFeeList, payFee } from '@/api/fee'
 import { useRouter } from 'vue-router'
-import { payFee } from '@/api/fee'
 import { ElMessage } from 'element-plus'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole } from '@/utils/authState'
 
 const router = useRouter()
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const isOwner = computed(() => role === 'owner')
+const canCreateFee = computed(() => ['admin', 'super_admin', 'property_admin'].includes(role))
 const paymentDialogVisible = ref(false)
 const payingId = ref<number | null>(null)
 const paymentMethod = ref('alipay')
+
+const filterForm = ref({
+    keyword: '',
+    fee_type: '',
+    date_from: '',
+    date_to: '',
+})
+const endDatePickerRef = ref<any>(null)
+
+const feeTypeOptions = [
+    { label: '物业费', value: 'property' },
+    { label: '水费', value: 'water' },
+    { label: '电费', value: 'electric' },
+    { label: '停车费', value: 'parking' },
+    { label: '其他费用', value: 'other' },
+]
 
 const paymentOptions = [
     { label: '支付宝', value: 'alipay' },
@@ -32,11 +49,68 @@ const {
     resetPage,
 } = useClientPagination(tableData)
 
-const loadData = async () => {
-    const res = await getFeeList()
+const buildQueryParams = () => {
+    return {
+        keyword: filterForm.value.keyword || undefined,
+        fee_type: filterForm.value.fee_type || undefined,
+        date_from: filterForm.value.date_from || undefined,
+        date_to: filterForm.value.date_to || undefined,
+    }
+}
 
-    tableData.value = res.data.data
-    resetPage()
+const focusEndDatePicker = () => {
+    const picker = endDatePickerRef.value
+
+    if (picker?.handleOpen) {
+        picker.handleOpen()
+        return
+    }
+
+    picker?.focus?.()
+}
+
+const handleStartDateChange = async () => {
+    if (filterForm.value.date_to && filterForm.value.date_to < filterForm.value.date_from) {
+        filterForm.value.date_to = ''
+    }
+
+    // 先选开始日期，再自动打开结束日期，避免区间控件一次展示两个日期面板。
+    await nextTick()
+    focusEndDatePicker()
+}
+
+const isEndDateDisabled = (date: Date) => {
+    if (!filterForm.value.date_from) {
+        return false
+    }
+
+    return date.getTime() < new Date(`${filterForm.value.date_from}T00:00:00`).getTime()
+}
+
+const loadData = async (shouldResetPage = true) => {
+    const res = await getFeeList(buildQueryParams())
+    const rows = res.data.data || []
+
+    tableData.value = Array.isArray(rows) ? rows : rows.results || []
+
+    if (shouldResetPage) {
+        resetPage()
+    }
+}
+
+const searchBills = () => {
+    loadData()
+}
+
+const resetFilters = () => {
+    filterForm.value = {
+        keyword: '',
+        fee_type: '',
+        date_from: '',
+        date_to: '',
+    }
+
+    loadData()
 }
 
 const handlePay = (id: number) => {
@@ -61,10 +135,19 @@ const confirmPay = async () => {
     }
 
     ElMessage.success('缴费成功')
+
+    const paidFee = res.data.data
+
+    if (paidFee?.id) {
+        tableData.value = tableData.value.map((item) =>
+            item.id === paidFee.id ? { ...item, ...paidFee } : item
+        )
+    }
+
     paymentDialogVisible.value = false
     payingId.value = null
 
-    await loadData()
+    await loadData(false)
 }
 
 onMounted(() => {
@@ -78,7 +161,7 @@ onMounted(() => {
             <div style="display: flex; justify-content: space-between">
                 <span>物业费列表</span>
 
-                <el-button v-if="!isOwner" type="primary" @click="router.push('/fee/create')">
+                <el-button v-if="canCreateFee" type="primary" @click="router.push('/fee/create')">
                     新增账单
                 </el-button>
             </div>
@@ -93,6 +176,59 @@ onMounted(() => {
             title="业主查看账单后可点击缴费；若对账单有疑问，请联系服务人员核对。"
         />
 
+        <el-form class="filter-form" :model="filterForm" inline>
+            <el-form-item label="搜索">
+                <el-input
+                    v-model="filterForm.keyword"
+                    clearable
+                    placeholder="业主/手机号/房号/备注"
+                    @keyup.enter="searchBills"
+                />
+            </el-form-item>
+
+            <el-form-item label="费用类型">
+                <el-select
+                    v-model="filterForm.fee_type"
+                    clearable
+                    placeholder="全部类型"
+                    style="width: 140px"
+                >
+                    <el-option
+                        v-for="item in feeTypeOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                    />
+                </el-select>
+            </el-form-item>
+
+            <el-form-item label="截止日期">
+                <div class="date-filter">
+                    <el-date-picker
+                        v-model="filterForm.date_from"
+                        type="date"
+                        placeholder="开始日期"
+                        value-format="YYYY-MM-DD"
+                        @change="handleStartDateChange"
+                    />
+                    <span class="date-separator">至</span>
+                    <el-date-picker
+                        ref="endDatePickerRef"
+                        v-model="filterForm.date_to"
+                        type="date"
+                        placeholder="结束日期"
+                        value-format="YYYY-MM-DD"
+                        :disabled-date="isEndDateDisabled"
+                    />
+                </div>
+            </el-form-item>
+
+            <el-form-item>
+                <el-button type="primary" @click="searchBills">查询</el-button>
+                <el-button @click="resetFilters">重置</el-button>
+            </el-form-item>
+        </el-form>
+
         <el-table :data="pagedTableData" border>
             <el-table-column prop="id" label="ID" width="80" />
 
@@ -104,9 +240,13 @@ onMounted(() => {
 
             <el-table-column prop="amount" label="金额" />
 
-            <el-table-column prop="fee_type" label="费用类型" />
+            <el-table-column label="费用类型">
+                <template #default="scope">
+                    {{ scope.row.fee_type_text || scope.row.fee_type }}
+                </template>
+            </el-table-column>
 
-            <el-table-column prop="fee_month" label="账单月份" />
+            <el-table-column prop="deadline" label="截止日期" min-width="160" />
 
             <el-table-column label="支付方式" width="110">
                 <template #default="scope">
@@ -174,6 +314,23 @@ onMounted(() => {
 <style scoped>
 .fee-tip {
     margin-bottom: 16px;
+}
+
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-bottom: 16px;
+}
+
+.date-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-separator {
+    color: #64748b;
 }
 
 .payment-methods {

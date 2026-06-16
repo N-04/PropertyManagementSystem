@@ -67,6 +67,10 @@ urlpatterns = [
         "api/complaint/",
         include("apps.complaints.urls.complaint_urls"),
     ),
+    path(
+        "api/chat/",
+        include("apps.chat.urls"),
+    ),
 ]
 
 # 开发环境文件访问

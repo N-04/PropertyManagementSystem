@@ -14,6 +14,10 @@ class NoticeSerializer(serializers.ModelSerializer):
         source="get_status_display",
         read_only=True,
     )
+    notice_type_display = serializers.CharField(
+        source="get_notice_type_display",
+        read_only=True,
+    )
     created_at = serializers.DateTimeField(
         format="%Y-%m-%d %H:%M:%S",
         read_only=True,

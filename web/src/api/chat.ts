@@ -39,3 +39,14 @@ export function updateChatConversationStatus(id: number, data: { status: string 
         data,
     })
 }
+
+export function rateChatConversation(
+    id: number,
+    data: { rating_score: number; rating_comment?: string }
+) {
+    return request({
+        url: `/chat/conversation/rating/${id}/`,
+        method: 'post',
+        data,
+    })
+}

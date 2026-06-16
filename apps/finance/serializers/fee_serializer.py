@@ -27,6 +27,30 @@ class FeeSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    deadline = serializers.DateTimeField(
+        format="%Y-%m-%d %H:%M:%S",
+    )
+
+    pay_time = serializers.DateTimeField(
+        format="%Y-%m-%d %H:%M:%S",
+        read_only=True,
+    )
+
+    fee_type_text = serializers.CharField(
+        source="get_fee_type_display",
+        read_only=True,
+    )
+
+    status_text = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+
+    payment_method_text = serializers.CharField(
+        source="get_payment_method_display",
+        read_only=True,
+    )
+
     class Meta:
         model = Fee
         fields = "__all__"

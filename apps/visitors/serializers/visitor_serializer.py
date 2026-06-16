@@ -22,17 +22,26 @@ class VisitorSerializer(serializers.ModelSerializer):
 
     # 离开时间
     leave_time = serializers.DateTimeField(
-        format="%Y-%m-%d %H:%M:%S", input_formats=["%Y-%m-%d %H:%M:%S"], allow_null=True
+        format="%Y-%m-%d %H:%M:%S",
+        input_formats=["%Y-%m-%d %H:%M:%S"],
+        allow_null=True,
+        required=False,
     )
 
     # 审批时间
     approve_time = serializers.DateTimeField(
-        format="%Y-%m-%d %H:%M:%S", input_formats=["%Y-%m-%d %H:%M:%S"], allow_null=True
+        format="%Y-%m-%d %H:%M:%S",
+        input_formats=["%Y-%m-%d %H:%M:%S"],
+        allow_null=True,
+        required=False,
     )
 
     # 到访时间
     enter_time = serializers.DateTimeField(
-        format="%Y-%m-%d %H:%M:%S", input_formats=["%Y-%m-%d %H:%M:%S"], allow_null=True
+        format="%Y-%m-%d %H:%M:%S",
+        input_formats=["%Y-%m-%d %H:%M:%S"],
+        allow_null=True,
+        required=False,
     )
 
     # 审批人

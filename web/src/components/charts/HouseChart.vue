@@ -1,68 +1,100 @@
-<!-- 文件说明：封装可复用前端组件。 -->
+<!-- 文件说明：基础资源统计图表，在管理员首页展示房屋、业主、车位和报修总量。 -->
 <script setup lang="ts">
-// 引入 ECharts
 import * as echarts from 'echarts'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-// Vue生命周期
-import { onMounted, ref } from 'vue'
+type DashboardData = {
+    house_count: number
+    owner_count: number
+    parking_count: number
+    repair_count: number
+}
 
-// Dashboard接口
-import { getDashboard } from '@/api/dashboard'
+const props = defineProps<{
+    dashboardData: DashboardData
+}>()
 
-// 图表DOM对象
-const chartRef = ref()
+const chartRef = ref<HTMLElement>()
+let chart: echarts.ECharts | null = null
 
-// 页面加载完成执行
-onMounted(async () => {
-    // 获取Dashboard统计数据
-    const res = await getDashboard()
+const renderChart = () => {
+    if (!chartRef.value) {
+        return
+    }
 
-    // 后端返回数据
-    const data = res.data.data
+    if (!chart) {
+        chart = echarts.init(chartRef.value)
+    }
 
-    // 初始化图表
-    const chart = echarts.init(chartRef.value)
-
-    // 设置图表配置
     chart.setOption({
-        // 标题
         title: {
-            text: '房屋统计',
+            text: '基础资源统计',
             left: 'center',
         },
-
-        // 鼠标提示
         tooltip: {
-            trigger: 'item',
-        },
-
-        // 图例
-        legend: {
-            bottom: '0%',
-        },
-
-        // 柱状图数据
-        series: [
-            {
-                // 图表类型
-                type: 'bar',
-                // 数据来源
-                data: [data.house_count, data.owner_count, data.parking_count, data.repair_count],
+            trigger: 'axis',
+            axisPointer: {
+                type: 'shadow',
             },
-        ],
+        },
+        grid: {
+            top: 72,
+            left: 42,
+            right: 24,
+            bottom: 42,
+        },
         xAxis: {
             type: 'category',
-
             data: ['房屋', '业主', '车位', '报修'],
         },
         yAxis: {
             type: 'value',
+            minInterval: 1,
         },
+        series: [
+            {
+                type: 'bar',
+                barMaxWidth: 46,
+                label: {
+                    show: true,
+                    position: 'top',
+                    formatter: '{c}',
+                },
+                data: [
+                    Number(props.dashboardData.house_count || 0),
+                    Number(props.dashboardData.owner_count || 0),
+                    Number(props.dashboardData.parking_count || 0),
+                    Number(props.dashboardData.repair_count || 0),
+                ],
+            },
+        ],
     })
+}
+
+const resizeChart = () => {
+    chart?.resize()
+}
+
+onMounted(() => {
+    nextTick(renderChart)
+    window.addEventListener('resize', resizeChart)
+})
+
+watch(() => props.dashboardData, renderChart, { deep: true })
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', resizeChart)
+    chart?.dispose()
+    chart = null
 })
 </script>
 
 <template>
-    <!-- 图表容器 -->
-    <div ref="chartRef" style="height: 400px" />
+    <div ref="chartRef" class="chart-container" />
 </template>
+
+<style scoped>
+.chart-container {
+    height: 400px;
+}
+</style>

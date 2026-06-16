@@ -5,4 +5,5 @@ from .parking_view import (
     ParkingListView,
     ParkingUpdateView,
     ParkingDeleteView,
+    ParkingBindView,
 )

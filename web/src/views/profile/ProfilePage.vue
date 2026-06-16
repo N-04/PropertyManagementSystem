@@ -9,6 +9,7 @@ import {
     updateCurrentUserProfile,
 } from '@/api/user'
 import { uploadFile } from '@/api/upload'
+import { clearAuthState, setAuthItem } from '@/utils/authState'
 
 const router = useRouter()
 const profileLoading = ref(false)
@@ -79,7 +80,7 @@ const saveProfile = async () => {
             return
         }
 
-        localStorage.setItem('username', profileForm.username)
+        setAuthItem('username', profileForm.username)
         ElMessage.success('资料已保存')
         await loadProfile()
     } catch (error) {
@@ -139,8 +140,7 @@ const savePassword = async () => {
         }
 
         ElMessage.success('密码修改成功，请重新登录')
-        localStorage.removeItem('token')
-        localStorage.removeItem('refresh')
+        clearAuthState()
         router.push('/login')
     } catch (error) {
         ElMessage.error(getErrorMessage(error, '密码修改失败'))

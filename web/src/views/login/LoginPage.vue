@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { refreshBrowserTitle } from '@/router'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCaptchaApi, loginApi, phoneLoginApi, sendSmsCodeApi } from '@/api/auth'
 import { isCustomerServiceRole } from '@/api/menu'
+import { saveAuthState } from '@/utils/authState'
 
 const router = useRouter()
 
@@ -106,20 +108,12 @@ const saveLoginDataAndEnter = async (loginData: any) => {
         return
     }
 
-    localStorage.setItem('token', token)
-    localStorage.setItem('refresh', loginData.refresh || '')
-    localStorage.setItem('username', loginData.username || loginData.user?.username || '')
-
-    const role = loginData.role || loginData.roles?.[0] || loginData.user?.role
-
-    if (role) {
-        localStorage.setItem('role', role)
-    } else {
-        localStorage.removeItem('role')
-    }
+    // 登录态写入当前标签页，避免复制标签后切换角色造成菜单和角色互相覆盖。
+    const { role } = saveAuthState(loginData)
 
     try {
         await router.push(isCustomerServiceRole(role) ? '/service/chat' : '/dashboard')
+        refreshBrowserTitle()
         ElMessage.success('登录成功')
     } catch (error) {
         console.log('登录成功后跳转失败：', error)

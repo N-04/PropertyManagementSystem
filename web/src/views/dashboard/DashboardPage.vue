@@ -2,37 +2,15 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { getDashboard } from '@/api/dashboard'
-import { getVisitorStatistics } from '@/api/visitor'
-import { getNoticeList } from '@/api/notice'
-import { getFeeList } from '@/api/fee'
-import { getRepairList } from '@/api/repair'
-import { getComplaintList } from '@/api/complaint'
 
 import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
 import HouseChart from '@/components/charts/HouseChart.vue'
+import { getStoredRole, getStoredUsername } from '@/utils/authState'
 
 // 当前登录用户
-const username = localStorage.getItem('username') || '用户'
-const role = localStorage.getItem('role') || ''
-const canReceiveNotice = computed(() => {
-    // 公告接收方只包含管理员和业主；财务/维修只进入公告发布列表。
-    return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role)
-})
-const noticeMessages = ref<string[]>([])
-const roleMessages = ref<string[]>([])
-
-const rollingMessages = computed(() => {
-    const messages = [...noticeMessages.value, ...roleMessages.value].filter(Boolean)
-
-    if (messages.length) {
-        return messages.slice(0, 8)
-    }
-
-    return ['系统运行正常，欢迎使用社区物业管理系统']
-})
-
-const rollingText = computed(() => rollingMessages.value.join('　　'))
+const username = getStoredUsername() || '用户'
+const role = getStoredRole()
 
 // 首页统计数据
 const data = ref({
@@ -48,16 +26,40 @@ const data = ref({
     repair_pending: 0,
     repair_processing: 0,
     repair_finished: 0,
+    paid_count: 0,
+    unpaid_count: 0,
 })
 
-// 访客统计数据
-const statistics = ref({
-    today_count: 0,
-    waiting: 0,
-    approved: 0,
-    entered: 0,
-    left: 0,
-    total: 0,
+const adminRoles = ['admin', 'super_admin', 'property_admin']
+const financeRoles = ['finance_staff', 'finance']
+const repairRoles = ['repair_staff', 'repairer', 'repair']
+
+const showHouseChart = computed(() => {
+    return adminRoles.includes(role)
+})
+
+const showFeeChart = computed(() => {
+    return adminRoles.includes(role) || financeRoles.includes(role)
+})
+
+const showRepairChart = computed(() => {
+    return adminRoles.includes(role) || repairRoles.includes(role)
+})
+
+const chartCount = computed(() => {
+    return [showHouseChart.value, showFeeChart.value, showRepairChart.value].filter(Boolean).length
+})
+
+const chartColumnSpan = computed(() => {
+    if (chartCount.value >= 3) {
+        return 8
+    }
+
+    if (chartCount.value === 2) {
+        return 12
+    }
+
+    return 16
 })
 
 /**
@@ -72,94 +74,15 @@ const loadData = async () => {
     }
 }
 
-/**
- * 获取访客统计
- */
-const loadStatistics = async () => {
-    const res = await getVisitorStatistics()
-
-    statistics.value = {
-        ...statistics.value,
-        ...res.data.data,
-    }
-}
-
-const loadNoticeMessages = async () => {
-    if (!canReceiveNotice.value) {
-        noticeMessages.value = []
-        return
-    }
-
-    try {
-        const res = await getNoticeList()
-        const list = res.data.data || []
-
-        noticeMessages.value = list
-            .filter((item: any) => item.status !== 'draft')
-            .slice(0, 3)
-            .map((item: any) => `公告通知：${item.title}`)
-    } catch (error) {
-        noticeMessages.value = []
-    }
-}
-
-const loadRoleMessages = async () => {
-    const messages: string[] = []
-
-    try {
-        if (['owner', 'finance', 'finance_staff', 'admin', 'super_admin'].includes(role)) {
-            const feeRes = await getFeeList()
-            const fees = feeRes.data.data || []
-            const unpaidFees = fees.filter((item: any) => item.status === 'unpaid' || item.status === 'overdue')
-
-            if (unpaidFees.length) {
-                messages.push(`缴费提醒：当前有 ${unpaidFees.length} 条待缴或逾期账单`)
-            }
-        }
-    } catch (error) {
-        // 首页提示不影响主统计展示。
-    }
-
-    try {
-        if (['owner', 'repair_staff', 'repair', 'property_admin', 'admin', 'super_admin'].includes(role)) {
-            const repairRes = await getRepairList({})
-            const repairs = repairRes.data.data || []
-            const activeRepairs = repairs.filter((item: any) => item.status !== 'finished')
-
-            if (activeRepairs.length) {
-                messages.push(`工单通知：当前有 ${activeRepairs.length} 条待处理或进行中工单`)
-            }
-        }
-    } catch (error) {
-        // 首页提示不影响主统计展示。
-    }
-
-    try {
-        if (['property_admin', 'customer_service', 'service', 'admin', 'super_admin'].includes(role)) {
-            const complaintRes = await getComplaintList({ status: 'pending' })
-            const complaints = complaintRes.data.data || []
-
-            if (complaints.length) {
-                messages.push(`投诉提醒：当前有 ${complaints.length} 条投诉/建议待处理`)
-            }
-        }
-    } catch (error) {
-        // 首页提示不影响主统计展示。
-    }
-
-    roleMessages.value = messages
-}
-
 onMounted(() => {
-    loadData()
-    loadStatistics()
-    loadNoticeMessages()
-    loadRoleMessages()
+    if (chartCount.value) {
+        loadData()
+    }
 })
 </script>
 
 <template>
-    <el-card>
+    <el-card v-if="chartCount">
         <template #header>
             <div style="display: flex; justify-content: space-between">
                 <span>首页统计</span>
@@ -169,159 +92,44 @@ onMounted(() => {
             </div>
         </template>
 
-        <div class="notice-marquee" aria-label="首页滚动通知">
-            <div class="notice-label">滚动通知</div>
-            <div class="notice-track">
-                <div class="notice-content">{{ rollingText }}</div>
+        <el-row :gutter="20" class="dashboard-chart-row">
+            <el-col v-if="showHouseChart" :span="chartColumnSpan">
+                <el-card>
+                    <!-- 管理员查看房屋、业主、车位和报修总量图表。 -->
+                    <HouseChart :dashboard-data="data" />
+                </el-card>
+            </el-col>
+
+            <el-col v-if="showFeeChart" :span="chartColumnSpan">
+                <el-card>
+                    <!-- 管理员和财务人员查看费用图表。 -->
+                    <FeeChart :dashboard-data="data" />
+                </el-card>
+            </el-col>
+
+            <el-col v-if="showRepairChart" :span="chartColumnSpan">
+                <el-card>
+                    <!-- 管理员和维修员查看维修工单图表。 -->
+                    <RepairChart :dashboard-data="data" />
+                </el-card>
+            </el-col>
+        </el-row>
+    </el-card>
+
+    <el-card v-else class="plain-home-card">
+        <template #header>
+            <div style="display: flex; justify-content: space-between">
+                <span>首页</span>
+                <span class="dashboard-user">
+                    欢迎您：{{ username }}
+                </span>
             </div>
-        </div>
+        </template>
 
-        <!-- 基础统计 -->
-        <el-row :gutter="20">
-            <el-col :span="4">
-                <el-statistic title="今日来访" :value="statistics.today_count" />
-            </el-col>
-
-            <el-col :span="4">
-                <el-statistic title="待审核" :value="statistics.waiting" />
-            </el-col>
-
-            <el-col :span="4">
-                <el-statistic title="已通过" :value="statistics.approved" />
-            </el-col>
-
-            <el-col :span="4">
-                <el-statistic title="已到访" :value="statistics.entered" />
-            </el-col>
-
-            <el-col :span="4">
-                <el-statistic title="已离开" :value="statistics.left" />
-            </el-col>
-
-            <el-col :span="4">
-                <el-statistic title="访客总数" :value="statistics.total" />
-            </el-col>
-        </el-row>
-        <br />
-
-        <el-row :gutter="20">
-            <el-col :span="6">
-                <el-card shadow="hover">
-                    <div>房屋总数</div>
-                    <h2>{{ data.house_count }}</h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="6">
-                <el-card shadow="hover">
-                    <div>业主总数</div>
-                    <h2>{{ data.owner_count }}</h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="6">
-                <el-card shadow="hover">
-                    <div>车位总数</div>
-                    <h2>{{ data.parking_count }}</h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="6">
-                <el-card shadow="hover">
-                    <div>报修总数</div>
-                    <h2>{{ data.repair_count }}</h2>
-                </el-card>
-            </el-col>
-        </el-row>
-
-        <br />
-        <el-row :gutter="20">
-            <el-col :span="12">
-                <el-card>
-                    <!-- 房屋统计 -->
-                    <HouseChart />
-                </el-card>
-            </el-col>
-        </el-row>
-        <br />
-
-        <!-- 费用统计 -->
-        <el-row :gutter="20">
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>物业费总额</div>
-                    <h2>¥ {{ data.fee_total }}</h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>已缴费金额</div>
-                    <h2 style="color: #67c23a">
-                        {{ data.fee_paid }}
-                    </h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>未缴费金额</div>
-                    <h2 style="color: #f56c6c">
-                        {{ data.fee_unpaid }}
-                    </h2>
-                </el-card>
-            </el-col>
-        </el-row>
-
-        <br />
-        <el-row :gutter="20">
-            <el-col :span="12">
-                <el-card>
-                    <!-- 缴费统计 -->
-                    <FeeChart />
-                </el-card>
-            </el-col>
-        </el-row>
-
-        <!-- 报修统计 -->
-        <el-row :gutter="20">
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>待派单报修</div>
-                    <h2 style="color: #e6a23c">
-                        {{ data.repair_pending }}
-                    </h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>进行中报修</div>
-                    <h2 style="color: #409eff">
-                        {{ data.repair_processing }}
-                    </h2>
-                </el-card>
-            </el-col>
-
-            <el-col :span="8">
-                <el-card shadow="hover">
-                    <div>已完成报修</div>
-                    <h2 style="color: #67c23a">
-                        {{ data.repair_finished }}
-                    </h2>
-                </el-card>
-            </el-col>
-        </el-row>
-
-        <br />
-        <el-row :gutter="20">
-            <el-col :span="12">
-                <el-card>
-                    <!-- 报修统计 -->
-                    <RepairChart />
-                </el-card>
-            </el-col>
-        </el-row>
+        <el-empty
+            description="请通过左侧业主模块办理业务"
+            :image-size="120"
+        />
     </el-card>
 </template>
 
@@ -336,46 +144,11 @@ h2 {
     text-align: center;
 }
 
-.notice-marquee {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: 42px;
-    margin-bottom: 18px;
-    padding: 0 12px;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    background: #f5f7fa;
-    overflow: hidden;
+.dashboard-chart-row {
+    justify-content: center;
 }
 
-.notice-label {
-    flex: 0 0 auto;
-    color: #409eff;
-    font-weight: 600;
-}
-
-.notice-track {
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.notice-content {
-    display: inline-block;
-    min-width: 100%;
-    color: #606266;
-    text-align: left;
-    animation: notice-scroll 22s linear infinite;
-}
-
-@keyframes notice-scroll {
-    0% {
-        transform: translateX(100%);
-    }
-
-    100% {
-        transform: translateX(-100%);
-    }
+.plain-home-card {
+    min-height: 260px;
 }
 </style>

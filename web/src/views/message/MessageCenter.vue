@@ -8,6 +8,7 @@ import { getNoticeList } from '@/api/notice'
 import { getRepairList } from '@/api/repair'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { getStoredRole } from '@/utils/authState'
 
 type MessageRow = {
     id: string
@@ -20,7 +21,7 @@ type MessageRow = {
 }
 
 const router = useRouter()
-const role = localStorage.getItem('role') || ''
+const role = getStoredRole()
 const loading = ref(false)
 const tableData = ref<MessageRow[]>([])
 

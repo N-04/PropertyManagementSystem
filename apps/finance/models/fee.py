@@ -22,6 +22,13 @@ class Fee(models.Model):
         ("parking", "停车费"),
         ("other", "其他费用"),
     )
+    PAYMENT_METHOD_CHOICES = (
+        ("alipay", "支付宝"),
+        ("wechat", "微信"),
+        ("bank_card", "银行卡"),
+        ("apple_pay", "Apple Pay"),
+        ("union_pay", "云闪付"),
+    )
     owner = models.ForeignKey(
         Owner,
         on_delete=models.CASCADE,
@@ -49,6 +56,13 @@ class Fee(models.Model):
         null=True,
         blank=True,
         verbose_name="缴费时间",
+    )
+    payment_method = models.CharField(
+        max_length=30,
+        choices=PAYMENT_METHOD_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="支付方式",
     )
     status = models.CharField(
         max_length=20,
