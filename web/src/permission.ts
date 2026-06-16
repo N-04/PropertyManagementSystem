@@ -1,0 +1,17 @@
+// 文件说明：前端路由权限控制入口。
+import router from './router'
+
+router.beforeEach((to, from) => {
+    const token = localStorage.getItem('token')
+    const whiteList = ['/login', '/register']
+
+    if (whiteList.includes(to.path)) {
+        return true
+    }
+
+    if (!token) {
+        return '/login'
+    }
+
+    return true
+})
