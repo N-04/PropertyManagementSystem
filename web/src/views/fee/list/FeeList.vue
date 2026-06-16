@@ -129,7 +129,7 @@ onMounted(() => {
             <el-table-column label="操作" width="120">
                 <template #default="scope">
                     <el-button
-                        v-if="scope.row.status === 'unpaid' || scope.row.status === 'overdue'"
+                        v-if="isOwner && (scope.row.status === 'unpaid' || scope.row.status === 'overdue')"
                         type="success"
                         size="small"
                         @click="handlePay(scope.row.id)"

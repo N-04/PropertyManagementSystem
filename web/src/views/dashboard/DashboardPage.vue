@@ -1,7 +1,6 @@
 <!-- 文件说明：实现 src/views/dashboard/DashboardPage.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { getDashboard } from '@/api/dashboard'
 import { getVisitorStatistics } from '@/api/visitor'
 import { getNoticeList } from '@/api/notice'
@@ -13,12 +12,13 @@ import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
 import HouseChart from '@/components/charts/HouseChart.vue'
 
-const router = useRouter()
-
 // 当前登录用户
 const username = localStorage.getItem('username') || '用户'
 const role = localStorage.getItem('role') || ''
-const isOwner = computed(() => role === 'owner')
+const canReceiveNotice = computed(() => {
+    // 公告接收方只包含管理员和业主；财务/维修只进入公告发布列表。
+    return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role)
+})
 const noticeMessages = ref<string[]>([])
 const roleMessages = ref<string[]>([])
 
@@ -85,6 +85,11 @@ const loadStatistics = async () => {
 }
 
 const loadNoticeMessages = async () => {
+    if (!canReceiveNotice.value) {
+        noticeMessages.value = []
+        return
+    }
+
     try {
         const res = await getNoticeList()
         const list = res.data.data || []
@@ -160,9 +165,6 @@ onMounted(() => {
                 <span>首页统计</span>
                 <span class="dashboard-user">
                     欢迎您：{{ username }}
-                    <el-button v-if="isOwner" type="primary" link @click="router.push('/contact/service')">
-                        联系客服
-                    </el-button>
                 </span>
             </div>
         </template>
