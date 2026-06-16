@@ -45,6 +45,3 @@ python manage.py runserver
 
 仓库中包含 `wyglxx2026.sql`，可按本地数据库环境导入初始化数据。数据库连接参数请根据本机 MySQL 配置在 Django settings 中调整。
 
-## 更新说明
-
-项目每天会通过 Codex 自动化检查本地变更，并生成中文更新内容后提交到 GitHub。若没有新的代码变更，则只输出无需推送的检查结果。
