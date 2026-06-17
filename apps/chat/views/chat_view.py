@@ -283,4 +283,19 @@ class ChatConversationRatingView(APIView):
         conversation.rating_at = timezone.now()
         conversation.save(update_fields=["rating_score", "rating_comment", "rating_at"])
 
+        feedback_message = f"用户已提交服务评分：{score}分"
+
+        if rating_comment:
+            feedback_message = f"{feedback_message}，评价：{rating_comment}"
+
+        # 评分结果写入会话系统消息，相关处理人员刷新列表后也能看到反馈。
+        ChatMessage.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            content=feedback_message,
+            message_type="system",
+        )
+        conversation.last_message = feedback_message
+        conversation.save(update_fields=["last_message", "updated_at"])
+
         return ResponseSuccess(data=ChatConversationSerializer(conversation).data, msg="评分成功")

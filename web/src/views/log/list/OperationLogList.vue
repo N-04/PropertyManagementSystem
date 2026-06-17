@@ -3,16 +3,19 @@
 import { ref, onMounted } from 'vue'
 import { getOperationLogList } from '@/api/log'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
+const keyword = ref('')
+const filteredTableData = useKeywordFilter(tableData, keyword, ['username', 'module', 'action', 'created_at'])
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 
 const loadData = async () => {
     const res = await getOperationLogList()
@@ -28,6 +31,16 @@ const exportExcel = () => {
     window.open('http://127.0.0.1:8000/api/log/operation/export/')
 }
 
+const handleFilter = () => {
+    // 日志列表按页面可见字段做本地模糊搜索。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    resetPage()
+}
+
 onMounted(() => {
     loadData()
 })
@@ -36,9 +49,24 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header>
-            <span>操作日志列表</span>
-            <el-button type="success" @click="exportExcel"> 导出Excel </el-button>
+            <div class="card-header">
+                <span>操作日志列表</span>
+                <el-button type="success" @click="exportExcel"> 导出Excel </el-button>
+            </div>
         </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="用户名/模块/操作内容"
+                style="width: 280px"
+                @keyup.enter="handleFilter"
+                @clear="handleFilter"
+            />
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+        </div>
 
         <el-table :data="pagedTableData" border>
             <el-table-column type="index" label="序号" width="80" />
@@ -62,3 +90,20 @@ onMounted(() => {
         />
     </el-card>
 </template>
+
+<style scoped>
+.card-header,
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-header {
+    justify-content: space-between;
+}
+
+.list-toolbar {
+    margin-bottom: 12px;
+}
+</style>

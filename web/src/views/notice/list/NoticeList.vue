@@ -4,6 +4,7 @@ import { computed, ref, onMounted } from 'vue'
 import { getNoticeList, deleteNotice } from '@/api/notice'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 // =====================================================
@@ -29,17 +30,34 @@ const canPublishNotice = computed(() => {
 // 公告列表数据
 // =====================================================
 const tableData = ref<any[]>([])
+const keyword = ref('')
+const filteredTableData = useKeywordFilter(tableData, keyword, [
+    'title',
+    'content',
+    'notice_type_display',
+    'status_display',
+])
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 const getList = async () => {
     const res = await getNoticeList()
 
     tableData.value = res.data.data
+    resetPage()
+}
+
+const handleFilter = () => {
+    // 公告列表本地模糊搜索后回到第一页。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
     resetPage()
 }
 
@@ -80,6 +98,19 @@ onMounted(() => {
                 </el-button>
             </div>
         </template>
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="公告标题/内容/类型/状态"
+                style="width: 300px"
+                @keyup.enter="handleFilter"
+                @clear="handleFilter"
+            />
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+        </div>
+
         <el-table :data="pagedTableData" style="width: 100%" border>
             <el-table-column prop="id" label="ID" width="80" />
 
@@ -117,5 +148,12 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 </style>

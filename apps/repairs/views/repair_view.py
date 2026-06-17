@@ -158,6 +158,9 @@ class RepairUpdateView(APIView):
                 if instance.status != "finished":
                     return ResponseError(msg="只能评价已完成工单")
 
+                if instance.evaluation_score is not None or instance.evaluation_time:
+                    return ResponseError(msg="该工单已评价，不能重复提交")
+
                 data = {
                     key: data[key]
                     for key in evaluation_fields
@@ -244,7 +247,7 @@ class RepairUpdateView(APIView):
         elif request.data.get("repair_result") or request.data.get("result_images"):
             action = "上传维修结果"
         elif data.get("evaluation_score"):
-            action = "维修评价"
+            action = f"维修评价（{data.get('evaluation_score')}分）"
 
         if action != "修改报修":
             RepairLog.objects.create(
@@ -263,7 +266,7 @@ class RepairUpdateView(APIView):
 
         return ResponseSuccess(
             data=RepairSerializer(saved).data,
-            msg="修改成功",
+            msg="评价提交成功，已反馈维修人员和管理员" if data.get("evaluation_score") else "修改成功",
         )
 
 

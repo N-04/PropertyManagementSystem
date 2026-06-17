@@ -155,16 +155,17 @@ class ParkingBindView(APIView):
         parking.owner = owner
         parking.status = "used"
         parking.save(update_fields=["owner", "status"])
+        owner_room = owner.house.room_no if owner.house_id else "未绑定房屋"
 
         save_log(
             username=getattr(request.user, "username", "system"),
             module="车位管理",
-            action=f"绑定车位 {parking.parking_no}",
+            action=f"业主购买/绑定车位 {parking.parking_no}（业主：{owner.name}，房号：{owner_room}）",
         )
 
         return ResponseSuccess(
             data=ParkingSerializer(parking).data,
-            msg="绑定成功",
+            msg="车位购买/绑定成功，已反馈管理员",
         )
 
 

@@ -1,6 +1,6 @@
 <!-- 文件说明：实现 src/views/car/list/CarList.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { getCarList } from '@/api/car'
 import { deleteCar, disableCar, enableCar } from '@/api/car'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -11,18 +11,23 @@ import DataPagination from '@/components/common/DataPagination.vue'
 const router = useRouter()
 
 const tableData = ref<any[]>([])
+const keyword = ref('')
+const statusFilter = ref('')
+const filteredTableData = computed(() => {
+    if (!statusFilter.value) {
+        return tableData.value
+    }
+
+    return tableData.value.filter((item) => item.status === statusFilter.value)
+})
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
-const keyword = ref('')
-const resetSearch = () => {
-    keyword.value = ''
-    getList()
-}
+} = useClientPagination(filteredTableData)
+
 /**
  * 获取车辆列表
  */
@@ -31,6 +36,18 @@ const getList = async () => {
 
     tableData.value = res.data.data
     resetPage()
+}
+
+const handleFilter = () => {
+    // 车辆关键字走接口模糊搜索，状态在当前结果内继续筛选。
+    page.value = 1
+    getList()
+}
+
+const resetSearch = () => {
+    keyword.value = ''
+    statusFilter.value = ''
+    getList()
 }
 
 const handleDetail = (row: any) => {
@@ -84,17 +101,28 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header>
-            <div style="display: flex; justify-content: space-between">
+            <div class="card-header">
                 <span>车辆列表</span>
-                <el-input v-model="keyword" placeholder="车牌号/业主" style="width: 250px" />
-
-                <el-button type="primary" @click="getList"> 搜索 </el-button>
-
-                <el-button @click="resetSearch"> 重置 </el-button>
-
                 <el-button type="primary" @click="router.push('/car/create')"> 新增车辆 </el-button>
             </div>
         </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="车牌号/业主"
+                style="width: 250px"
+                @keyup.enter="handleFilter"
+                @clear="handleFilter"
+            />
+            <el-select v-model="statusFilter" clearable placeholder="车辆状态" style="width: 130px">
+                <el-option label="正常" value="normal" />
+                <el-option label="禁用" value="disabled" />
+            </el-select>
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetSearch">重置</el-button>
+        </div>
 
         <el-table :data="pagedTableData" border style="width: 100%">
             <el-table-column prop="id" label="ID" width="80" />
@@ -161,3 +189,20 @@ onMounted(() => {
         />
     </el-card>
 </template>
+
+<style scoped>
+.card-header,
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-header {
+    justify-content: space-between;
+}
+
+.list-toolbar {
+    margin-bottom: 12px;
+}
+</style>

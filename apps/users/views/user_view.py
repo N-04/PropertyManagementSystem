@@ -1,6 +1,7 @@
 # 文件说明：处理 apps/users/views/user_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from django.contrib.auth import authenticate
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -302,6 +303,16 @@ class UserListView(APIView):
     def get(self, request):
 
         queryset = User.objects.all().order_by("-id")
+        keyword = request.GET.get("keyword", "").strip()
+
+        if keyword:
+            # 用户列表搜索只匹配页面可见的用户名、姓名、手机号和角色名。
+            queryset = queryset.filter(
+                Q(username__icontains=keyword)
+                | Q(real_name__icontains=keyword)
+                | Q(phone__icontains=keyword)
+                | Q(roles__name__icontains=keyword)
+            ).distinct()
 
         # 实例化分页器
         paginator = CustomPageNumberPagination()

@@ -124,7 +124,7 @@ onMounted(() => {
             </el-form-item>
 
             <el-form-item>
-                <el-button type="primary" @click="loadData">搜索</el-button>
+                <el-button type="primary" @click="loadData">筛选</el-button>
                 <el-button @click="resetSearch">重置</el-button>
             </el-form-item>
         </el-form>

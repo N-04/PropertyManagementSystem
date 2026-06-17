@@ -78,7 +78,7 @@ onMounted(() => {
                 <span>业主列表</span>
                 <el-input v-model="keyword" placeholder="姓名/手机号" />
 
-                <el-button type="primary" @click="searchOwner"> 搜索 </el-button>
+                <el-button type="primary" @click="searchOwner"> 筛选 </el-button>
 
                 <el-button type="primary" @click="handleCreate"> 新增业主 </el-button>
             </div>

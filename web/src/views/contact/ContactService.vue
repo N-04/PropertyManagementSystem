@@ -50,12 +50,17 @@ const sending = ref(false)
 const conversations = ref<Conversation[]>([])
 const activeId = ref<number | null>(null)
 const replyText = ref('')
+const keyword = ref('')
+const targetFilter = ref('')
+const statusFilter = ref('')
 const ratingDialogVisible = ref(false)
 const ratingSubmitting = ref(false)
 const pendingRatingConversation = ref<Conversation | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 const ratingDismissedIds = new Set<number>()
 const ratingCompletedIds = new Set<number>()
+const SERVICE_RATING_FEEDBACK_EVENT = 'property-management-service-rating-feedback'
+const SERVICE_RATING_FEEDBACK_STORAGE_KEY = 'serviceRatingFeedback'
 
 const form = reactive({
     target_role: 'customer_service',
@@ -87,13 +92,37 @@ const targetOptions = computed(() => {
     return options
 })
 
+const statusOptions = [
+    { label: '进行中', value: 'active' },
+    { label: '已解决', value: 'resolved' },
+    { label: '已关闭', value: 'closed' },
+]
+
+const filteredConversations = computed(() => {
+    const text = keyword.value.trim().toLowerCase()
+
+    return conversations.value.filter((item) => {
+        const matchesKeyword = !text || [
+            item.title,
+            item.target_role_text,
+            item.status_text,
+            item.last_message,
+            item.updated_at,
+        ].some((value) => String(value ?? '').toLowerCase().includes(text))
+        const matchesTarget = !targetFilter.value || item.target_role === targetFilter.value
+        const matchesStatus = !statusFilter.value || item.status === statusFilter.value
+
+        return matchesKeyword && matchesTarget && matchesStatus
+    })
+})
+
 const {
     page,
     pageSize,
     total,
     pagedData: pagedConversations,
     resetPage,
-} = useClientPagination(conversations, 5)
+} = useClientPagination(filteredConversations, 5)
 
 const activeConversation = computed(() => {
     return conversations.value.find((item) => item.id === activeId.value) || null
@@ -165,6 +194,20 @@ const mergeUpdatedConversation = (conversation: Conversation) => {
             ...conversation,
         }
     }
+}
+
+const emitServiceRatingFeedback = (conversation: Conversation, score: number) => {
+    const feedback = {
+        id: Date.now(),
+        conversation_id: conversation.id,
+        score,
+        // 评分成功后给当前页面和管理员侧滚动通知一个即时信号，后端数据刷新稍慢也不会重复弹窗。
+        message: `${username || '用户'} 已对会话「${conversation.title}」提交 ${score.toFixed(1)} 分服务评分，请相关人员及时查看。`,
+        created_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+    }
+
+    localStorage.setItem(SERVICE_RATING_FEEDBACK_STORAGE_KEY, JSON.stringify(feedback))
+    window.dispatchEvent(new CustomEvent(SERVICE_RATING_FEEDBACK_EVENT, { detail: feedback }))
 }
 
 const loadConversations = async (
@@ -280,23 +323,32 @@ const submitRating = async () => {
     ratingSubmitting.value = true
 
     try {
+        const currentConversation = pendingRatingConversation.value
+        const score = Number(ratingForm.score.toFixed(1))
         const res = await rateChatConversation(pendingRatingConversation.value.id, {
-            rating_score: Number(ratingForm.score.toFixed(1)),
+            rating_score: score,
             rating_comment: ratingForm.comment.trim(),
         })
 
         if (res.data.code !== 200) {
+            if ((res.data.msg || '').includes('已评分')) {
+                ratingCompletedIds.add(currentConversation.id)
+                ratingDialogVisible.value = false
+                pendingRatingConversation.value = null
+            }
+
             ElMessage.error(res.data.msg || '评分失败')
             return
         }
 
         // 先本地标记为已评分，再关闭弹窗和刷新列表，避免轮询拿到旧数据时重复弹出评分框。
-        ratingCompletedIds.add(pendingRatingConversation.value.id)
+        ratingCompletedIds.add(currentConversation.id)
 
         if (res.data.data) {
             mergeUpdatedConversation(res.data.data as Conversation)
         }
 
+        emitServiceRatingFeedback(res.data.data || currentConversation, score)
         ratingDialogVisible.value = false
         pendingRatingConversation.value = null
         ElMessage.success('评分已提交')
@@ -313,6 +365,18 @@ const handleRatingLater = () => {
 
     ratingDialogVisible.value = false
     pendingRatingConversation.value = null
+}
+
+const handleFilter = () => {
+    // 会话列表筛选只影响列表展示，不影响当前打开的聊天记录。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    targetFilter.value = ''
+    statusFilter.value = ''
+    resetPage()
 }
 
 onMounted(() => {
@@ -362,6 +426,35 @@ onBeforeUnmount(() => {
 
         <section class="conversation-panel">
             <div class="panel-title">会话列表</div>
+            <div class="list-toolbar">
+                <el-input
+                    v-model="keyword"
+                    clearable
+                    placeholder="标题/对象/状态/消息"
+                    style="width: 240px"
+                    @keyup.enter="handleFilter"
+                    @clear="handleFilter"
+                />
+                <el-select v-model="targetFilter" clearable placeholder="联系对象" style="width: 120px">
+                    <el-option
+                        v-for="item in targetOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                    />
+                </el-select>
+                <el-select v-model="statusFilter" clearable placeholder="会话状态" style="width: 120px">
+                    <el-option
+                        v-for="item in statusOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                    />
+                </el-select>
+                <el-button type="primary" @click="handleFilter">筛选</el-button>
+                <el-button @click="resetFilter">重置</el-button>
+            </div>
+
             <el-table v-loading="loading" :data="pagedConversations" border highlight-current-row>
                 <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
                 <el-table-column prop="target_role_text" label="联系对象" width="110" />
@@ -525,6 +618,14 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     font-size: 16px;
     font-weight: 700;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
 }
 
 .message-list {

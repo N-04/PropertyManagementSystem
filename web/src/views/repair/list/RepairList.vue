@@ -9,13 +9,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
 import Upload from '@/views/upload/Upload.vue'
-import { getStoredRole } from '@/utils/authState'
+import { getStoredRole, getStoredUsername } from '@/utils/authState'
 
 const router = useRouter()
 const route = useRoute()
 const role = getStoredRole()
 const isOwner = role === 'owner'
 const isRepairer = ['repair_staff', 'repairer', 'repair'].includes(role)
+const REPAIR_EVALUATION_FEEDBACK_EVENT = 'property-management-repair-evaluation-feedback'
+const REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY = 'repairEvaluationFeedback'
 
 const startRef = ref()
 const endRef = ref()
@@ -158,21 +160,42 @@ const removeResultImage = (index: number) => {
 
 // 维修评价
 const evaluateDialogVisible = ref(false)
+const evaluationSubmitting = ref(false)
 const evaluateRow = ref<RepairItem | null>(null)
+const evaluationCompletedIds = new Set<number>()
 const evaluateForm = reactive({
     score: 5,
     content: '',
 })
 
 const handleEvaluate = (row: RepairItem) => {
+    if (row.evaluation_score || evaluationCompletedIds.has(row.id)) {
+        ElMessage.info('该工单已评价，不能重复提交')
+        return
+    }
+
     evaluateRow.value = row
     evaluateForm.score = Number(row.evaluation_score || 5)
     evaluateForm.content = row.evaluation_content || ''
     evaluateDialogVisible.value = true
 }
 
+const emitEvaluationFeedback = (repair: RepairItem, score: number) => {
+    const feedback = {
+        id: Date.now(),
+        repair_id: repair.id,
+        title: repair.title,
+        score,
+        message: `${getStoredUsername() || repair.owner_name || '业主'} 已对工单「${repair.title}」提交 ${score.toFixed(1)} 分评价，请维修人员和管理员及时查看。`,
+        created_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+    }
+
+    localStorage.setItem(REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY, JSON.stringify(feedback))
+    window.dispatchEvent(new CustomEvent(REPAIR_EVALUATION_FEEDBACK_EVENT, { detail: feedback }))
+}
+
 const submitEvaluation = async () => {
-    if (!evaluateRow.value) {
+    if (!evaluateRow.value || evaluationSubmitting.value) {
         return
     }
 
@@ -181,15 +204,31 @@ const submitEvaluation = async () => {
         return
     }
 
-    await updateRepair(evaluateRow.value.id, {
-        evaluation_score: evaluateForm.score,
-        evaluation_content: evaluateForm.content,
-    })
+    evaluationSubmitting.value = true
 
-    ElMessage.success('评价已提交')
-    evaluateDialogVisible.value = false
+    try {
+        const currentRow = evaluateRow.value
+        const score = Number(evaluateForm.score.toFixed(1))
+        const res = await updateRepair(currentRow.id, {
+            evaluation_score: score,
+            evaluation_content: evaluateForm.content,
+        })
 
-    await loadData()
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '评价提交失败')
+            return
+        }
+
+        evaluationCompletedIds.add(currentRow.id)
+        emitEvaluationFeedback(res.data.data || currentRow, score)
+        ElMessage.success(res.data.msg || '评价已提交')
+        evaluateDialogVisible.value = false
+        evaluateRow.value = null
+
+        await loadData()
+    } finally {
+        evaluationSubmitting.value = false
+    }
 }
 
 // 日期筛选
@@ -307,7 +346,7 @@ onMounted(() => {
                                 />
                             </el-form-item>
                             <el-form-item>
-                                <el-button type="primary" @click="loadData"> 搜索 </el-button>
+                                <el-button type="primary" @click="loadData"> 筛选 </el-button>
                                 <el-button @click="resetSearch"> 重置 </el-button>
                             </el-form-item>
                         </div>
@@ -416,12 +455,19 @@ onMounted(() => {
                         </el-button>
 
                         <el-button
-                            v-if="isOwner && scope.row.status === 'finished'"
+                            v-if="isOwner && scope.row.status === 'finished' && !scope.row.evaluation_score && !evaluationCompletedIds.has(scope.row.id)"
                             type="warning"
                             @click="handleEvaluate(scope.row)"
                         >
-                            {{ scope.row.evaluation_score ? '修改评价' : '评价' }}
+                            评价
                         </el-button>
+
+                        <el-tag
+                            v-else-if="isOwner && scope.row.status === 'finished'"
+                            type="success"
+                        >
+                            已评价
+                        </el-tag>
 
                         <el-button
                             v-if="scope.row.status === 'pending'"
@@ -507,7 +553,14 @@ onMounted(() => {
 
         <template #footer>
             <el-button @click="evaluateDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitEvaluation">提交评价</el-button>
+            <el-button
+                type="primary"
+                :loading="evaluationSubmitting"
+                :disabled="evaluationSubmitting"
+                @click="submitEvaluation"
+            >
+                提交评价
+            </el-button>
         </template>
     </el-dialog>
 </template>

@@ -7,6 +7,7 @@ import { getFeeList } from '@/api/fee'
 import { getNoticeList } from '@/api/notice'
 import { getRepairList } from '@/api/repair'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 
@@ -24,6 +25,16 @@ const router = useRouter()
 const role = getStoredRole()
 const loading = ref(false)
 const tableData = ref<MessageRow[]>([])
+const keyword = ref('')
+const typeFilter = ref('')
+const keywordFilteredData = useKeywordFilter(tableData, keyword, ['type', 'title', 'content', 'status'])
+const filteredTableData = computed(() => {
+    if (!typeFilter.value) {
+        return keywordFilteredData.value
+    }
+
+    return keywordFilteredData.value.filter((item) => item.type === typeFilter.value)
+})
 
 const {
     page,
@@ -31,7 +42,11 @@ const {
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
+
+const messageTypeOptions = computed(() => {
+    return Array.from(new Set(tableData.value.map((item) => item.type).filter(Boolean)))
+})
 
 const canSeeFee = computed(() => {
     return ['owner', 'finance', 'finance_staff', 'admin', 'super_admin'].includes(role)
@@ -218,6 +233,17 @@ const openMessage = (row: MessageRow) => {
     router.push(row.path)
 }
 
+const handleFilter = () => {
+    // 消息中心按类型、标题、内容和状态做本地模糊搜索。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    typeFilter.value = ''
+    resetPage()
+}
+
 onMounted(() => {
     loadMessages()
 })
@@ -235,6 +261,27 @@ onMounted(() => {
                         </el-button>
                     </div>
                 </template>
+
+                <div class="list-toolbar">
+                    <el-input
+                        v-model="keyword"
+                        clearable
+                        placeholder="类型/标题/内容/状态"
+                        style="width: 300px"
+                        @keyup.enter="handleFilter"
+                        @clear="handleFilter"
+                    />
+                    <el-select v-model="typeFilter" clearable placeholder="消息类型" style="width: 140px">
+                        <el-option
+                            v-for="item in messageTypeOptions"
+                            :key="item"
+                            :label="item"
+                            :value="item"
+                        />
+                    </el-select>
+                    <el-button type="primary" @click="handleFilter">筛选</el-button>
+                    <el-button @click="resetFilter">重置</el-button>
+                </div>
 
                 <el-table v-loading="loading" :data="pagedTableData" border align="center">
                     <el-table-column prop="type" label="类型" width="110" />
@@ -282,6 +329,13 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 
 .pagination-wrapper {

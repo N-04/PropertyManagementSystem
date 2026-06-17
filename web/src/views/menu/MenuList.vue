@@ -1,20 +1,49 @@
 <!-- 文件说明：实现 src/views/menu/MenuList.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMenuTree } from '@/api/menu'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
+const keyword = ref('')
 const loading = ref(false)
+const normalizedKeyword = computed(() => keyword.value.trim().toLowerCase())
+const filterMenuTree = (menus: any[]): any[] => {
+    if (!normalizedKeyword.value) {
+        return menus
+    }
+
+    return menus
+        .map((menu) => {
+            const children = filterMenuTree(menu.children || [])
+            const searchableText = [
+                menu.title,
+                menu.path,
+                menu.component,
+                menu.code,
+            ].join(' ').toLowerCase()
+
+            if (searchableText.includes(normalizedKeyword.value) || children.length) {
+                return {
+                    ...menu,
+                    children,
+                }
+            }
+
+            return null
+        })
+        .filter(Boolean)
+}
+const filteredTableData = computed(() => filterMenuTree(tableData.value))
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 
 const getList = async () => {
     loading.value = true
@@ -34,6 +63,16 @@ const getList = async () => {
     }
 }
 
+const handleFilter = () => {
+    // 菜单树搜索保留命中的父子层级，并从第一页展示。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    resetPage()
+}
+
 onMounted(() => {
     getList()
 })
@@ -47,6 +86,19 @@ onMounted(() => {
                 <el-button type="primary" @click="getList">刷新</el-button>
             </div>
         </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="菜单名称/路由/组件"
+                style="width: 300px"
+                @keyup.enter="handleFilter"
+                @clear="handleFilter"
+            />
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+        </div>
 
         <el-table
             v-loading="loading"
@@ -96,5 +148,12 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 </style>

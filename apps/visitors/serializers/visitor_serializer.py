@@ -14,6 +14,9 @@ class VisitorSerializer(serializers.ModelSerializer):
     # 被访业主名称
     owner_name = serializers.CharField(source="owner.name", read_only=True)
 
+    # 访客临停页面需要展示被访房屋，和业主车位列表区分开。
+    room_no = serializers.SerializerMethodField()
+
     # 来访时间
     visit_time = serializers.DateTimeField(
         format="%Y-%m-%d %H:%M:%S",
@@ -58,3 +61,6 @@ class VisitorSerializer(serializers.ModelSerializer):
         model = Visitor
 
         fields = "__all__"
+
+    def get_room_no(self, obj):
+        return obj.owner.house.room_no if obj.owner_id and obj.owner.house_id else ""

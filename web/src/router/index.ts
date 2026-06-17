@@ -5,8 +5,6 @@ import {
     AUTH_STATE_CHANGED_EVENT,
     getStoredRole,
     getStoredToken,
-    isAuthStorageKey,
-    syncSessionAuthStateFromLocal,
 } from '@/utils/authState'
 
 const routes = [
@@ -362,13 +360,6 @@ export const refreshBrowserTitle = () => {
 
 if (typeof window !== 'undefined') {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshBrowserTitle)
-    window.addEventListener('storage', (event) => {
-        if (isAuthStorageKey(event.key)) {
-            // 复制标签页会复制 sessionStorage；跨标签切换用户后先同步版本，标题和菜单才会跟随当前登录角色。
-            syncSessionAuthStateFromLocal()
-            refreshBrowserTitle()
-        }
-    })
 }
 
 // 路由拦截，未登录不允许进入后台。

@@ -2,6 +2,7 @@
 
 # 导入 path
 from django.urls import path
+from rest_framework_simplejwt.views import TokenRefreshView
 
 # 导入 view
 from apps.users.views.auth_view import (
@@ -24,6 +25,9 @@ urlpatterns = [
 
     # 登录接口
     path("login/", LoginView.as_view()),
+
+    # 刷新 access token，避免用户登录一段时间后访问列表接口直接 401。
+    path("token/refresh/", TokenRefreshView.as_view()),
 
     # 手机号验证码登录
     path("login/phone/", PhoneLoginView.as_view()),

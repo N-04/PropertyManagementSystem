@@ -16,19 +16,22 @@ import { deleteRole } from '@/api/role'
 // 路由
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // =====================================================
 // 角色列表数据
 // =====================================================
 const tableData = ref<any[]>([])
+const keyword = ref('')
+const filteredTableData = useKeywordFilter(tableData, keyword, ['name', 'code', 'description'])
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 
 // =====================================================
 // 获取角色列表
@@ -41,6 +44,16 @@ const getList = async () => {
     console.log(res.data)
 
     tableData.value = res.data.data
+    resetPage()
+}
+
+const handleFilter = () => {
+    // 模糊搜索条件变化后回到第一页，避免停在空页。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
     resetPage()
 }
 
@@ -96,6 +109,19 @@ onMounted(() => {
                 </div>
             </template>
 
+            <div class="list-toolbar">
+                <el-input
+                    v-model="keyword"
+                    clearable
+                    placeholder="角色名称/编码"
+                    style="width: 260px"
+                    @keyup.enter="handleFilter"
+                    @clear="handleFilter"
+                />
+                <el-button type="primary" @click="handleFilter">筛选</el-button>
+                <el-button @click="resetFilter">重置</el-button>
+            </div>
+
             <!-- 表格 -->
             <el-table :data="pagedTableData" border>
                 <!-- ID -->
@@ -149,5 +175,12 @@ onMounted(() => {
     justify-content: space-between;
 
     align-items: center;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 </style>

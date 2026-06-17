@@ -12,6 +12,7 @@ import { ref, onMounted } from 'vue'
 
 import { getPermissionList } from '@/api/permission'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // =====================================================
@@ -19,13 +20,15 @@ import DataPagination from '@/components/common/DataPagination.vue'
 // =====================================================
 
 const tableData = ref<any[]>([])
+const keyword = ref('')
+const filteredTableData = useKeywordFilter(tableData, keyword, ['name', 'code'])
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 
 // =====================================================
 // 获取权限列表
@@ -58,6 +61,16 @@ const columns = [
     },
 ]
 
+const handleFilter = () => {
+    // 权限列表按名称和编码做本地模糊搜索。
+    resetPage()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    resetPage()
+}
+
 // =====================================================
 // 页面加载完成执行
 // =====================================================
@@ -83,6 +96,19 @@ onMounted(() => {
             <template #header>
                 <span>权限列表</span>
             </template>
+
+            <div class="list-toolbar">
+                <el-input
+                    v-model="keyword"
+                    clearable
+                    placeholder="权限名称/编码"
+                    style="width: 260px"
+                    @keyup.enter="handleFilter"
+                    @clear="handleFilter"
+                />
+                <el-button type="primary" @click="handleFilter">筛选</el-button>
+                <el-button @click="resetFilter">重置</el-button>
+            </div>
 
             <!-- ================================================= -->
             <!-- 表格 -->
@@ -117,5 +143,12 @@ onMounted(() => {
 
 .page-container {
     padding: 20px;
+}
+
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 </style>

@@ -29,6 +29,8 @@ interface UserItem {
 // 表格数据
 const tableData = ref<UserItem[]>([])
 
+const keyword = ref('')
+
 const total = ref(0)
 
 const page = ref(1)
@@ -42,11 +44,24 @@ const loadData = async () => {
     const res = await getUserList({
         page: page.value,
         page_size: pageSize.value,
+        keyword: keyword.value || undefined,
     })
 
     tableData.value = res.data.data
     total.value = res.data.total
     console.log(res.data.data)
+}
+
+const searchUsers = () => {
+    // 服务端分页列表需要重新请求，保证模糊搜索覆盖全部用户而不是当前页。
+    page.value = 1
+    loadData()
+}
+
+const resetFilter = () => {
+    keyword.value = ''
+    page.value = 1
+    loadData()
 }
 
 const handlePageSizeChange = () => {
@@ -106,6 +121,19 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header> 用户列表 </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="用户名/姓名/手机号/角色"
+                style="width: 280px"
+                @keyup.enter="searchUsers"
+                @clear="searchUsers"
+            />
+            <el-button type="primary" @click="searchUsers">筛选</el-button>
+            <el-button @click="resetFilter">重置</el-button>
+        </div>
 
         <el-table :data="tableData" border>
             <el-table-column prop="id" label="ID" width="80" />
@@ -167,3 +195,12 @@ onMounted(() => {
         />
     </el-card>
 </template>
+
+<style scoped>
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+</style>

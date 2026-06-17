@@ -74,6 +74,10 @@ const writeAuthVersion = (storage: Storage, version: string) => {
     }
 }
 
+const hasCurrentSessionAuth = () => {
+    return Boolean(safeRead(sessionStorage, 'token') || safeRead(sessionStorage, 'refresh'))
+}
+
 const copyLocalAuthToSession = () => {
     let changed = false
 
@@ -111,10 +115,12 @@ export const isAuthStorageKey = (key: string | null) => {
 }
 
 export const syncSessionAuthStateFromLocal = (notify = true) => {
-    const localVersion = readAuthVersion(localStorage)
-    const sessionVersion = readAuthVersion(sessionStorage)
+    // 复制标签页会复制 sessionStorage；已有会话必须保持当前标签独立，不再被 localStorage 覆盖。
+    if (hasCurrentSessionAuth()) {
+        return false
+    }
 
-    if (localVersion === sessionVersion) {
+    if (!safeRead(localStorage, 'token') && !safeRead(localStorage, 'refresh')) {
         return false
     }
 
@@ -159,24 +165,30 @@ const collectRoleCodes = (value: any): string[] => {
 export const getAuthItem = (key: AuthKey) => {
     syncSessionAuthStateFromLocal(false)
 
-    // sessionStorage 是当前标签页独立的；localStorage 只作为老登录态和新标签页兜底。
-    return safeRead(sessionStorage, key) ?? safeRead(localStorage, key) ?? ''
+    // sessionStorage 是当前标签页独立会话；localStorage 只在当前标签没有会话时初始化。
+    return safeRead(sessionStorage, key) ?? ''
 }
 
-export const setAuthItem = (key: AuthKey, value: string) => {
+export const setAuthItem = (key: AuthKey, value: string, persist = false) => {
     safeWrite(sessionStorage, key, value)
-    safeWrite(localStorage, key, value)
+
+    if (persist) {
+        safeWrite(localStorage, key, value)
+    }
 }
 
-export const removeAuthItem = (key: AuthKey) => {
+export const removeAuthItem = (key: AuthKey, persist = false) => {
     safeRemove(sessionStorage, key)
-    safeRemove(localStorage, key)
+
+    if (persist) {
+        safeRemove(localStorage, key)
+    }
 }
 
 export const clearAuthState = () => {
     const version = createAuthVersion()
 
-    authKeys.forEach(removeAuthItem)
+    authKeys.forEach((key) => removeAuthItem(key, true))
     writeAuthVersion(sessionStorage, version)
     writeAuthVersion(localStorage, version)
     notifyAuthStateChanged()
@@ -214,11 +226,11 @@ export const saveAuthState = (loginData: any) => {
     const username = loginData.username || loginData.user?.username || ''
     const version = createAuthVersion()
 
-    setAuthItem('token', token)
-    setAuthItem('refresh', loginData.refresh || '')
-    setAuthItem('username', username)
-    setAuthItem('role', role)
-    setAuthItem('roles', JSON.stringify(loginData.roles || loginData.role_codes || loginData.user?.role_codes || []))
+    setAuthItem('token', token, true)
+    setAuthItem('refresh', loginData.refresh || '', true)
+    setAuthItem('username', username, true)
+    setAuthItem('role', role, true)
+    setAuthItem('roles', JSON.stringify(loginData.roles || loginData.role_codes || loginData.user?.role_codes || []), true)
     writeAuthVersion(sessionStorage, version)
     writeAuthVersion(localStorage, version)
     notifyAuthStateChanged()

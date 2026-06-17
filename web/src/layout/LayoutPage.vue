@@ -1,7 +1,26 @@
 <!-- 文件说明：实现左侧一/二级菜单、顶部三级功能菜单和内容区的后台主布局。 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import {
+    ArrowDown,
+    ArrowRight,
+    Bell,
+    ChatDotRound,
+    DataAnalysis,
+    Document,
+    HomeFilled,
+    Menu as MenuIcon,
+    Money,
+    OfficeBuilding,
+    Operation,
+    Search,
+    Setting,
+    Tickets,
+    Tools,
+    User,
+    UserFilled,
+    Van,
+} from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
@@ -27,14 +46,76 @@ const username = ref(getStoredUsername())
 const role = ref(getStoredRole())
 const menuItems = ref<AppMenuItem[]>([])
 const menuLoaded = ref(false)
+const selectedFirstId = ref('')
 const selectedSecondId = ref('')
 const selectedThirdId = ref('')
-const selectedFourthId = ref('')
 const selectedFunctionTitle = ref('')
-const hoveredSecondId = ref('')
-const thirdFlyoutTop = ref(60)
+const expandedFirstIds = ref<string[]>([])
 const noticeMessages = ref<string[]>([])
 const roleMessages = ref<string[]>([])
+const parkingFeedbackMessages = ref<string[]>([])
+const repairEvaluationFeedbackMessages = ref<string[]>([])
+const serviceRatingFeedbackMessages = ref<string[]>([])
+const PARKING_FEEDBACK_EVENT = 'property-management-parking-feedback'
+const PARKING_FEEDBACK_STORAGE_KEY = 'parkingPurchaseFeedback'
+const REPAIR_EVALUATION_FEEDBACK_EVENT = 'property-management-repair-evaluation-feedback'
+const REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY = 'repairEvaluationFeedback'
+const SERVICE_RATING_FEEDBACK_EVENT = 'property-management-service-rating-feedback'
+const SERVICE_RATING_FEEDBACK_STORAGE_KEY = 'serviceRatingFeedback'
+
+const roleTitleMap: Record<string, string> = {
+    admin: '物业管理员',
+    super_admin: '超级管理员',
+    property_admin: '物业管理员',
+    finance_staff: '财务人员',
+    finance: '财务人员',
+    customer_service: '客服人员',
+    service: '客服人员',
+    repair_staff: '维修员',
+    repairer: '维修员',
+    repair: '维修员',
+    owner: '业主',
+}
+
+const roleTitle = computed(() => roleTitleMap[role.value] || '用户')
+const usernameInitial = computed(() => (username.value || '用').slice(0, 1).toUpperCase())
+const notificationCount = computed(() => notificationMessages.value.length)
+
+const searchPlaceholder = computed(() => {
+    if (['repair_staff', 'repairer', 'repair'].includes(role.value)) {
+        return '搜索工单号、业主、房号、报修类型等'
+    }
+
+    if (['finance_staff', 'finance'].includes(role.value)) {
+        return '搜索功能、账单、业主、房号等'
+    }
+
+    if (role.value === 'owner') {
+        return '搜索功能、公告、服务等'
+    }
+
+    return '搜索功能、业主、房号、电话等'
+})
+
+const resolveMenuIcon = (menu: AppMenuItem): Component => {
+    const title = menu.title || ''
+
+    if (title.includes('工作台') || title.includes('首页')) return HomeFilled
+    if (title.includes('用户') || title.includes('业主') || title.includes('个人')) return User
+    if (title.includes('小区') || title.includes('房产') || title.includes('房屋') || title.includes('楼栋')) return OfficeBuilding
+    if (title.includes('车位') || title.includes('车辆')) return Van
+    if (title.includes('工单') || title.includes('维修') || title.includes('报修')) return Tools
+    if (title.includes('收费') || title.includes('缴费') || title.includes('费用') || title.includes('财务')) return Money
+    if (title.includes('公告') || title.includes('消息') || title.includes('通知')) return Bell
+    if (title.includes('投诉') || title.includes('建议')) return ChatDotRound
+    if (title.includes('访客')) return Tickets
+    if (title.includes('日志') || title.includes('审计')) return Operation
+    if (title.includes('报表') || title.includes('统计')) return DataAnalysis
+    if (title.includes('系统') || title.includes('设置') || title.includes('角色')) return Setting
+    if (title.includes('文件') || title.includes('上传')) return Document
+
+    return MenuIcon
+}
 
 const menuKey = (menu: AppMenuItem) => String(menu.id)
 
@@ -66,16 +147,21 @@ const findMenuById = (menus: AppMenuItem[], id: string): AppMenuItem | undefined
 const findMenuPathByRoute = (
     menus: AppMenuItem[],
     routePath: string,
+    routeFullPath = routePath,
     parents: AppMenuItem[] = []
 ): AppMenuItem[] => {
+    const allowBaseMatch = !routeFullPath.includes('?')
+
     for (const menu of menus) {
         const currentPath = [...parents, menu]
+        const menuPath = menu.path || ''
+        const menuRoutePath = menuPath.split('?')[0]
 
-        if (menu.path === routePath) {
+        if (menuPath === routeFullPath || (allowBaseMatch && menuRoutePath === routePath)) {
             return currentPath
         }
 
-        const matchedPath = findMenuPathByRoute(menu.children || [], routePath, currentPath)
+        const matchedPath = findMenuPathByRoute(menu.children || [], routePath, routeFullPath, currentPath)
 
         if (matchedPath.length) {
             return matchedPath
@@ -110,8 +196,16 @@ const menuTargetPath = (menu?: AppMenuItem) => {
     return menu.path
 }
 
-const secondMenus = computed(() => {
+const firstMenus = computed(() => {
     return menuItems.value.filter((item) => item.menu_type !== 2)
+})
+
+const activeFirstMenu = computed(() => {
+    return firstMenus.value.find((item) => menuKey(item) === selectedFirstId.value)
+})
+
+const secondMenus = computed(() => {
+    return childrenOf(activeFirstMenu.value)
 })
 
 const activeSecondMenu = computed(() => {
@@ -122,24 +216,8 @@ const thirdMenus = computed(() => {
     return childrenOf(activeSecondMenu.value)
 })
 
-const flyoutSecondMenu = computed(() => {
-    return secondMenus.value.find((item) => menuKey(item) === hoveredSecondId.value)
-})
-
-const flyoutThirdMenus = computed(() => {
-    return childrenOf(flyoutSecondMenu.value)
-})
-
 const activeThirdMenu = computed(() => {
     return thirdMenus.value.find((item) => menuKey(item) === selectedThirdId.value)
-})
-
-const fourthMenus = computed(() => {
-    return childrenOf(activeThirdMenu.value)
-})
-
-const activeFourthMenu = computed(() => {
-    return fourthMenus.value.find((item) => menuKey(item) === selectedFourthId.value)
 })
 
 const canReceiveNotice = computed(() => {
@@ -147,8 +225,14 @@ const canReceiveNotice = computed(() => {
     return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role.value)
 })
 
-const rollingMessages = computed(() => {
-    const messages = [...noticeMessages.value, ...roleMessages.value].filter(Boolean)
+const notificationMessages = computed(() => {
+    const messages = [
+        ...parkingFeedbackMessages.value,
+        ...repairEvaluationFeedbackMessages.value,
+        ...serviceRatingFeedbackMessages.value,
+        ...noticeMessages.value,
+        ...roleMessages.value,
+    ].filter(Boolean)
 
     if (messages.length) {
         return messages.slice(0, 8)
@@ -156,8 +240,6 @@ const rollingMessages = computed(() => {
 
     return ['系统运行正常，欢迎使用社区物业管理系统']
 })
-
-const rollingText = computed(() => rollingMessages.value.join('　　'))
 
 const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
     if (!menu) {
@@ -179,36 +261,72 @@ const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
     return undefined
 }
 
-const resetFourthSelection = () => {
-    selectedFourthId.value = fourthMenus.value[0] ? menuKey(fourthMenus.value[0]) : ''
-    selectedFunctionTitle.value = ''
+const expandFirstMenu = (id: string) => {
+    if (!expandedFirstIds.value.includes(id)) {
+        expandedFirstIds.value.push(id)
+    }
+}
+
+const toggleFirstMenu = (id: string) => {
+    if (expandedFirstIds.value.includes(id)) {
+        expandedFirstIds.value = expandedFirstIds.value.filter((item) => item !== id)
+        return
+    }
+
+    expandedFirstIds.value.push(id)
+}
+
+const isFirstExpanded = (id: string) => {
+    return expandedFirstIds.value.includes(id)
 }
 
 const resetThirdSelection = () => {
     selectedThirdId.value = thirdMenus.value[0] ? menuKey(thirdMenus.value[0]) : ''
-    resetFourthSelection()
+    selectedFunctionTitle.value = ''
+}
+
+const resetSecondSelection = () => {
+    selectedSecondId.value = secondMenus.value[0] ? menuKey(secondMenus.value[0]) : ''
+    resetThirdSelection()
 }
 
 const syncSelectionByCurrentRoute = () => {
-    const matchedPath = findMenuPathByRoute(menuItems.value, router.currentRoute.value.path)
+    const exactMatchedPath = findMenuPathByRoute(
+        menuItems.value,
+        router.currentRoute.value.path,
+        router.currentRoute.value.fullPath
+    )
+    const matchedPath = exactMatchedPath.length
+        ? exactMatchedPath
+        : findMenuPathByRoute(menuItems.value, router.currentRoute.value.path)
 
     if (matchedPath.length) {
-        selectedSecondId.value = matchedPath[0] ? menuKey(matchedPath[0]) : ''
-        selectedThirdId.value = matchedPath[1] ? menuKey(matchedPath[1]) : ''
-        selectedFourthId.value = matchedPath[2] ? menuKey(matchedPath[2]) : ''
+        selectedFirstId.value = matchedPath[0] ? menuKey(matchedPath[0]) : ''
+        selectedSecondId.value = matchedPath[1] ? menuKey(matchedPath[1]) : ''
+        selectedThirdId.value = matchedPath[2] ? menuKey(matchedPath[2]) : ''
         selectedFunctionTitle.value = matchedPath[3]?.title || ''
     }
 
-    if (!selectedSecondId.value && secondMenus.value[0]) {
-        selectedSecondId.value = menuKey(secondMenus.value[0])
+    if (!selectedFirstId.value && firstMenus.value[0]) {
+        selectedFirstId.value = menuKey(firstMenus.value[0])
     }
 
-    if (!selectedThirdId.value) {
+    if (selectedFirstId.value) {
+        expandFirstMenu(selectedFirstId.value)
+    }
+
+    if (
+        secondMenus.value.length
+        && !secondMenus.value.some((item) => menuKey(item) === selectedSecondId.value)
+    ) {
+        resetSecondSelection()
+    }
+
+    if (
+        thirdMenus.value.length
+        && !thirdMenus.value.some((item) => menuKey(item) === selectedThirdId.value)
+    ) {
         resetThirdSelection()
-    }
-
-    if (!selectedFourthId.value) {
-        resetFourthSelection()
     }
 }
 
@@ -220,45 +338,42 @@ const navigateMenu = (menu?: AppMenuItem) => {
     }
 }
 
-const handleSecondSelect = (id: string) => {
-    selectedSecondId.value = id
+const handleFirstSelect = (item: AppMenuItem) => {
+    const id = menuKey(item)
+    const wasCurrentFirstMenu = selectedFirstId.value === id
+    selectedFirstId.value = id
+    selectedFunctionTitle.value = ''
+
+    if (childrenOf(item).length) {
+        if (wasCurrentFirstMenu) {
+            toggleFirstMenu(id)
+        } else {
+            expandFirstMenu(id)
+        }
+
+        resetSecondSelection()
+        navigateMenu(firstReachableMenu(activeThirdMenu.value || activeSecondMenu.value || activeFirstMenu.value))
+        return
+    }
+
+    selectedSecondId.value = ''
+    selectedThirdId.value = ''
+    navigateMenu(item)
+}
+
+const handleSecondSelect = (parent: AppMenuItem, item: AppMenuItem) => {
+    selectedFirstId.value = menuKey(parent)
+    expandFirstMenu(menuKey(parent))
+    selectedSecondId.value = menuKey(item)
     resetThirdSelection()
     navigateMenu(firstReachableMenu(activeThirdMenu.value || activeSecondMenu.value))
 }
 
-const handleSecondMouseEnter = (item: AppMenuItem, event: MouseEvent) => {
-    const target = event.currentTarget as HTMLElement
-    const sidebar = target.closest('.second-sidebar')
-    const sidebarTop = sidebar?.getBoundingClientRect().top || 0
-    const itemTop = target.getBoundingClientRect().top - sidebarTop
-
-    hoveredSecondId.value = menuKey(item)
-    thirdFlyoutTop.value = Math.max(60, itemTop)
-}
-
-const closeThirdFlyout = () => {
-    hoveredSecondId.value = ''
-}
-
-const handleThirdSelect = (id: string) => {
+const handleThirdSelect = (item: AppMenuItem) => {
+    const id = menuKey(item)
     selectedThirdId.value = id
-    resetFourthSelection()
-    navigateMenu(firstReachableMenu(activeFourthMenu.value || activeThirdMenu.value))
-}
-
-const handleThirdFlyoutClick = (item: AppMenuItem) => {
-    if (flyoutSecondMenu.value) {
-        selectedSecondId.value = menuKey(flyoutSecondMenu.value)
-    }
-
-    handleThirdSelect(menuKey(item))
-    closeThirdFlyout()
-}
-
-const handleFourthSelect = (menu: AppMenuItem) => {
-    selectedFourthId.value = menuKey(menu)
     selectedFunctionTitle.value = ''
-    navigateMenu(firstReachableMenu(menu))
+    navigateMenu(firstReachableMenu(item))
 }
 
 const handleFunctionSelect = (id: string) => {
@@ -335,7 +450,7 @@ const loadRoleMessages = async () => {
             }
         }
     } catch (error) {
-        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+        // 通知角标只是提醒入口，接口失败不影响页面主体。
     }
 
     try {
@@ -349,7 +464,7 @@ const loadRoleMessages = async () => {
             }
         }
     } catch (error) {
-        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+        // 通知角标只是提醒入口，接口失败不影响页面主体。
     }
 
     try {
@@ -362,22 +477,97 @@ const loadRoleMessages = async () => {
             }
         }
     } catch (error) {
-        // 滚动通知只是提醒入口，接口失败不影响页面主体。
+        // 通知角标只是提醒入口，接口失败不影响页面主体。
     }
 
     roleMessages.value = messages
 }
 
-const loadRollingMessages = () => {
+const loadNotificationMessages = () => {
     loadNoticeMessages()
     loadRoleMessages()
 }
 
+const readParkingFeedbackMessages = () => {
+    try {
+        const raw = localStorage.getItem(PARKING_FEEDBACK_STORAGE_KEY)
+        const item = raw ? JSON.parse(raw) : null
+
+        if (!item?.message) {
+            parkingFeedbackMessages.value = []
+            return
+        }
+
+        parkingFeedbackMessages.value = [`车位反馈：${item.message}`]
+    } catch {
+        parkingFeedbackMessages.value = []
+    }
+}
+
+const readRepairEvaluationFeedbackMessages = () => {
+    try {
+        const raw = localStorage.getItem(REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY)
+        const item = raw ? JSON.parse(raw) : null
+
+        if (!item?.message) {
+            repairEvaluationFeedbackMessages.value = []
+            return
+        }
+
+        repairEvaluationFeedbackMessages.value = [`评价反馈：${item.message}`]
+    } catch {
+        repairEvaluationFeedbackMessages.value = []
+    }
+}
+
+const readServiceRatingFeedbackMessages = () => {
+    try {
+        const raw = localStorage.getItem(SERVICE_RATING_FEEDBACK_STORAGE_KEY)
+        const item = raw ? JSON.parse(raw) : null
+
+        if (!item?.message) {
+            serviceRatingFeedbackMessages.value = []
+            return
+        }
+
+        serviceRatingFeedbackMessages.value = [`服务反馈：${item.message}`]
+    } catch {
+        serviceRatingFeedbackMessages.value = []
+    }
+}
+
+const handleParkingFeedback = () => {
+    readParkingFeedbackMessages()
+}
+
+const handleRepairEvaluationFeedback = () => {
+    readRepairEvaluationFeedbackMessages()
+}
+
+const handleServiceRatingFeedback = () => {
+    readServiceRatingFeedbackMessages()
+}
+
+const handleStorageFeedback = (event: StorageEvent) => {
+    if (event.key === PARKING_FEEDBACK_STORAGE_KEY) {
+        readParkingFeedbackMessages()
+    }
+
+    if (event.key === REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY) {
+        readRepairEvaluationFeedbackMessages()
+    }
+
+    if (event.key === SERVICE_RATING_FEEDBACK_STORAGE_KEY) {
+        readServiceRatingFeedbackMessages()
+    }
+}
+
 const reloadMenusForCurrentRole = () => {
+    selectedFirstId.value = ''
     selectedSecondId.value = ''
     selectedThirdId.value = ''
-    selectedFourthId.value = ''
     selectedFunctionTitle.value = ''
+    expandedFirstIds.value = []
     menuLoaded.value = false
     loadMenus()
 }
@@ -392,7 +582,7 @@ const refreshLayoutAuthState = () => {
 
     if (roleChanged) {
         reloadMenusForCurrentRole()
-        loadRollingMessages()
+        loadNotificationMessages()
     }
 }
 
@@ -411,19 +601,30 @@ const handleLogout = async () => {
 
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
+    window.addEventListener(PARKING_FEEDBACK_EVENT, handleParkingFeedback)
+    window.addEventListener(REPAIR_EVALUATION_FEEDBACK_EVENT, handleRepairEvaluationFeedback)
+    window.addEventListener(SERVICE_RATING_FEEDBACK_EVENT, handleServiceRatingFeedback)
+    window.addEventListener('storage', handleStorageFeedback)
     loadMenus()
-    loadRollingMessages()
+    readParkingFeedbackMessages()
+    readRepairEvaluationFeedbackMessages()
+    readServiceRatingFeedbackMessages()
+    loadNotificationMessages()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
+    window.removeEventListener(PARKING_FEEDBACK_EVENT, handleParkingFeedback)
+    window.removeEventListener(REPAIR_EVALUATION_FEEDBACK_EVENT, handleRepairEvaluationFeedback)
+    window.removeEventListener(SERVICE_RATING_FEEDBACK_EVENT, handleServiceRatingFeedback)
+    window.removeEventListener('storage', handleStorageFeedback)
 })
 
 watch(
     () => router.currentRoute.value.fullPath,
     () => {
         if (menuLoaded.value) {
-            // 页面内跳转、浏览器前进后退后，同步二/三/四级菜单和功能下拉选中态。
+            // 页面内跳转、浏览器前进后退后，同步一/二/三级菜单和功能下拉选中态。
             syncSelectionByCurrentRoute()
         }
     }
@@ -431,44 +632,62 @@ watch(
 </script>
 
 <template>
-    <div class="layout-container" @mouseleave="closeThirdFlyout">
+    <div class="layout-container">
         <aside class="second-sidebar">
-            <div class="logo">{{ appMenuTitle }}</div>
+            <div class="logo">
+                <el-icon><HomeFilled /></el-icon>
+                <span>{{ appMenuTitle }}</span>
+            </div>
+
+            <div class="role-switcher">
+                <el-icon><UserFilled /></el-icon>
+                <span>{{ roleTitle }}</span>
+                <el-icon class="role-arrow"><ArrowDown /></el-icon>
+            </div>
 
             <div class="sidebar-menu">
-                <section v-for="item in secondMenus" :key="item.id" class="sidebar-group">
+                <section v-for="item in firstMenus" :key="item.id" class="sidebar-group">
                     <button
                         type="button"
                         class="first-menu-item"
-                        :class="{ active: selectedSecondId === menuKey(item) }"
-                        @click="handleSecondSelect(menuKey(item))"
-                        @mouseover="handleSecondMouseEnter(item, $event)"
+                        :class="{
+                            active: selectedFirstId === menuKey(item),
+                            expanded: isFirstExpanded(menuKey(item)),
+                        }"
+                        @click="handleFirstSelect(item)"
                     >
-                        <span>{{ item.title }}</span>
-                        <span v-if="childrenOf(item).length" class="menu-arrow"> > </span>
+                        <span class="menu-label">
+                            <el-icon><component :is="resolveMenuIcon(item)" /></el-icon>
+                            <span>{{ item.title }}</span>
+                        </span>
+                        <span v-if="childrenOf(item).length" class="menu-arrow">
+                            <el-icon>
+                                <component :is="isFirstExpanded(menuKey(item)) ? ArrowDown : ArrowRight" />
+                            </el-icon>
+                        </span>
                     </button>
+
+                    <div
+                        v-if="childrenOf(item).length && isFirstExpanded(menuKey(item))"
+                        class="second-menu-list"
+                    >
+                        <button
+                            v-for="child in childrenOf(item)"
+                            :key="child.id"
+                            type="button"
+                            class="second-menu-item"
+                            :class="{ active: selectedSecondId === menuKey(child) }"
+                            @click.stop="handleSecondSelect(item, child)"
+                        >
+                            <span>{{ child.title }}</span>
+                            <el-icon v-if="childrenOf(child).length"><ArrowRight /></el-icon>
+                        </button>
+                    </div>
                 </section>
             </div>
 
-            <div
-                v-if="hoveredSecondId && flyoutThirdMenus.length"
-                class="third-flyout"
-                :style="{ top: `${thirdFlyoutTop}px` }"
-            >
-                <button
-                    v-for="item in flyoutThirdMenus"
-                    :key="item.id"
-                    type="button"
-                    class="third-flyout-item"
-                    :class="{ active: selectedThirdId === menuKey(item) }"
-                    @click="handleThirdFlyoutClick(item)"
-                >
-                    {{ item.title }}
-                </button>
-            </div>
-
             <el-empty
-                v-if="menuLoaded && secondMenus.length === 0"
+                v-if="menuLoaded && firstMenus.length === 0"
                 class="menu-empty"
                 description="暂无可访问菜单"
                 :image-size="72"
@@ -477,27 +696,46 @@ watch(
 
         <main class="layout-main">
             <header class="layout-header">
-                <div class="header-title">
-                    {{ activeThirdMenu?.title || activeSecondMenu?.title || '后台管理系统' }}
+                <div class="community-select">
+                    <el-icon><OfficeBuilding /></el-icon>
+                    <span>幸福里小区</span>
+                    <el-icon class="community-arrow"><ArrowDown /></el-icon>
+                </div>
+
+                <div class="global-search">
+                    <el-icon><Search /></el-icon>
+                    <input
+                        :placeholder="searchPlaceholder"
+                        type="text"
+                        readonly
+                    >
                 </div>
 
                 <div class="header-user">
-                    {{ username }}
+                    <el-badge :value="notificationCount" :max="99" class="notification-badge">
+                        <el-icon class="notification-icon"><Bell /></el-icon>
+                    </el-badge>
+                    <span class="role-pill">{{ roleTitle }}</span>
+                    <span class="avatar-chip">
+                        <span class="avatar-circle">{{ usernameInitial }}</span>
+                        <span>{{ username }}</span>
+                        <el-icon><ArrowDown /></el-icon>
+                    </span>
                     <el-button link type="primary" @click="handleLogout">退出登录</el-button>
                 </div>
             </header>
 
-            <div v-if="fourthMenus.length" class="third-bar">
+            <div v-if="thirdMenus.length" class="third-bar">
                 <el-dropdown
-                    v-for="item in fourthMenus"
+                    v-for="item in thirdMenus"
                     :key="item.id"
                     trigger="click"
                     @command="handleFunctionSelect"
                 >
                     <template #default>
                         <el-button
-                            :type="selectedFourthId === menuKey(item) ? 'primary' : 'default'"
-                            @click="handleFourthSelect(item)"
+                            :type="selectedThirdId === menuKey(item) ? 'primary' : 'default'"
+                            @click="handleThirdSelect(item)"
                         >
                             {{ item.title }}
                             <el-icon v-if="item.children?.length" class="dropdown-icon">
@@ -527,13 +765,6 @@ watch(
                 </span>
             </div>
 
-            <div class="notice-marquee" aria-label="滚动通知">
-                <div class="notice-label">滚动通知</div>
-                <div class="notice-track">
-                    <div class="notice-content">{{ rollingText }}</div>
-                </div>
-            </div>
-
             <section class="layout-content">
                 <router-view />
             </section>
@@ -544,36 +775,66 @@ watch(
 <style scoped>
 .layout-container {
     display: flex;
-    min-width: 1024px;
+    min-width: 1180px;
     height: 100vh;
-    background: #f4f6f8;
+    color: #172033;
+    background: #f5f7fa;
 }
 
 .second-sidebar {
     position: relative;
-    width: 220px;
-    flex: 0 0 220px;
+    width: 230px;
+    flex: 0 0 230px;
     background: #ffffff;
     border-right: 1px solid #e4e7ed;
     z-index: 20;
 }
 
 .logo {
-    height: 60px;
+    height: 66px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0 16px;
+    gap: 10px;
+    padding: 0 20px;
     font-size: 18px;
     font-weight: 700;
-    color: #1f2d3d;
+    color: #111827;
     border-bottom: 1px solid #e4e7ed;
+    white-space: nowrap;
+}
+
+.logo .el-icon {
+    color: #00897b;
+    font-size: 26px;
+}
+
+.role-switcher {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    margin: 20px 12px 12px;
+    padding: 0 14px;
+    border-radius: 6px;
+    color: #00897b;
+    background: #e4f5f2;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.role-switcher .role-arrow {
+    margin-left: auto;
+    font-size: 14px;
 }
 
 .sidebar-menu {
-    height: calc(100vh - 60px);
-    padding: 12px;
+    height: calc(100vh - 144px);
+    padding: 0 12px 14px;
     overflow-y: auto;
+}
+
+.sidebar-group {
+    position: relative;
 }
 
 .sidebar-group + .sidebar-group {
@@ -583,67 +844,98 @@ watch(
 .first-menu-item {
     width: 100%;
     border: 0;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
-    color: #303133;
+    color: #344054;
     cursor: pointer;
     text-align: left;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 42px;
-    padding: 0 14px;
-    font-size: 16px;
-    font-weight: 700;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.menu-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.menu-label .el-icon {
+    color: #667085;
+    font-size: 18px;
 }
 
 .menu-arrow {
-    color: #c0c4cc;
-    font-size: 10px;
+    display: inline-flex;
+    color: #98a2b3;
+    font-size: 13px;
 }
 
-.first-menu-item:hover,
+.first-menu-item:hover {
+    color: #00897b;
+    background: #edf8f6;
+}
+
+.first-menu-item:hover .el-icon,
+.first-menu-item:hover .menu-arrow {
+    color: #00897b;
+}
+
+.first-menu-item.expanded:not(.active) {
+    color: #006d63;
+    background: #f3fbfa;
+}
+
 .first-menu-item.active {
-    color: #409eff;
-    background: #ecf5ff;
+    color: #ffffff;
+    background: linear-gradient(135deg, #009688, #00796b);
+    box-shadow: 0 8px 18px rgba(0, 137, 123, 0.22);
+}
+
+.first-menu-item.active .el-icon,
+.first-menu-item.active .menu-arrow {
+    color: #ffffff;
+}
+
+.second-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 4px 0 6px 16px;
+    padding: 4px 0 4px 10px;
+    border-left: 2px solid #e4f5f2;
+}
+
+.second-menu-item {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #475467;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.second-menu-item:hover,
+.second-menu-item.active {
+    color: #00897b;
+    background: #e4f5f2;
 }
 
 .menu-empty {
     padding: 24px 8px;
-}
-
-/* 二级菜单保持悬浮样式，避免左侧栏被深层菜单撑开。 */
-.third-flyout {
-    position: absolute;
-    left: 102%;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 150px;
-    max-height: calc(100vh - 72px);
-    padding: 8px;
-    background: #ffffff;
-    border: 1px solid #e4e7ed;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
-    overflow-y: auto;
-}
-
-.third-flyout-item {
-    width: 100%;
-    min-height: 38px;
-    padding: 8px 10px;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: #303133;
-    text-align: center;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-.third-flyout-item:hover,
-.third-flyout-item.active {
-    color: #409eff;
-    background: #ecf5ff;
 }
 
 .layout-main {
@@ -654,36 +946,118 @@ watch(
 }
 
 .layout-header {
-    height: 60px;
-    display: flex;
+    height: 66px;
+    display: grid;
+    grid-template-columns: 180px minmax(320px, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 20px;
+    gap: 24px;
+    padding: 0 28px;
     background: #ffffff;
     border-bottom: 1px solid #e4e7ed;
 }
 
-.header-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #303133;
+.community-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid #dfe5ef;
+    border-radius: 6px;
+    color: #344054;
+    background: #ffffff;
+    font-size: 14px;
+}
+
+.community-select .el-icon:first-child {
+    color: #667085;
+}
+
+.community-arrow {
+    margin-left: auto;
+    font-size: 13px;
+}
+
+.global-search {
+    display: flex;
+    align-items: center;
+    width: min(430px, 100%);
+    min-height: 38px;
+    justify-self: center;
+    padding: 0 14px;
+    border: 1px solid #dfe5ef;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.global-search .el-icon {
+    margin-right: 8px;
+    color: #98a2b3;
+}
+
+.global-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: #667085;
+    background: transparent;
+    cursor: default;
 }
 
 .header-user {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 14px;
+    white-space: nowrap;
+}
+
+.notification-icon {
+    color: #344054;
+    font-size: 22px;
+}
+
+.role-pill {
+    min-width: 78px;
+    padding: 9px 18px;
+    border-radius: 18px;
+    color: #00897b;
+    background: #d8f3ef;
+    text-align: center;
+    font-weight: 700;
+}
+
+.avatar-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #172033;
+}
+
+.avatar-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    color: #ffffff;
+    background: #2563eb;
+    font-weight: 700;
 }
 
 .third-bar {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 52px;
-    padding: 8px 20px;
-    background: #ffffff;
-    border-bottom: 1px solid #e4e7ed;
+    min-height: 48px;
+    padding: 12px 28px 8px;
+    background: transparent;
     overflow-x: auto;
+}
+
+.third-bar :deep(.el-button) {
+    border-radius: 6px;
 }
 
 .dropdown-icon {
@@ -693,56 +1067,14 @@ watch(
 .selected-function {
     flex: 0 0 auto;
     margin-left: 8px;
-    color: #606266;
-    font-size: 15px;
-}
-
-.notice-marquee {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-height: 42px;
-    padding: 0 20px;
-    border-bottom: 1px solid #e4e7ed;
-    background: #f8fafc;
-    overflow: hidden;
-}
-
-.notice-label {
-    flex: 0 0 auto;
-    color: #409eff;
-    font-weight: 600;
-}
-
-.notice-track {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.notice-content {
-    display: inline-block;
-    min-width: 100%;
-    color: #606266;
-    text-align: left;
-    animation: notice-scroll 22s linear infinite;
-}
-
-@keyframes notice-scroll {
-    0% {
-        transform: translateX(100%);
-    }
-
-    100% {
-        transform: translateX(-100%);
-    }
+    color: #667085;
+    font-size: 14px;
 }
 
 .layout-content {
     flex: 1;
     min-width: 0;
-    padding: 20px;
+    padding: 20px 28px 28px;
     overflow-y: auto;
 }
 </style>

@@ -224,7 +224,7 @@ onMounted(() => {
             </el-form-item>
 
             <el-form-item>
-                <el-button type="primary" @click="searchBills">查询</el-button>
+                <el-button type="primary" @click="searchBills">筛选</el-button>
                 <el-button @click="resetFilters">重置</el-button>
             </el-form-item>
         </el-form>

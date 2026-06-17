@@ -1,7 +1,7 @@
 // 文件说明：为数据表格提供前端分页切片和页码状态。
-import { computed, type Ref, ref } from 'vue'
+import { computed, type ComputedRef, type Ref, ref } from 'vue'
 
-export function useClientPagination<T>(source: Ref<T[]>, defaultPageSize = 10) {
+export function useClientPagination<T>(source: Ref<T[]> | ComputedRef<T[]>, defaultPageSize = 10) {
     const page = ref(1)
     const pageSize = ref(defaultPageSize)
 

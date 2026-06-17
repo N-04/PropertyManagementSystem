@@ -3,7 +3,7 @@
 // =====================================================
 // Vue 相关
 // =====================================================
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 
 // =====================================================
 // 路由
@@ -34,13 +34,21 @@ const router = useRouter()
 // 表格数据
 // =====================================================
 const tableData = ref<any[]>([])
+const statusFilter = ref('')
+const filteredTableData = computed(() => {
+    if (!statusFilter.value) {
+        return tableData.value
+    }
+
+    return tableData.value.filter((item) => item.status === statusFilter.value)
+})
 const {
     page,
     pageSize,
     total,
     pagedData: pagedTableData,
     resetPage,
-} = useClientPagination(tableData)
+} = useClientPagination(filteredTableData)
 
 // =====================================================
 // 搜索关键字
@@ -52,7 +60,14 @@ const keyword = ref('')
  */
 const resetSearch = () => {
     keyword.value = ''
+    statusFilter.value = ''
 
+    getList()
+}
+
+const handleFilter = () => {
+    // 访客关键字走接口模糊搜索，状态在当前结果内继续筛选。
+    page.value = 1
     getList()
 }
 
@@ -138,19 +153,33 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header>
-            <div style="display: flex; justify-content: space-between">
+            <div class="card-header">
                 <span>访客列表</span>
-                <el-input v-model="keyword" placeholder="访客姓名" style="width: 250px" />
-
-                <el-button type="primary" @click="getList"> 搜索 </el-button>
-
-                <el-button @click="resetSearch"> 重置 </el-button>
-
                 <el-button type="primary" @click="router.push('/visitor/create')">
                     新增访客
                 </el-button>
             </div>
         </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="访客姓名/手机号/业主/事由"
+                style="width: 300px"
+                @keyup.enter="handleFilter"
+                @clear="handleFilter"
+            />
+            <el-select v-model="statusFilter" clearable placeholder="访客状态" style="width: 130px">
+                <el-option label="待审核" value="waiting" />
+                <el-option label="已通过" value="approved" />
+                <el-option label="已拒绝" value="rejected" />
+                <el-option label="已到访" value="entered" />
+                <el-option label="已离开" value="left" />
+            </el-select>
+            <el-button type="primary" @click="handleFilter">筛选</el-button>
+            <el-button @click="resetSearch">重置</el-button>
+        </div>
 
         <el-table :data="pagedTableData" border style="width: 100%">
             <el-table-column prop="id" label="ID" width="80" />
@@ -250,3 +279,20 @@ onMounted(() => {
         />
     </el-card>
 </template>
+
+<style scoped>
+.card-header,
+.list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-header {
+    justify-content: space-between;
+}
+
+.list-toolbar {
+    margin-bottom: 12px;
+}
+</style>
