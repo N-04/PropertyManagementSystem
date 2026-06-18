@@ -1,10 +1,10 @@
-<!-- 文件说明：聚合系统公告、缴费提醒、工单通知和投诉进度。 -->
+<!-- 文件说明：展示角色与角色之间的站内消息、缴费协同、工单协同和投诉反馈。 -->
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getChatConversationList } from '@/api/chat'
 import { getComplaintList } from '@/api/complaint'
 import { getFeeList } from '@/api/fee'
-import { getNoticeList } from '@/api/notice'
 import { getRepairList } from '@/api/repair'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
@@ -75,11 +75,6 @@ const canSeeComplaint = computed(() => {
     ].includes(role)
 })
 
-const canReceiveNotice = computed(() => {
-    // 消息中心公告接收方只包含管理员和业主。
-    return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role)
-})
-
 const extractList = (data: any) => {
     if (Array.isArray(data)) {
         return data
@@ -90,6 +85,22 @@ const extractList = (data: any) => {
     }
 
     return []
+}
+
+const chatTargetPath = () => {
+    return ['customer_service', 'service'].includes(role) ? '/service/chat' : '/message/center'
+}
+
+const feeTypeTextMap: Record<string, string> = {
+    property: '物业费',
+    water: '水费',
+    electric: '电费',
+    parking: '车位费',
+    other: '其他费用',
+}
+
+const feeTypeText = (item: any) => {
+    return item.fee_type_text || item.fee_type_display || feeTypeTextMap[item.fee_type] || '账单'
 }
 
 const feeStatusText = (status: string) => {
@@ -130,29 +141,23 @@ const loadMessages = async () => {
     try {
         const rows: MessageRow[] = []
 
-        if (canReceiveNotice.value) {
-            try {
-                const res = await getNoticeList()
-                const notices = extractList(res.data.data)
+        try {
+            const res = await getChatConversationList()
+            const conversations = extractList(res.data.data)
 
-                notices
-                    .filter((item: any) => item.status !== 'draft')
-                    .forEach((item: any) => {
-                        const isActivity = `${item.title}${item.content}`.includes('活动')
-
-                        rows.push({
-                            id: `notice-${item.id}`,
-                            type: isActivity ? '活动通知' : '系统公告',
-                            title: item.title,
-                            content: item.content || '',
-                            status: item.status_display || '已发布',
-                            created_at: item.created_at || '',
-                            path: '/notice/list',
-                        })
-                    })
-            } catch (error) {
-                // 单类消息加载失败不影响其他消息。
-            }
+            conversations.forEach((item: any) => {
+                rows.push({
+                    id: `chat-${item.id}`,
+                    type: `${item.created_by_real_name || item.created_by_name || '发起人'} → ${item.target_role_text || '处理角色'}`,
+                    title: item.title || `会话 #${item.id}`,
+                    content: item.last_message || '暂无最新消息',
+                    status: item.status_text || '沟通中',
+                    created_at: item.updated_at || item.created_at || '',
+                    path: chatTargetPath(),
+                })
+            })
+        } catch (error) {
+            // 站内会话加载失败不影响账单、工单等业务消息。
         }
 
         if (canSeeFee.value) {
@@ -165,9 +170,9 @@ const loadMessages = async () => {
                 ).forEach((item: any) => {
                     rows.push({
                         id: `fee-${item.id}`,
-                        type: '缴费提醒',
-                        title: `${item.fee_type || '账单'} ${item.amount || 0}元`,
-                        content: item.remark || `截止时间：${item.deadline || '-'}`,
+                        type: '财务人员 → 业主',
+                        title: `${item.owner_name || '业主'} ${feeTypeText(item)}待处理`,
+                        content: item.remark || `应缴 ${item.amount || 0} 元，截止时间：${item.deadline || '-'}`,
                         status: feeStatusText(item.status),
                         created_at: item.created_at || item.deadline || '',
                         path: '/fee/list',
@@ -188,7 +193,7 @@ const loadMessages = async () => {
                     .forEach((item: any) => {
                         rows.push({
                             id: `repair-${item.id}`,
-                            type: '工单通知',
+                            type: '维修员 → 业主',
                             title: item.title || `报修工单 #${item.id}`,
                             content: item.content || '',
                             status: repairStatusText(item.status),
@@ -209,7 +214,7 @@ const loadMessages = async () => {
                 complaints.forEach((item: any) => {
                     rows.push({
                         id: `complaint-${item.id}`,
-                        type: '站内信通知',
+                        type: '客服人员 → 业主',
                         title: item.title || `投诉建议 #${item.id}`,
                         content: item.handle_result || item.return_visit || item.content || '',
                         status: complaintStatusText(item.status),
@@ -266,12 +271,12 @@ onMounted(() => {
                     <el-input
                         v-model="keyword"
                         clearable
-                        placeholder="类型/标题/内容/状态"
+                        placeholder="角色关系/标题/内容/状态"
                         style="width: 300px"
                         @keyup.enter="handleFilter"
                         @clear="handleFilter"
                     />
-                    <el-select v-model="typeFilter" clearable placeholder="消息类型" style="width: 140px">
+                    <el-select v-model="typeFilter" clearable placeholder="角色关系" style="width: 180px">
                         <el-option
                             v-for="item in messageTypeOptions"
                             :key="item"
@@ -284,7 +289,7 @@ onMounted(() => {
                 </div>
 
                 <el-table v-loading="loading" :data="pagedTableData" border align="center">
-                    <el-table-column prop="type" label="类型" width="110" />
+                    <el-table-column prop="type" label="角色关系" width="170" />
                     <el-table-column
                         prop="title"
                         label="标题"
@@ -293,7 +298,7 @@ onMounted(() => {
                     />
                     <el-table-column
                         prop="content"
-                        label="内容"
+                        label="最近内容"
                         min-width="220"
                         show-overflow-tooltip
                     />
@@ -334,8 +339,9 @@ onMounted(() => {
 .list-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
 }
 
 .pagination-wrapper {

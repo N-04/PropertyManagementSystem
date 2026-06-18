@@ -51,7 +51,7 @@ onMounted(() => {
         <template #header>
             <div class="card-header">
                 <span>操作日志列表</span>
-                <el-button type="success" @click="exportExcel"> 导出Excel </el-button>
+                <el-button type="primary" @click="exportExcel"> 导出Excel </el-button>
             </div>
         </template>
 

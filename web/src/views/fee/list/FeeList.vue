@@ -1,14 +1,15 @@
 <!-- 文件说明：实现 src/views/fee/list/FeeList.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { computed, nextTick, ref, onMounted } from 'vue'
+import { computed, nextTick, ref, onMounted, watch } from 'vue'
 import { getFeeList, payFee } from '@/api/fee'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 
 const router = useRouter()
+const route = useRoute()
 const role = getStoredRole()
 const isOwner = computed(() => role === 'owner')
 const canCreateFee = computed(() => ['admin', 'super_admin', 'property_admin'].includes(role))
@@ -19,6 +20,7 @@ const paymentMethod = ref('alipay')
 const filterForm = ref({
     keyword: '',
     fee_type: '',
+    status: '',
     date_from: '',
     date_to: '',
 })
@@ -28,9 +30,19 @@ const feeTypeOptions = [
     { label: '物业费', value: 'property' },
     { label: '水费', value: 'water' },
     { label: '电费', value: 'electric' },
-    { label: '停车费', value: 'parking' },
+    { label: '车位费', value: 'parking' },
     { label: '其他费用', value: 'other' },
 ]
+
+const feeTypeTextMap = feeTypeOptions.reduce<Record<string, string>>((map, item) => {
+    map[item.value] = item.label
+    return map
+}, {})
+
+const feeTypeText = (row: any) => feeTypeTextMap[row.fee_type] || row.fee_type_text || row.fee_type || '-'
+const validFeeTypes = feeTypeOptions.map((item) => item.value)
+const validStatuses = ['unpaid', 'paid', 'overdue']
+const isPaidRecordPage = computed(() => filterForm.value.status === 'paid')
 
 const paymentOptions = [
     { label: '支付宝', value: 'alipay' },
@@ -53,9 +65,19 @@ const buildQueryParams = () => {
     return {
         keyword: filterForm.value.keyword || undefined,
         fee_type: filterForm.value.fee_type || undefined,
+        status: filterForm.value.status || undefined,
         date_from: filterForm.value.date_from || undefined,
         date_to: filterForm.value.date_to || undefined,
     }
+}
+
+const syncRouteFilters = () => {
+    const routeFeeType = String(route.query.fee_type || '')
+    const routeStatus = String(route.query.status || '')
+
+    // 菜单通过 query 区分在线缴费、缴费记录和不同费用类型，页面查询条件要跟随 URL。
+    filterForm.value.fee_type = validFeeTypes.includes(routeFeeType) ? routeFeeType : ''
+    filterForm.value.status = validStatuses.includes(routeStatus) ? routeStatus : ''
 }
 
 const focusEndDatePicker = () => {
@@ -106,9 +128,11 @@ const resetFilters = () => {
     filterForm.value = {
         keyword: '',
         fee_type: '',
+        status: '',
         date_from: '',
         date_to: '',
     }
+    syncRouteFilters()
 
     loadData()
 }
@@ -151,15 +175,24 @@ const confirmPay = async () => {
 }
 
 onMounted(() => {
+    syncRouteFilters()
     loadData()
 })
+
+watch(
+    () => [route.query.fee_type, route.query.status],
+    () => {
+        syncRouteFilters()
+        loadData()
+    }
+)
 </script>
 
 <template>
     <el-card>
         <template #header>
-            <div style="display: flex; justify-content: space-between">
-                <span>物业费列表</span>
+            <div class="card-header">
+                <span>费用账单</span>
 
                 <el-button v-if="canCreateFee" type="primary" @click="router.push('/fee/create')">
                     新增账单
@@ -168,7 +201,7 @@ onMounted(() => {
         </template>
 
         <el-alert
-            v-if="isOwner"
+            v-if="isOwner && !isPaidRecordPage"
             class="fee-tip"
             type="info"
             show-icon
@@ -242,7 +275,7 @@ onMounted(() => {
 
             <el-table-column label="费用类型">
                 <template #default="scope">
-                    {{ scope.row.fee_type_text || scope.row.fee_type }}
+                    {{ feeTypeText(scope.row) }}
                 </template>
             </el-table-column>
 
@@ -270,7 +303,7 @@ onMounted(() => {
                 <template #default="scope">
                     <el-button
                         v-if="isOwner && (scope.row.status === 'unpaid' || scope.row.status === 'overdue')"
-                        type="success"
+                        type="primary"
                         size="small"
                         @click="handlePay(scope.row.id)"
                     >

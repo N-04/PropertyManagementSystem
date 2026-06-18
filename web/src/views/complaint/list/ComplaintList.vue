@@ -96,26 +96,33 @@ onMounted(() => {
 </script>
 
 <template>
-    <el-card class="search-card">
-        <el-form :inline="true" :model="queryForm">
-            <el-form-item>
+    <el-card>
+        <template #header>
+            <div class="card-header">
+                <span>投诉建议列表</span>
+            </div>
+        </template>
+
+        <el-form class="filter-form" :inline="true" :model="queryForm">
+            <el-form-item label="搜索">
                 <el-input
                     v-model="queryForm.keyword"
                     placeholder="标题/内容/手机号"
                     clearable
+                    style="width: 240px"
                     @keyup.enter="loadData"
                 />
             </el-form-item>
 
-            <el-form-item>
-                <el-select v-model="queryForm.category" placeholder="类型" clearable style="width: 120px">
+            <el-form-item label="类型">
+                <el-select v-model="queryForm.category" placeholder="全部类型" clearable style="width: 130px">
                     <el-option label="投诉" value="complaint" />
                     <el-option label="建议" value="suggestion" />
                 </el-select>
             </el-form-item>
 
-            <el-form-item>
-                <el-select v-model="queryForm.status" placeholder="状态" clearable style="width: 130px">
+            <el-form-item label="状态">
+                <el-select v-model="queryForm.status" placeholder="全部状态" clearable style="width: 140px">
                     <el-option label="待处理" value="pending" />
                     <el-option label="处理中" value="processing" />
                     <el-option label="已完成" value="done" />
@@ -128,10 +135,6 @@ onMounted(() => {
                 <el-button @click="resetSearch">重置</el-button>
             </el-form-item>
         </el-form>
-    </el-card>
-
-    <el-card>
-        <template #header>投诉建议列表</template>
 
         <el-table :data="pagedTableData" border>
             <el-table-column prop="id" label="ID" width="80" />
@@ -209,9 +212,3 @@ onMounted(() => {
         </template>
     </el-dialog>
 </template>
-
-<style scoped>
-.search-card {
-    margin-bottom: 16px;
-}
-</style>

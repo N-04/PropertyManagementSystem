@@ -14,7 +14,7 @@ export function getMenuTree() {
     return request.get('/menu/tree/')
 }
 
-const adminMenuIds = ['auth', 'rbac', 'admin', 'finance', 'repairer', 'owner', 'contact-service', 'message', 'file', 'security']
+const adminMenuIds = ['admin', 'finance', 'repairer', 'owner', 'message', 'file', 'security']
 const adminMenuRule: RoleMenuRule = {
     allow: adminMenuIds,
 }
@@ -32,16 +32,16 @@ const roleMenuMap: Record<string, RoleMenuRule> = {
     },
 
     property_admin: {
-        allow: ['rbac-user', 'rbac-role', 'rbac-permission', 'admin', 'contact-service'],
+        allow: ['admin'],
         deny: ['admin-super'],
     },
 
     finance_staff: {
-        allow: ['finance', 'message', 'contact-service'],
+        allow: ['finance', 'message'],
     },
 
     finance: {
-        allow: ['finance', 'message', 'contact-service'],
+        allow: ['finance', 'message'],
     },
 
     customer_service: {
@@ -53,15 +53,15 @@ const roleMenuMap: Record<string, RoleMenuRule> = {
     },
 
     repair_staff: {
-        allow: ['repairer', 'message', 'contact-service'],
+        allow: ['repairer', 'message'],
     },
 
     repair: {
-        allow: ['repairer', 'message', 'contact-service'],
+        allow: ['repairer', 'message'],
     },
 
     owner: {
-        allow: ['owner', 'contact-service'],
+        allow: ['owner'],
     },
 }
 
@@ -168,10 +168,7 @@ const getMenu = (menus: AppMenuItem[], id: string) => {
 const adminDisplayMenus = (): AppMenuItem[] => {
     // 管理员后台使用面向实际工作的 UI 分组，不再按 XMind 节点逐条平铺。
     return [
-        groupMenu('admin-workbench', '运营工作台', [
-            leafMenu('admin-dashboard', '综合看板', '/dashboard'),
-            leafMenu('admin-data-report', '运营报表', '/dashboard'),
-        ]),
+        leafMenu('admin-dashboard', '运营工作台', '/dashboard'),
         groupMenu('admin-users', '用户管理', [
             leafMenu('admin-user-list', '账号管理', '/user/list'),
             leafMenu('admin-owner-list', '业主管理', '/owner/list'),
@@ -202,10 +199,7 @@ const adminDisplayMenus = (): AppMenuItem[] => {
             leafMenu('admin-fee-record', '缴费记录', '/fee/list?status=paid'),
             leafMenu('admin-fee-overdue', '欠费提醒', '/fee/list?status=unpaid'),
         ]),
-        groupMenu('admin-notice', '公告通知', [
-            leafMenu('admin-notice-list', '公告列表', '/notice/list'),
-            leafMenu('admin-message-center', '消息中心', '/message/center'),
-        ]),
+        leafMenu('admin-notice-list', '公告通知', '/notice/list'),
         groupMenu('admin-complaint', '投诉建议', [
             leafMenu('admin-complaint-list', '投诉建议', '/complaint/list'),
         ]),
@@ -217,9 +211,7 @@ const adminDisplayMenus = (): AppMenuItem[] => {
 }
 
 const financeDisplayMenus = (): AppMenuItem[] => [
-    groupMenu('finance-workbench', '财务工作台', [
-        leafMenu('finance-dashboard', '财务总览', '/dashboard'),
-    ]),
+    leafMenu('finance-dashboard', '财务工作台', '/dashboard'),
     groupMenu('finance-fee', '费用管理', [
         leafMenu('finance-fee-list', '账单管理', '/fee/list'),
         leafMenu('finance-fee-unpaid', '待缴账单', '/fee/list?status=unpaid'),
@@ -235,13 +227,12 @@ const financeDisplayMenus = (): AppMenuItem[] => [
     ]),
     groupMenu('finance-profile', '个人中心', [
         leafMenu('finance-profile-page', '个人资料', '/profile'),
+        leafMenu('finance-profile-password', '修改密码', '/profile/password'),
     ]),
 ]
 
 const repairDisplayMenus = (): AppMenuItem[] => [
-    groupMenu('repair-workbench', '维修工作台', [
-        leafMenu('repair-dashboard', '维修总览', '/dashboard'),
-    ]),
+    leafMenu('repair-dashboard', '维修工作台', '/dashboard'),
     groupMenu('repair-pending', '待接工单', [
         leafMenu('repairer-pending', '待接单', '/repair/list'),
     ]),
@@ -257,23 +248,22 @@ const repairDisplayMenus = (): AppMenuItem[] => [
     ]),
     groupMenu('repair-profile', '个人中心', [
         leafMenu('repair-profile-page', '个人资料', '/profile'),
+        leafMenu('repair-profile-password', '修改密码', '/profile/password'),
     ]),
 ]
 
 const ownerDisplayMenus = (): AppMenuItem[] => [
-    groupMenu('owner-home', '业主首页', [
-        leafMenu('owner-dashboard', '业主首页', '/dashboard'),
-    ]),
+    leafMenu('owner-dashboard', '业主首页', '/dashboard'),
     groupMenu('owner-profile', '个人中心', [
         leafMenu('owner-profile-page', '个人资料', '/profile'),
+        leafMenu('owner-profile-password', '修改密码', '/profile/password'),
     ]),
     groupMenu('owner-house', '房产信息', [
         leafMenu('owner-house-list', '我的房屋', '/house/list'),
     ]),
     groupMenu('owner-parking', '车位信息', [
         leafMenu('owner-parking-owner', '我的车位', '/parking/list?parking_view=owner'),
-        leafMenu('owner-parking-visitor', '访客临停', '/parking/list?parking_view=visitor'),
-        leafMenu('owner-parking-pay', '停车缴费', '/fee/list?fee_type=parking'),
+        leafMenu('owner-parking-purchase', '购买车位', '/parking/list?parking_view=owner&parking_mode=available'),
     ]),
     groupMenu('owner-pay', '缴费中心', [
         leafMenu('owner-fee-list', '在线缴费', '/fee/list'),
@@ -287,10 +277,7 @@ const ownerDisplayMenus = (): AppMenuItem[] => [
         leafMenu('owner-complaint-create', '提交投诉', '/complaint/create'),
         leafMenu('owner-complaint-list', '投诉进度', '/complaint/list'),
     ]),
-    groupMenu('owner-notice', '公告活动', [
-        leafMenu('owner-notice-list', '公告活动', '/notice/list'),
-        leafMenu('owner-message-center', '消息中心', '/message/center'),
-    ]),
+    leafMenu('owner-notice-list', '公告活动', '/notice/list'),
 ]
 
 export function isCustomerServiceRole(role: string) {

@@ -224,6 +224,10 @@ const routes = [
                 component: () => import('@/views/profile/ProfilePage.vue'),
             },
             {
+                path: 'profile/password',
+                component: () => import('@/views/profile/ProfilePage.vue'),
+            },
+            {
                 path: 'message/center',
                 component: () => import('@/views/message/MessageCenter.vue'),
             },
@@ -295,6 +299,7 @@ const routeTitleMap: Record<string, string> = {
     '/notice/create': '发布公告',
     '/visitor/list': '访客管理',
     '/profile': '个人中心',
+    '/profile/password': '修改密码',
     '/message/center': '消息中心',
     '/contact/service': '联系客服',
     '/service/chat': '即时通讯',

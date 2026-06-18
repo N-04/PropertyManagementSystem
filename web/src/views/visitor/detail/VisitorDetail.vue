@@ -100,7 +100,7 @@ onMounted(() => {
 <template>
     <el-card v-loading="loading">
         <template #header>
-            <div style="display: flex; justify-content: space-between; align-items: center">
+            <div class="card-header">
                 <span>访客详情</span>
 
                 <el-button @click="$router.back()"> 返回 </el-button>

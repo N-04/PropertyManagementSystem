@@ -1,5 +1,6 @@
 # 文件说明：负责 apps/users/serializers/user_serializer.py 对应接口的数据序列化、反序列化和参数校验。
 
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from rest_framework import serializers
 
 from apps.users.models.user import User
@@ -107,10 +108,26 @@ class UserInfoSerializer(serializers.ModelSerializer):
 class CurrentUserProfileSerializer(serializers.Serializer):
     """当前用户资料修改校验。"""
 
+    username = serializers.CharField(required=False, max_length=150)
     real_name = serializers.CharField(required=False, allow_blank=True, max_length=50)
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=50)
     phone = serializers.CharField(required=False, allow_blank=True)
     avatar = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate_username(self, value):
+        username = value.strip()
+
+        if not username:
+            raise serializers.ValidationError("用户名不能为空")
+
+        UnicodeUsernameValidator()(username)
+
+        user = self.context["request"].user
+
+        if User.objects.exclude(id=user.id).filter(username=username).exists():
+            raise serializers.ValidationError("用户名已被其他账号使用")
+
+        return username
 
     def validate_phone(self, value):
         if not value:
@@ -135,7 +152,7 @@ class CurrentUserProfileSerializer(serializers.Serializer):
         old_phone = instance.phone
         owner_updates = {}
 
-        for field in ["real_name", "nickname", "phone", "avatar"]:
+        for field in ["username", "real_name", "nickname", "phone", "avatar"]:
             if field in validated_data:
                 setattr(instance, field, validated_data[field])
 

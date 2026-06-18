@@ -1,13 +1,16 @@
 # 文件说明：提供 Django 管理命令，用于维护或生成项目数据。
 
-from django.core.management.base import BaseCommand
-from django.db import transaction
-
-from faker import Faker
-
+from datetime import datetime
+from decimal import Decimal
 import random
 import string
+
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
+
+from faker import Faker
 
 from apps.community.models.community import Community
 from apps.community.models.building import Building
@@ -21,6 +24,45 @@ from apps.visitors.models.visitor import Visitor
 from apps.finance.models.fee import Fee
 
 fake = Faker("zh_CN")
+
+DEMO_COMMUNITIES = [
+    {
+        "name": "一期社区",
+        "code": "PHASE001",
+        "address": "杭州市西湖区幸福里一期",
+        "contact_name": "周管家",
+        "contact_phone": "0571-6386-9274",
+    },
+    {
+        "name": "二期社区",
+        "code": "PHASE002",
+        "address": "杭州市西湖区幸福里二期",
+        "contact_name": "陈管家",
+        "contact_phone": "0571-5824-1396",
+    },
+]
+
+FAMILY_TEMPLATES = [
+    ("self", "spouse"),
+    ("self", "spouse", "child"),
+    ("self", "spouse", "child", "parent"),
+    ("self", "parent"),
+]
+
+RELATIONSHIP_LABELS = {
+    "self": "本人",
+    "spouse": "配偶",
+    "child": "子女",
+    "parent": "父母",
+    "other": "其他",
+}
+
+FEE_TYPE_AMOUNT_RULES = {
+    "property": (Decimal("2.80"), Decimal("4.20")),
+    "water": (Decimal("40.00"), Decimal("180.00")),
+    "electric": (Decimal("80.00"), Decimal("420.00")),
+    "parking": (Decimal("180.00"), Decimal("320.00")),
+}
 
 
 class Command(BaseCommand):
@@ -40,6 +82,16 @@ class Command(BaseCommand):
         self.used_phone = set()
         self.used_id_card = set()
         self.used_plate = set()
+
+        self.used_phone.update(
+            Owner.objects.exclude(phone__isnull=True).values_list("phone", flat=True)
+        )
+        self.used_id_card.update(
+            Owner.objects.exclude(id_card__isnull=True).values_list("id_card", flat=True)
+        )
+        self.used_plate.update(
+            Car.objects.exclude(plate_no__isnull=True).values_list("plate_no", flat=True)
+        )
 
         if options["reset"]:
 
@@ -75,14 +127,14 @@ class Command(BaseCommand):
 
         self.communities = []
 
-        for i in range(1, 6):
+        for community_data in DEMO_COMMUNITIES:
 
             community = Community.objects.create(
-                name=f"演示小区{i}",
-                code=f"COMM{i:03}",
-                address=fake.address(),
-                contact_name=fake.name(),
-                contact_phone=self.generate_phone(),
+                name=community_data["name"],
+                code=community_data["code"],
+                address=community_data["address"],
+                contact_name=community_data["contact_name"],
+                contact_phone=community_data["contact_phone"],
             )
 
             self.communities.append(community)
@@ -99,14 +151,14 @@ class Command(BaseCommand):
 
         for community in self.communities:
 
-            for b in range(1, 11):
+            for b in range(1, 7):
 
                 building = Building.objects.create(
                     community=community,
                     name=f"{b}栋",
                     code=f"{community.code}-B{b:02d}",
-                    floor_count=30,
-                    unit_count=4,
+                    floor_count=18,
+                    unit_count=2,
                 )
 
                 self.buildings.append(building)
@@ -123,13 +175,13 @@ class Command(BaseCommand):
 
         for building in self.buildings:
 
-            for u in range(1, 5):
+            for u in range(1, 3):
 
                 unit = Unit.objects.create(
                     building=building,
                     name=f"{u}单元",
                     code=f"{building.code}-U{u:02d}",
-                    floor_count=30,
+                    floor_count=18,
                 )
 
                 self.units.append(unit)
@@ -146,7 +198,7 @@ class Command(BaseCommand):
 
         for unit in self.units:
 
-            for floor in range(1, 31):
+            for floor in range(1, 19):
 
                 for room in range(1, 5):
 
@@ -164,10 +216,10 @@ class Command(BaseCommand):
                         ),
                         status=random.choice(
                             [
-                                "vacant",
                                 "occupied",
                                 "renting",
                                 "repairing",
+                                "vacant",
                             ]
                         ),
                         owner_count=0,
@@ -188,60 +240,37 @@ class Command(BaseCommand):
 
         self.owners = []
 
-        for house in self.houses:
+        demo_owner_user = get_user_model().objects.filter(username="owner_demo").first()
 
-            # 空置房大概率只有1个业主
-            if house.status == "vacant":
-                owner_count = 1
-            else:
-                owner_count = random.randint(1, 2)
+        for house_index, house in enumerate(self.houses):
+            relationships = self.select_house_family(house, house_index)
 
-            for index in range(owner_count):
+            for index, relationship in enumerate(relationships):
+                owner_name = self.generate_family_member_name(relationship)
+                owner_phone = self.generate_phone()
+
+                if house_index == 0 and relationship == "self" and demo_owner_user:
+                    owner_name = demo_owner_user.real_name or demo_owner_user.username
+                    owner_phone = demo_owner_user.phone or owner_phone
 
                 owner = Owner.objects.create(
                     house=house,
-                    name=fake.name(),
-                    phone=self.generate_phone(),
-                    relationship=(
-                        "self"
-                        if index == 0
-                        else random.choice(
-                            [
-                                "spouse",
-                                "child",
-                                "parent",
-                                "other",
-                            ]
-                        )
-                    ),
-                    gender=random.choice(
-                        [
-                            "male",
-                            "female",
-                        ]
-                    ),
-                    birthday=fake.date_between(
-                        start_date="-60y",
-                        end_date="-18y",
-                    ),
-                    id_card=self.generate_id_card(),
+                    name=owner_name,
+                    phone=owner_phone,
+                    relationship=relationship,
+                    gender=self.generate_gender(relationship),
+                    birthday=self.generate_birthday(relationship),
+                    id_card=self.generate_id_card(relationship),
                     is_primary=(index == 0),
-                    remark="系统生成演示数据",
+                    status="approved",
+                    remark=f"系统生成演示数据：{RELATIONSHIP_LABELS[relationship]}",
                 )
 
                 self.owners.append(owner)
 
-            house.owner_count = owner_count
-
-            if house.status == "vacant":
-                house.resident_count = 0
-            else:
-                house.resident_count = random.randint(
-                    owner_count,
-                    owner_count + 3,
-                )
-
-            house.save()
+            house.owner_count = len(relationships)
+            house.resident_count = 0 if house.status == "vacant" else len(relationships)
+            house.save(update_fields=["owner_count", "resident_count"])
 
         self.stdout.write(
             self.style.SUCCESS(f"√ 业主完成，共生成 {len(self.owners)} 人")
@@ -323,17 +352,17 @@ class Command(BaseCommand):
         #     生成访客
         self.stdout.write("生成访客")
         self.visitors = []
-        for owner in random.sample(self.owners, 3000):
-            status = (
-                random.choice(
-                    [
-                        "waiting",
-                        "approved",
-                        "rejected",
-                        "entered",
-                        "left",
-                    ]
-                ),
+        visitor_sample_size = min(300, len(self.owners))
+
+        for owner in random.sample(self.owners, visitor_sample_size):
+            status = random.choice(
+                [
+                    "waiting",
+                    "approved",
+                    "rejected",
+                    "entered",
+                    "left",
+                ]
             )
             visitor = Visitor.objects.create(
                 owner=owner,
@@ -361,10 +390,10 @@ class Command(BaseCommand):
             if visitor.status in ["approved", "entered", "left"]:
                 visitor.approve_time = timezone.now()
             if visitor.status in ["entered", "left"]:
-                visitor.entered_time = timezone.now()
+                visitor.enter_time = timezone.now()
             if visitor.status == "left":
                 visitor.leave_time = timezone.now()
-            visitor.save()
+            visitor.save(update_fields=["approve_time", "enter_time", "leave_time"])
             self.visitors.append(visitor)
 
         self.stdout.write(
@@ -375,45 +404,31 @@ class Command(BaseCommand):
 
         self.fees = []
 
-        months = [
-            "2026_04",
-            "2020-05",
-            "2020-06",
-        ]
+        primary_owners = [owner for owner in self.owners if owner.is_primary]
 
-        fee_type = random.choice(
-            [
-                "property",
-                "water",
-                "electric",
-            ]
-        )
+        for owner in primary_owners:
+            for month_offset in [-1, 0, 1]:
+                for fee_type in self.get_owner_fee_types(owner):
+                    amount = self.generate_fee_amount(owner.house, fee_type)
+                    deadline = self.generate_fee_deadline(month_offset)
+                    status = self.generate_fee_status(deadline)
 
-        for house in self.houses:
-            for month in months:
-                if fee_type == "property":
-                    amount = round(house.area * random.uniform(2.5, 4.5), 2)
-                elif fee_type == "water":
-                    amount = random.randint(30, 200)
-                else:
-                    amount = random.randint(80, 600)
-                status = random.choice(
-                    [
-                        "paid",
-                        "unpaid",
-                    ]
-                )
-
-                fee = Fee.objects.create(
-                    house=house,
-                    amount=amount,
-                    fee_type=fee_type,
-                    fee_month=month,
-                    status=status,
-                    pay_time=(timezone.now() if status == "paid" else None),
-                    remark="系统自动生成",
-                )
-                self.fees.append(fee)
+                    fee = Fee.objects.create(
+                        owner=owner,
+                        house=owner.house,
+                        amount=amount,
+                        fee_type=fee_type,
+                        deadline=deadline,
+                        status=status,
+                        pay_time=(timezone.now() if status == "paid" else None),
+                        payment_method=(
+                            random.choice(["alipay", "wechat", "bank_card"])
+                            if status == "paid"
+                            else None
+                        ),
+                        remark="系统自动生成",
+                    )
+                    self.fees.append(fee)
         self.stdout.write(
             self.style.SUCCESS(f"√ 物业费完成，共生成 {len(self.fees)} 条")
         )
@@ -434,18 +449,17 @@ class Command(BaseCommand):
                 return phone
 
     #         生成身份证
-    def generate_id_card(self):
+    def generate_id_card(self, relationship="self"):
 
         while True:
 
-            card = (
+            birth_date = self.generate_birthday(relationship)
+            body = (
                 "110101"
-                + str(random.randint(1965, 2005))
-                + f"{random.randint(1,12):02d}"
-                + f"{random.randint(1,28):02d}"
+                + birth_date.strftime("%Y%m%d")
                 + f"{random.randint(100,999):03d}"
-                + random.choice("0123456789X")
             )
+            card = body + self.generate_id_card_check_digit(body)
 
             if card not in self.used_id_card:
 
@@ -473,13 +487,73 @@ class Command(BaseCommand):
 
                 return plate
 
+    def select_house_family(self, house, house_index):
+        """按房屋状态生成家庭关系，首套房优先给 owner_demo 形成稳定演示数据。"""
 
-data = {
-    "community_count": Community.objects.count(),
-    "building_count": Building.objects.count(),
-    "house_count": House.objects.count(),
-    "owner_count": Owner.objects.count(),
-    "car_count": Car.objects.count(),
-    "visitor_count": Visitor.objects.count(),
-    "unpaid_fee_count": Fee.objects.filter(status="unpaid").count(),
-}
+        if house_index == 0:
+            return ["self", "spouse", "child"]
+
+        if house.status == "vacant":
+            return ["self"]
+
+        return list(random.choice(FAMILY_TEMPLATES))
+
+    def generate_family_member_name(self, relationship):
+        if relationship == "child":
+            return fake.first_name() + random.choice(["小朋友", "同学"])
+
+        return fake.name()
+
+    def generate_gender(self, relationship):
+        if relationship == "spouse":
+            return random.choice(["male", "female"])
+
+        return random.choice(["male", "female"])
+
+    def generate_birthday(self, relationship):
+        if relationship == "child":
+            return fake.date_between(start_date="-16y", end_date="-6y")
+
+        if relationship == "parent":
+            return fake.date_between(start_date="-75y", end_date="-50y")
+
+        return fake.date_between(start_date="-60y", end_date="-22y")
+
+    def generate_id_card_check_digit(self, body):
+        weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+        check_digits = "10X98765432"
+        total = sum(int(number) * weight for number, weight in zip(body, weights))
+
+        return check_digits[total % 11]
+
+    def get_owner_fee_types(self, owner):
+        fee_types = ["property", "water", "electric"]
+
+        if owner.parkings.exists():
+            fee_types.append("parking")
+
+        return fee_types
+
+    def generate_fee_amount(self, house, fee_type):
+        if fee_type == "property":
+            amount = Decimal(house.area) * Decimal(str(random.uniform(2.8, 4.2)))
+        else:
+            min_amount, max_amount = FEE_TYPE_AMOUNT_RULES[fee_type]
+            amount = Decimal(str(random.uniform(float(min_amount), float(max_amount))))
+
+        return amount.quantize(Decimal("0.01"))
+
+    def generate_fee_deadline(self, month_offset):
+        current = timezone.localtime(timezone.now())
+        month_number = current.month - 1 + month_offset
+        year = current.year + month_number // 12
+        month = month_number % 12 + 1
+        naive_deadline = datetime(year, month, 25, 23, 59, 59)
+
+        return timezone.make_aware(naive_deadline, timezone.get_current_timezone())
+
+    def generate_fee_status(self, deadline):
+        if deadline < timezone.now():
+            return random.choice(["paid", "overdue", "unpaid"])
+
+        return random.choice(["paid", "unpaid"])

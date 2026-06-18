@@ -32,6 +32,13 @@ const lastPage = computed(() => {
 
 const isFirstPage = computed(() => props.currentPage <= 1)
 const isLastPage = computed(() => props.currentPage >= lastPage.value)
+const paginationLayout = computed(() => {
+    return props.layout
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item && item !== 'total')
+        .join(', ')
+})
 
 const emitCurrentPage = (value: number) => {
     emit('update:currentPage', value)
@@ -78,13 +85,15 @@ const goLastPage = () => {
     <div class="data-pagination">
         <el-button size="small" :disabled="isFirstPage" @click="goFirstPage">首页</el-button>
 
+        <span class="pagination-total">共 {{ total }} 条</span>
+
         <el-pagination
             :current-page="currentPage"
             :page-size="pageSize"
             :page-sizes="pageSizes"
             :total="total"
             :background="background"
-            :layout="layout"
+            :layout="paginationLayout"
             @current-change="handleCurrentChange"
             @size-change="handleSizeChange"
         />
@@ -99,8 +108,35 @@ const goLastPage = () => {
     align-items: center;
     /* 数据页分页统一居中，首页/尾页按钮与页码保持同一行。 */
     justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
+    gap: 12px;
+    margin-top: 28px;
     flex-wrap: wrap;
+}
+
+.pagination-total {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.data-pagination :deep(.el-button) {
+    height: 36px;
+    min-width: 54px;
+    padding: 0 14px;
+}
+
+.data-pagination :deep(.el-pagination) {
+    gap: 10px;
+}
+
+.data-pagination :deep(.el-pagination .el-select) {
+    width: 112px;
+}
+
+.data-pagination :deep(.el-pagination button),
+.data-pagination :deep(.el-pager li),
+.data-pagination :deep(.el-pagination__editor.el-input) {
+    min-width: 36px;
+    height: 36px;
 }
 </style>

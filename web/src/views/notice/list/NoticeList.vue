@@ -88,7 +88,7 @@ onMounted(() => {
     <el-card>
         <template #header>
             <div class="notice-header">
-                <span>公告列表</span>
+                <span>公开公告</span>
                 <el-button
                     v-if="canPublishNotice"
                     type="primary"
@@ -102,7 +102,7 @@ onMounted(() => {
             <el-input
                 v-model="keyword"
                 clearable
-                placeholder="公告标题/内容/类型/状态"
+                placeholder="公开公告标题/内容/类型/状态"
                 style="width: 300px"
                 @keyup.enter="handleFilter"
                 @clear="handleFilter"
@@ -153,7 +153,8 @@ onMounted(() => {
 .list-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
 }
 </style>

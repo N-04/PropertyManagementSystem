@@ -115,6 +115,7 @@ class FeeListView(APIView):
 
         keyword = request.GET.get("keyword", "").strip()
         fee_type = request.GET.get("fee_type", "").strip()
+        status = request.GET.get("status", "").strip()
         date_from_raw = (
             request.GET.get("date_from") or request.GET.get("start_date") or ""
         ).strip()
@@ -139,6 +140,14 @@ class FeeListView(APIView):
                 return ResponseError(msg="费用类型不正确")
 
             queryset = queryset.filter(fee_type=fee_type)
+
+        if status:
+            valid_statuses = {choice[0] for choice in Fee.STATUS_CHOICES}
+
+            if status not in valid_statuses:
+                return ResponseError(msg="缴费状态不正确")
+
+            queryset = queryset.filter(status=status)
 
         if date_from_raw:
             date_from = _parse_query_date(date_from_raw)

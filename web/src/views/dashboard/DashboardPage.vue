@@ -4,25 +4,33 @@ import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import {
     Bell,
+    Calendar,
     ChatDotRound,
+    Check,
     CircleCheck,
     CreditCard,
     DataAnalysis,
     Document,
-    House,
     Money,
     OfficeBuilding,
+    Phone,
     Service,
     Tickets,
     Tools,
     User,
+    UserFilled,
     Van,
     Wallet,
 } from '@element-plus/icons-vue'
+import { getComplaintList } from '@/api/complaint'
 import { getDashboard } from '@/api/dashboard'
+import { getFeeList } from '@/api/fee'
+import { getHouseList } from '@/api/house'
+import { getNoticeList } from '@/api/notice'
+import { getOwnerList } from '@/api/owner'
+import { getRepairList } from '@/api/repair'
 import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
-import HouseChart from '@/components/charts/HouseChart.vue'
 import {
     AUTH_STATE_CHANGED_EVENT,
     getStoredRole,
@@ -56,13 +64,70 @@ type MetricCard = {
 type AdminWorkOrderRow = [string, string, string, string, string, string, string, string]
 type FinanceBillRow = [string, string, string, string, string, string, string]
 type RepairOrderRow = [string, string, string, string, string, string, string]
-type OwnerTaskRow = [string, string, string, string, string, string]
 type SimplePairRow = [string, string]
 type ActivityRow = [string, string, string]
+
+type OwnerTaskItem = {
+    id: string
+    title: string
+    desc: string
+    amount?: string
+    progress?: number
+    status: string
+    statusClass: string
+    action: string
+    path: string
+    tone: string
+    icon: Component
+}
+
+type OwnerServiceItem = {
+    id: string
+    title: string
+    meta: string
+    status: string
+    statusClass: string
+    date: string
+    path: string
+}
+
+type OwnerNoticeItem = {
+    id: string
+    title: string
+    date: string
+}
+
+type OwnerCalendarEvent = {
+    id: string
+    dateKey: string
+    title: string
+    time: string
+    path: string
+}
+
+type CalendarDay = {
+    key: string
+    day: number | null
+    dateKey: string
+    hasEvent: boolean
+    isToday: boolean
+}
+
+type ConveniencePhone = {
+    label: string
+    phone: string
+}
 
 const router = useRouter()
 const username = ref(getStoredUsername() || '用户')
 const role = ref(getStoredRole())
+const ownerHouses = ref<any[]>([])
+const ownerProfiles = ref<any[]>([])
+const ownerFees = ref<any[]>([])
+const ownerRepairsData = ref<any[]>([])
+const ownerComplaints = ref<any[]>([])
+const ownerNotices = ref<any[]>([])
+const ownerCalendarCursor = ref(new Date())
 
 const data = ref<DashboardData>({
     house_count: 0,
@@ -211,45 +276,6 @@ const repairMetrics = computed<MetricCard[]>(() => [
     },
 ])
 
-const ownerCards = [
-    {
-        label: '待缴费用',
-        value: '¥ 1,288.00',
-        desc: '共 3 笔待缴',
-        action: '立即缴费',
-        path: '/fee/list',
-        tone: 'amber',
-        icon: Wallet,
-    },
-    {
-        label: '维修进度',
-        value: '2',
-        desc: '个进行中，1 个待评价',
-        action: '查看详情',
-        path: '/repair/list',
-        tone: 'blue',
-        icon: Tools,
-    },
-    {
-        label: '我的车位',
-        value: 'B2-045',
-        desc: '地下二层 | 月租',
-        action: '查看详情',
-        path: '/parking/list',
-        tone: 'green',
-        icon: Van,
-    },
-    {
-        label: '未读通知',
-        value: '4',
-        desc: '条系统通知',
-        action: '查看全部',
-        path: '/message/center',
-        tone: 'red',
-        icon: Bell,
-    },
-]
-
 const adminActions = [
     { label: '新增工单', path: '/repair/create', icon: Tools, tone: 'teal' },
     { label: '访客登记', path: '/visitor/create', icon: User, tone: 'blue' },
@@ -270,7 +296,7 @@ const financeBills: FinanceBillRow[] = [
     ['BILL20250519002', '李女士', '2栋-2单元-0803', '水费', '¥ 68.00', '未缴费', '2025-05-31'],
     ['BILL20250519003', '王先生', '1栋-1单元-1502', '电费', '¥ 124.50', '未缴费', '2025-05-31'],
     ['BILL20250519004', '赵女士', '3栋-1单元-0601', '物业费', '¥ 1,280.00', '部分缴费', '2025-05-31'],
-    ['BILL20250519005', '刘先生', '2栋-1单元-1103', '停车费', '¥ 180.00', '部分缴费', '2025-05-31'],
+    ['BILL20250519005', '刘先生', '2栋-1单元-1103', '车位费', '¥ 180.00', '部分缴费', '2025-05-31'],
     ['BILL20250519006', '陈女士', '5栋-2单元-1002', '水费', '¥ 68.00', '已逾期', '2025-05-20'],
 ]
 
@@ -281,13 +307,6 @@ const repairOrders: RepairOrderRow[] = [
     ['WD20250519004', '陈先生', '5栋-3单元-1103', '门禁故障', '中', '待接单', '今天 15:30'],
     ['WD20250519005', '刘女士', '6栋-2单元-0702', '水龙头漏水', '低', '待接单', '明天 09:00'],
     ['WD20250519006', '赵先生', '4栋-1单元-0901', '插座故障', '低', '待接单', '明天 10:30'],
-]
-
-const ownerTasks: OwnerTaskRow[] = [
-    ['¥', '有 3 笔费用待缴纳', '物业费、水费、电费等', '¥ 1,288.00', '去支付', '/fee/list'],
-    ['修', '2 个报修工单进行中', '水管漏水、门锁故障', '', '查看进度', '/repair/list'],
-    ['诉', '1 条投诉待反馈', '电梯运行噪音问题', '', '查看详情', '/complaint/list'],
-    ['证', '房产认证未完善', '完成房产认证，享受更多服务', '', '去认证', '/house/list'],
 ]
 
 const notices: SimplePairRow[] = [
@@ -306,11 +325,423 @@ const activities: ActivityRow[] = [
     ['投诉', '投诉编号 TS20250518007 已回访', '08:35'],
 ]
 
-const ownerRepairs: ActivityRow[] = [
-    ['卫生间水管漏水', '维修中', '05-19 09:28'],
-    ['门锁故障维修', '已完成', '05-16 14:52'],
-    ['客厅灯不亮', '已评价', '05-08 16:18'],
+const ownerConveniencePhones: ConveniencePhone[] = [
+    { label: '物业前台', phone: '0571-6386-9274' },
+    { label: '门岗电话', phone: '0571-5824-1396' },
+    { label: '客服热线', phone: '400-736-5281' },
+    { label: '紧急值班', phone: '0571-8507-3164' },
 ]
+
+const feeTypeLabels: Record<string, string> = {
+    property: '物业费',
+    water: '水费',
+    electric: '电费',
+    parking: '车位费',
+    other: '其他费用',
+}
+
+const houseStatusLabels: Record<string, string> = {
+    vacant: '空置',
+    occupied: '已入住',
+    renting: '出租',
+    repairing: '装修中',
+}
+
+const repairStatusLabels: Record<string, string> = {
+    pending: '待派单',
+    assigned: '待接单',
+    accepted: '已接单',
+    processing: '进行中',
+    finished: '已完成',
+}
+
+const repairProgressMap: Record<string, number> = {
+    pending: 20,
+    assigned: 35,
+    accepted: 50,
+    processing: 60,
+    finished: 100,
+}
+
+const complaintStatusLabels: Record<string, string> = {
+    pending: '待处理',
+    processing: '处理中',
+    done: '已完成',
+    closed: '已关闭',
+}
+
+const extractList = (payload: any) => {
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.results)) return payload.results
+    if (Array.isArray(payload?.data)) return payload.data
+    if (Array.isArray(payload?.data?.results)) return payload.data.results
+
+    return []
+}
+
+const parseDateFromValue = (value?: string | null) => {
+    if (!value) return null
+
+    const match = String(value).match(
+        /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/,
+    )
+
+    if (!match) return null
+
+    const [, year, month, day, hour = '00', minute = '00'] = match
+
+    return new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+    )
+}
+
+const toDateKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+
+    return `${year}-${month}-${day}`
+}
+
+const dateKeyFromValue = (value?: string | null) => {
+    const date = parseDateFromValue(value)
+
+    return date ? toDateKey(date) : ''
+}
+
+const formatDateShort = (value?: string | null) => {
+    const date = parseDateFromValue(value)
+
+    if (!date) return ''
+
+    return `${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+const formatDateTimeShort = (value?: string | null) => {
+    const date = parseDateFromValue(value)
+
+    if (!date) return ''
+
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+    const hour = `${date.getHours()}`.padStart(2, '0')
+    const minute = `${date.getMinutes()}`.padStart(2, '0')
+
+    return `${month}-${day} ${hour}:${minute}`
+}
+
+const formatCalendarEventTime = (value?: string | null) => {
+    const date = parseDateFromValue(value)
+
+    if (!date) return ''
+
+    return `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
+}
+
+const formatMonthLabel = (date: Date) => `${date.getFullYear()}年${date.getMonth() + 1}月`
+
+const feeTypeText = (item: any) => item.fee_type_text || feeTypeLabels[item.fee_type] || '费用'
+const repairStatusText = (item: any) => item.status_text || repairStatusLabels[item.status] || '待处理'
+const complaintStatusText = (item: any) => item.status_text || complaintStatusLabels[item.status] || '待处理'
+
+const isUnpaidFee = (item: any) => ['unpaid', 'overdue'].includes(item.status)
+const isActiveRepair = (item: any) => item.status !== 'finished'
+const isActiveComplaint = (item: any) => !['done', 'closed'].includes(item.status)
+
+const primaryOwnerProfile = computed(() => {
+    return ownerProfiles.value.find((item) => item.is_primary) || ownerProfiles.value[0] || null
+})
+
+const primaryOwnerHouse = computed(() => {
+    return ownerHouses.value[0] || primaryOwnerProfile.value?.house || null
+})
+
+const ownerDisplayName = computed(() => {
+    return primaryOwnerProfile.value?.name || username.value || '业主'
+})
+
+const ownerHouseTitle = computed(() => {
+    const profile = primaryOwnerProfile.value || {}
+    const house = primaryOwnerHouse.value || {}
+    const communityName = profile.community_name || house.community_name || '社区'
+    const buildingName = profile.building_name || house.building_name || ''
+    const unitName = profile.unit_name || house.unit_name || ''
+    const roomNo = profile.room_no || house.room_no || ''
+    const addressParts = [buildingName, unitName, roomNo].filter(Boolean).join('-')
+
+    return addressParts ? `${communityName} ${addressParts}` : communityName
+})
+
+const ownerHouseMeta = computed(() => {
+    const house = primaryOwnerHouse.value || {}
+    const metas = []
+
+    if (house.area) metas.push(`建筑面积：${house.area}㎡`)
+    if (house.house_type) metas.push(`房屋类型：${house.house_type}`)
+    if (house.status) metas.push(`房屋状态：${houseStatusLabels[house.status] || house.status}`)
+
+    return metas.length ? metas : ['暂无房屋详情']
+})
+
+const ownerProfileCompleted = computed(() => {
+    const profile = primaryOwnerProfile.value
+
+    return Boolean(profile?.phone && profile?.id_card_mask && primaryOwnerHouse.value)
+})
+
+const unpaidOwnerFees = computed(() => ownerFees.value.filter(isUnpaidFee))
+
+const ownerFeeTotalAmount = computed(() => {
+    return unpaidOwnerFees.value.reduce((total, item) => total + Number(item.amount || 0), 0)
+})
+
+const activeOwnerRepairs = computed(() => ownerRepairsData.value.filter(isActiveRepair))
+const activeOwnerComplaints = computed(() => ownerComplaints.value.filter(isActiveComplaint))
+
+const ownerRecentTasks = computed<OwnerTaskItem[]>(() => {
+    const tasks: OwnerTaskItem[] = []
+
+    if (unpaidOwnerFees.value.length) {
+        const feeNames = Array.from(new Set(unpaidOwnerFees.value.map(feeTypeText))).join('、')
+
+        tasks.push({
+            id: 'fees',
+            title: `本月账单待处理`,
+            desc: feeNames ? `${feeNames}等费用待缴纳` : '费用待缴纳',
+            amount: formatMoney(ownerFeeTotalAmount.value),
+            status: '待缴费',
+            statusClass: 'warning',
+            action: '处理',
+            path: '/fee/list',
+            tone: 'amber',
+            icon: Money,
+        })
+    }
+
+    const repair = activeOwnerRepairs.value[0]
+
+    if (repair) {
+        const progress = repairProgressMap[repair.status] || 40
+
+        tasks.push({
+            id: `repair-${repair.id}`,
+            title: '服务单待确认',
+            desc: repair.title || repair.content || '报修服务单正在处理',
+            progress,
+            status: repairStatusText(repair),
+            statusClass: statusClass(repairStatusText(repair)),
+            action: '查看',
+            path: '/repair/list',
+            tone: 'blue',
+            icon: Tools,
+        })
+    }
+
+    if (!ownerProfileCompleted.value) {
+        tasks.push({
+            id: 'profile',
+            title: '身份认证待完善',
+            desc: '完善身份信息，享受更多服务',
+            status: '待完善',
+            statusClass: 'warning',
+            action: '处理',
+            path: '/profile',
+            tone: 'green',
+            icon: UserFilled,
+        })
+    }
+
+    const complaint = activeOwnerComplaints.value[0]
+
+    if (complaint) {
+        tasks.push({
+            id: `complaint-${complaint.id}`,
+            title: '投诉反馈待查看',
+            desc: complaint.title || complaint.content || '请查看处理进度',
+            status: complaintStatusText(complaint),
+            statusClass: statusClass(complaintStatusText(complaint)),
+            action: '查看',
+            path: '/complaint/list',
+            tone: 'purple',
+            icon: ChatDotRound,
+        })
+    }
+
+    return tasks
+})
+
+const ownerNoticeItems = computed<OwnerNoticeItem[]>(() => {
+    return ownerNotices.value
+        .filter((item) => item.status !== 'draft')
+        .slice(0, 5)
+        .map((item) => ({
+            id: String(item.id || item.title),
+            title: item.title || '公告通知',
+            date: formatDateShort(item.created_at),
+        }))
+})
+
+const ownerServiceItems = computed<OwnerServiceItem[]>(() => {
+    const repairItems = ownerRepairsData.value.map((item) => ({
+        id: `repair-${item.id}`,
+        title: item.title || '报修服务',
+        meta: `工单号：BX${String(item.id || '').padStart(10, '0')}`,
+        status: repairStatusText(item),
+        statusClass: statusClass(repairStatusText(item)),
+        date: formatDateTimeShort(item.finish_time || item.created_at),
+        path: '/repair/list',
+    }))
+
+    const complaintItems = ownerComplaints.value.map((item) => ({
+        id: `complaint-${item.id}`,
+        title: item.title || '投诉建议',
+        meta: `工单号：TS${String(item.id || '').padStart(10, '0')}`,
+        status: complaintStatusText(item),
+        statusClass: statusClass(complaintStatusText(item)),
+        date: formatDateTimeShort(item.updated_at || item.created_at),
+        path: '/complaint/list',
+    }))
+
+    return [...repairItems, ...complaintItems].slice(0, 3)
+})
+
+const ownerCalendarEvents = computed<OwnerCalendarEvent[]>(() => {
+    const events: OwnerCalendarEvent[] = []
+
+    ownerFees.value.forEach((item) => {
+        const dateKey = dateKeyFromValue(item.deadline)
+        if (!dateKey) return
+
+        events.push({
+            id: `fee-${item.id}`,
+            dateKey,
+            title: `${feeTypeText(item)}缴费`,
+            time: formatCalendarEventTime(item.deadline),
+            path: '/fee/list',
+        })
+    })
+
+    ownerRepairsData.value.forEach((item) => {
+        const sourceDate = item.finish_time || item.created_at
+        const dateKey = dateKeyFromValue(sourceDate)
+        if (!dateKey) return
+
+        events.push({
+            id: `repair-${item.id}`,
+            dateKey,
+            title: item.title || '报修服务',
+            time: formatCalendarEventTime(sourceDate),
+            path: '/repair/list',
+        })
+    })
+
+    ownerComplaints.value.forEach((item) => {
+        const sourceDate = item.updated_at || item.created_at
+        const dateKey = dateKeyFromValue(sourceDate)
+        if (!dateKey) return
+
+        events.push({
+            id: `complaint-${item.id}`,
+            dateKey,
+            title: item.title || '投诉建议',
+            time: formatCalendarEventTime(sourceDate),
+            path: '/complaint/list',
+        })
+    })
+
+    ownerNotices.value.forEach((item) => {
+        const dateKey = dateKeyFromValue(item.created_at)
+        if (!dateKey) return
+
+        events.push({
+            id: `notice-${item.id}`,
+            dateKey,
+            title: item.title || '公告活动',
+            time: formatCalendarEventTime(item.created_at),
+            path: '/notice/list',
+        })
+    })
+
+    return events.sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+})
+
+const ownerCalendarEventMap = computed(() => {
+    return ownerCalendarEvents.value.reduce<Record<string, OwnerCalendarEvent[]>>((map, item) => {
+        map[item.dateKey] = [...(map[item.dateKey] || []), item]
+        return map
+    }, {})
+})
+
+const ownerCalendarDays = computed<CalendarDay[]>(() => {
+    const cursor = ownerCalendarCursor.value
+    const firstDay = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+    const dayOffset = (firstDay.getDay() + 6) % 7
+    const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate()
+    const todayKey = toDateKey(new Date())
+    const cells: CalendarDay[] = []
+
+    for (let index = 0; index < dayOffset; index += 1) {
+        cells.push({
+            key: `empty-${index}`,
+            day: null,
+            dateKey: '',
+            hasEvent: false,
+            isToday: false,
+        })
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        const dateKey = toDateKey(new Date(cursor.getFullYear(), cursor.getMonth(), day))
+
+        cells.push({
+            key: dateKey,
+            day,
+            dateKey,
+            hasEvent: Boolean(ownerCalendarEventMap.value[dateKey]?.length),
+            isToday: dateKey === todayKey,
+        })
+    }
+
+    while (cells.length % 7 !== 0) {
+        cells.push({
+            key: `tail-${cells.length}`,
+            day: null,
+            dateKey: '',
+            hasEvent: false,
+            isToday: false,
+        })
+    }
+
+    return cells
+})
+
+const visibleOwnerCalendarEvents = computed(() => {
+    const monthKey = `${ownerCalendarCursor.value.getFullYear()}-${`${ownerCalendarCursor.value.getMonth() + 1}`.padStart(2, '0')}`
+
+    return ownerCalendarEvents.value
+        .filter((item) => item.dateKey.startsWith(monthKey))
+        .slice(0, 4)
+})
+
+const shiftOwnerCalendarMonth = (offset: number) => {
+    ownerCalendarCursor.value = new Date(
+        ownerCalendarCursor.value.getFullYear(),
+        ownerCalendarCursor.value.getMonth() + offset,
+        1,
+    )
+}
+
+const goToCalendarDay = (day: CalendarDay) => {
+    const firstEvent = ownerCalendarEventMap.value[day.dateKey]?.[0]
+
+    if (firstEvent) {
+        goTo(firstEvent.path)
+    }
+}
 
 const statusClass = (status: string) => {
     if (status.includes('紧急') || status.includes('未缴') || status.includes('逾期')) {
@@ -332,6 +763,37 @@ const goTo = (path: string) => {
     router.push(path)
 }
 
+const readSettledList = (result: PromiseSettledResult<any>) => {
+    if (result.status !== 'fulfilled') return []
+
+    return extractList(result.value?.data?.data)
+}
+
+const loadOwnerHomeData = async () => {
+    const [
+        houseResult,
+        ownerResult,
+        feeResult,
+        repairResult,
+        complaintResult,
+        noticeResult,
+    ] = await Promise.allSettled([
+        getHouseList(),
+        getOwnerList(''),
+        getFeeList({ page_size: 1000 }),
+        getRepairList({ page_size: 1000 }),
+        getComplaintList({ page_size: 1000 }),
+        getNoticeList(),
+    ])
+
+    ownerHouses.value = readSettledList(houseResult)
+    ownerProfiles.value = readSettledList(ownerResult)
+    ownerFees.value = readSettledList(feeResult)
+    ownerRepairsData.value = readSettledList(repairResult)
+    ownerComplaints.value = readSettledList(complaintResult)
+    ownerNotices.value = readSettledList(noticeResult)
+}
+
 const loadData = async () => {
     try {
         const res = await getDashboard()
@@ -342,6 +804,10 @@ const loadData = async () => {
         }
     } catch {
         // 工作台有兜底展示数据，统计接口异常时不影响页面可用性。
+    }
+
+    if (isOwnerRole.value) {
+        await loadOwnerHomeData()
     }
 }
 
@@ -367,7 +833,6 @@ onBeforeUnmount(() => {
             <div class="workbench-heading">
                 <div>
                     <h1>运营工作台</h1>
-                    <p>欢迎回来，{{ username }}！集中处理工单、访客、缴费和公告。</p>
                 </div>
 
                 <div class="heading-meta">
@@ -550,7 +1015,6 @@ onBeforeUnmount(() => {
             <div class="workbench-heading">
                 <div>
                     <h1>财务工作台</h1>
-                    <p>聚焦账单、收费、欠费提醒和收入趋势。</p>
                 </div>
             </div>
 
@@ -590,7 +1054,7 @@ onBeforeUnmount(() => {
                         <span>物业费 86</span>
                         <span>水费 18</span>
                         <span>电费 15</span>
-                        <span>停车费 9</span>
+                        <span>车位费 9</span>
                     </div>
 
                     <table class="data-table">
@@ -828,149 +1292,160 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
-        <section v-else-if="isOwnerRole" class="workbench">
+        <section v-else-if="isOwnerRole" class="workbench owner-workbench">
             <div class="workbench-heading">
                 <div>
                     <h1>业主首页</h1>
-                    <p>欢迎回家，{{ username }}！</p>
+                    <p>欢迎回来，{{ ownerDisplayName }}！</p>
                 </div>
             </div>
 
-            <section class="owner-hero panel">
+            <section class="owner-house-summary panel">
                 <div class="owner-house-icon">
                     <el-icon><OfficeBuilding /></el-icon>
                 </div>
-                <div>
-                    <span>欢迎回家，{{ username }}！</span>
-                    <h2>幸福里小区 3栋-2单元-0602</h2>
-                    <p>房屋面积：98.56㎡　房屋类型：住宅　入住时间：2021-06-12</p>
+                <div class="owner-house-copy">
+                    <h2>{{ ownerHouseTitle }}</h2>
+                    <p>
+                        <span v-for="item in ownerHouseMeta" :key="item">{{ item }}</span>
+                    </p>
                 </div>
-                <div class="owner-hero-actions">
-                    <button type="button" @click="goTo('/fee/list')"><el-icon><Money /></el-icon>立即缴费</button>
-                    <button type="button" @click="goTo('/repair/create')"><el-icon><Tools /></el-icon>提交报修</button>
-                    <button type="button" @click="goTo('/visitor/create')"><el-icon><User /></el-icon>访客登记</button>
-                    <button type="button" @click="goTo('/notice/list')"><el-icon><Bell /></el-icon>查看公告</button>
-                </div>
+                <span class="owner-house-status" :class="{ pending: !ownerProfileCompleted }">
+                    <el-icon><Check /></el-icon>
+                    {{ ownerProfileCompleted ? '资料已完善' : '资料待完善' }}
+                </span>
             </section>
 
-            <div class="workbench-grid owner-grid">
-                <main>
-                    <div class="owner-card-grid">
-                        <article
-                            v-for="item in ownerCards"
-                            :key="item.label"
-                            class="owner-card"
-                            :class="`tone-${item.tone}`"
-                        >
-                            <el-icon><component :is="item.icon" /></el-icon>
-                            <div>
-                                <p>{{ item.label }}</p>
-                                <strong>{{ item.value }}</strong>
-                                <span>{{ item.desc }}</span>
-                            </div>
-                            <button type="button" @click="goTo(item.path)">{{ item.action }}</button>
-                        </article>
-                    </div>
-
-                    <section class="panel">
+            <div class="owner-home-grid">
+                <main class="owner-main-stack">
+                    <section class="panel owner-recent-panel">
                         <div class="panel-header">
-                            <h2>我的待办</h2>
+                            <h2>近期事项</h2>
                         </div>
-                        <ul class="owner-task-list">
-                            <li v-for="item in ownerTasks" :key="item[1]">
-                                <b>{{ item[0] }}</b>
-                                <div>
-                                    <strong>{{ item[1] }}</strong>
-                                    <span>{{ item[2] }}</span>
+                        <ul v-if="ownerRecentTasks.length" class="owner-recent-list">
+                            <li v-for="item in ownerRecentTasks" :key="item.id" class="owner-recent-item">
+                                <div class="owner-recent-icon" :class="`tone-${item.tone}`">
+                                    <el-icon><component :is="item.icon" /></el-icon>
                                 </div>
-                                <em>{{ item[3] }}</em>
-                                <button type="button" @click="goTo(item[5])">{{ item[4] }}</button>
+                                <div class="owner-recent-copy">
+                                    <strong>{{ item.title }}</strong>
+                                    <span>{{ item.desc }}</span>
+                                </div>
+                                <div v-if="item.amount || item.progress !== undefined" class="owner-task-extra">
+                                    <strong v-if="item.amount">{{ item.amount }}</strong>
+                                    <div v-else class="owner-progress">
+                                        <span>进行中 {{ item.progress }}%</span>
+                                        <i><b :style="{ width: `${item.progress || 0}%` }" /></i>
+                                    </div>
+                                </div>
+                                <span class="status-pill" :class="item.statusClass">{{ item.status }}</span>
+                                <button type="button" class="owner-outline-button" @click="goTo(item.path)">
+                                    {{ item.action }}
+                                </button>
                             </li>
                         </ul>
+                        <div v-else class="owner-empty-state">暂无待处理事项</div>
                     </section>
 
-                    <div class="bottom-grid three owner-bottom">
-                        <section class="panel">
-                            <div class="panel-header">
-                                <h2>我的房产</h2>
+                    <section class="panel owner-calendar-panel">
+                        <div class="owner-calendar-header">
+                            <div>
+                                <el-icon><Calendar /></el-icon>
+                                <h2>社区日历</h2>
                             </div>
-                            <div class="owner-property">
-                                <div class="building-thumb"><el-icon><House /></el-icon></div>
+                            <div class="owner-calendar-month">
+                                <button type="button" @click="shiftOwnerCalendarMonth(-1)">&lt;</button>
+                                <strong>{{ formatMonthLabel(ownerCalendarCursor) }}</strong>
+                                <button type="button" @click="shiftOwnerCalendarMonth(1)">&gt;</button>
+                            </div>
+                        </div>
+
+                        <div class="owner-calendar-body">
+                            <div class="owner-calendar-grid">
+                                <span>一</span>
+                                <span>二</span>
+                                <span>三</span>
+                                <span>四</span>
+                                <span>五</span>
+                                <span>六</span>
+                                <span>日</span>
+                                <button
+                                    v-for="day in ownerCalendarDays"
+                                    :key="day.key"
+                                    type="button"
+                                    class="owner-calendar-cell"
+                                    :class="{ 'has-event': day.hasEvent, today: day.isToday, empty: !day.day }"
+                                    :disabled="!day.day"
+                                    @click="goToCalendarDay(day)"
+                                >
+                                    <span v-if="day.day" class="calendar-day-number">{{ day.day }}</span>
+                                    <i v-if="day.hasEvent" />
+                                </button>
+                            </div>
+
+                            <div class="owner-calendar-events">
+                                <button
+                                    v-for="item in visibleOwnerCalendarEvents"
+                                    :key="item.id"
+                                    type="button"
+                                    class="owner-calendar-event"
+                                    @click="goTo(item.path)"
+                                >
+                                    <b>{{ item.dateKey.slice(5) }}</b>
+                                    <span>{{ item.title }}</span>
+                                    <em>{{ item.time }}</em>
+                                </button>
                                 <div>
-                                    <strong>3栋-2单元-0602</strong>
-                                    <span>房屋面积 98.56㎡</span>
-                                    <span>房屋类型 住宅</span>
-                                    <span>房屋状态 已入住</span>
+                                    <button type="button" class="text-button" @click="goTo('/notice/list')">查看全部</button>
                                 </div>
                             </div>
-                            <button type="button" class="ghost-button" @click="goTo('/house/list')">查看详情</button>
-                        </section>
-
-                        <section class="panel">
-                            <div class="panel-header">
-                                <h2>缴费记录</h2>
-                                <button type="button" class="text-button" @click="goTo('/fee/list')">更多</button>
-                            </div>
-                            <ul class="notice-list">
-                                <li><span>物业费 ¥ 888.00</span><em>待缴费</em></li>
-                                <li><span>水费 ¥ 150.00</span><em>待缴费</em></li>
-                                <li><span>电费 ¥ 250.00</span><em>待缴费</em></li>
-                                <li><span>停车费 ¥ 300.00</span><em>已缴费</em></li>
-                            </ul>
-                        </section>
-
-                        <section class="panel">
-                            <div class="panel-header">
-                                <h2>最近报修</h2>
-                                <button type="button" class="text-button" @click="goTo('/repair/list')">更多</button>
-                            </div>
-                            <ul class="notice-list">
-                                <li v-for="item in ownerRepairs" :key="item[0]">
-                                    <span>{{ item[0] }}</span>
-                                    <em>{{ item[1] }}</em>
-                                </li>
-                            </ul>
-                        </section>
-                    </div>
+                        </div>
+                    </section>
                 </main>
 
-                <aside class="side-stack">
-                    <section class="panel">
-                        <div class="panel-header">
-                            <h2>缴费提醒</h2>
-                            <button type="button" class="text-button" @click="goTo('/fee/list')">更多</button>
-                        </div>
-                        <p class="fee-remind">您有 3 笔费用待缴纳，合计 <strong>¥ 1,288.00</strong></p>
-                        <ul class="notice-list">
-                            <li><span>2025年5月 物业费 ¥ 888.00</span><em>待缴费</em></li>
-                            <li><span>2025年5月 水费 ¥ 150.00</span><em>待缴费</em></li>
-                            <li><span>2025年5月 电费 ¥ 250.00</span><em>待缴费</em></li>
-                        </ul>
-                        <button type="button" class="primary-wide" @click="goTo('/fee/list')">立即缴费</button>
-                    </section>
-
+                <aside class="owner-side-stack">
                     <section class="panel">
                         <div class="panel-header">
                             <h2>公告活动</h2>
                             <button type="button" class="text-button" @click="goTo('/notice/list')">更多</button>
                         </div>
-                        <ul class="notice-list">
-                            <li v-for="item in notices" :key="`owner-${item[0]}`">
-                                <span>{{ item[0] }}</span>
-                                <em>{{ item[1] }}</em>
+                        <ul v-if="ownerNoticeItems.length" class="owner-side-notice-list">
+                            <li v-for="item in ownerNoticeItems" :key="item.id">
+                                <span>{{ item.title }}</span>
+                                <em>{{ item.date }}</em>
                             </li>
                         </ul>
+                        <div v-else class="owner-empty-state compact">暂无公告</div>
                     </section>
 
                     <section class="panel">
                         <div class="panel-header">
                             <h2>服务进度</h2>
-                            <button type="button" class="text-button">更多</button>
+                            <button type="button" class="text-button" @click="goTo('/repair/list')">更多</button>
                         </div>
-                        <ul class="timeline-list">
-                            <li><span class="dot info" />报修工单 #BX20250519001 <em>维修中</em></li>
-                            <li><span class="dot success" />报修工单 #BX20250516002 <em>已完成</em></li>
-                            <li><span class="dot warning" />投诉单 #TS20250515001 <em>处理中</em></li>
+                        <ul v-if="ownerServiceItems.length" class="owner-service-list">
+                            <li v-for="item in ownerServiceItems" :key="item.id">
+                                <button type="button" @click="goTo(item.path)">
+                                    <span class="dot" :class="item.statusClass" />
+                                    <strong>{{ item.title }}</strong>
+                                    <em>{{ item.status }}</em>
+                                    <small>{{ item.meta }}</small>
+                                    <time>{{ item.date }}</time>
+                                </button>
+                            </li>
+                        </ul>
+                        <div v-else class="owner-empty-state compact">暂无服务进度</div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2><el-icon><Phone /></el-icon> 便民电话</h2>
+                        </div>
+                        <ul class="owner-phone-list">
+                            <li v-for="item in ownerConveniencePhones" :key="item.label">
+                                <span><el-icon><Phone /></el-icon>{{ item.label }}</span>
+                                <em>{{ item.phone }}</em>
+                            </li>
                         </ul>
                     </section>
                 </aside>
@@ -989,7 +1464,11 @@ onBeforeUnmount(() => {
 <style scoped>
 .dashboard-page {
     min-height: 100%;
-    color: #172033;
+    color: var(--text-primary);
+    font-family: var(--font-family-base);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: 0;
 }
 
 .workbench {
@@ -1007,23 +1486,28 @@ onBeforeUnmount(() => {
 
 .workbench-heading h1 {
     margin: 0;
-    font-size: 28px;
-    line-height: 1.25;
+    color: var(--text-heading);
+    font-size: 24px;
     font-weight: 700;
+    line-height: 32px;
 }
 
 .workbench-heading p {
     margin: 8px 0 0;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .heading-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 14px;
-    color: #475467;
+    color: var(--text-muted);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .quick-action-row {
@@ -1056,8 +1540,9 @@ onBeforeUnmount(() => {
     padding: 0 22px;
     border-radius: 6px;
     color: #fff;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
+    line-height: 20px;
     box-shadow: 0 8px 16px rgba(15, 118, 110, 0.14);
 }
 
@@ -1099,16 +1584,19 @@ onBeforeUnmount(() => {
 .metric-card p,
 .owner-card p {
     margin: 0;
-    color: #344054;
+    color: var(--text-primary);
     font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
 }
 
 .metric-card strong {
     display: block;
     margin-top: 6px;
+    color: var(--text-heading);
     font-size: 28px;
-    line-height: 1.1;
     font-weight: 700;
+    line-height: 36px;
 }
 
 .metric-card small {
@@ -1121,13 +1609,15 @@ onBeforeUnmount(() => {
 .muted {
     display: block;
     margin-top: 8px;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .tone-teal {
-    --tone: #009688;
-    --tone-soft: #d8f3ef;
+    --tone: var(--brand-primary);
+    --tone-soft: var(--brand-primary-soft);
 }
 
 .tone-blue {
@@ -1155,6 +1645,11 @@ onBeforeUnmount(() => {
     --tone-soft: #ffedd5;
 }
 
+.tone-purple {
+    --tone: #5b5ce2;
+    --tone-soft: #ecebff;
+}
+
 .metric-card .metric-icon,
 .owner-card > .el-icon {
     color: var(--tone);
@@ -1165,7 +1660,7 @@ onBeforeUnmount(() => {
 .solid-mini,
 .primary-wide,
 .filter-line button {
-    background: linear-gradient(135deg, #009688, #00796b);
+    background: linear-gradient(135deg, #0f766e, #0b625b);
 }
 
 .quick-action.tone-blue {
@@ -1212,16 +1707,20 @@ onBeforeUnmount(() => {
 
 .panel-header h2 {
     margin: 0;
-    font-size: 18px;
-    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
 }
 
 .filter-line {
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .filter-line span {
@@ -1250,22 +1749,23 @@ onBeforeUnmount(() => {
     padding: 7px 16px;
     border: 1px solid #e4e7ed;
     border-radius: 6px;
-    color: #475467;
+    color: var(--text-subtle);
     background: #f8fafc;
     font-size: 13px;
+    line-height: 20px;
 }
 
 .tab-row .active {
     color: #fff;
-    border-color: #009688;
-    background: #009688;
+    border-color: var(--brand-primary);
+    background: var(--brand-primary);
 }
 
 .data-table {
     width: 100%;
     min-width: 760px;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .data-table th,
@@ -1276,10 +1776,19 @@ onBeforeUnmount(() => {
     white-space: nowrap;
 }
 
+.data-table td {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
+}
+
 .data-table th {
-    color: #475467;
+    color: var(--text-subtle);
     background: #f8fafc;
+    font-size: 13px;
     font-weight: 600;
+    line-height: 20px;
 }
 
 .status-pill {
@@ -1289,7 +1798,9 @@ onBeforeUnmount(() => {
     padding: 3px 8px;
     border-radius: 5px;
     font-size: 12px;
+    font-weight: 500;
     font-style: normal;
+    line-height: 18px;
 }
 
 .status-pill.danger {
@@ -1313,9 +1824,11 @@ onBeforeUnmount(() => {
 }
 
 .text-button {
-    color: #00897b;
+    color: var(--brand-primary);
     background: transparent;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
 }
 
 .solid-mini {
@@ -1323,7 +1836,9 @@ onBeforeUnmount(() => {
     height: 28px;
     border-radius: 5px;
     color: #fff;
-    font-size: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
 }
 
 .side-stack {
@@ -1354,8 +1869,10 @@ onBeforeUnmount(() => {
     gap: 8px;
     min-height: 34px;
     border-bottom: 1px solid #eef1f5;
-    color: #475467;
+    color: var(--text-muted);
     font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .compact-list li:last-child,
@@ -1381,7 +1898,7 @@ onBeforeUnmount(() => {
 .activity-list em,
 .timeline-list em {
     margin-left: auto;
-    color: #98a2b3;
+    color: var(--text-muted);
     font-style: normal;
     white-space: nowrap;
 }
@@ -1432,14 +1949,14 @@ onBeforeUnmount(() => {
 }
 
 .activity-list span {
-    color: #00897b;
+    color: var(--brand-primary);
     font-weight: 700;
 }
 
 .activity-list p {
     margin: 0;
     overflow: hidden;
-    color: #475467;
+    color: var(--text-muted);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -1470,23 +1987,28 @@ onBeforeUnmount(() => {
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    color: #667085;
+    color: var(--text-muted);
 }
 
 .resource-grid .el-icon {
-    color: #00897b;
+    color: var(--brand-primary);
     font-size: 28px;
 }
 
 .resource-grid strong {
-    color: #00897b;
-    font-size: 32px;
+    color: var(--text-heading);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 36px;
 }
 
 .money-total {
     display: block;
     margin: 2px 0 10px;
-    font-size: 24px;
+    color: var(--text-heading);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 36px;
 }
 
 .progress-line {
@@ -1499,8 +2021,10 @@ onBeforeUnmount(() => {
 
 .progress-line span {
     position: relative;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .progress-line span::before {
@@ -1515,23 +2039,25 @@ onBeforeUnmount(() => {
 }
 
 .progress-line .active {
-    color: #00897b;
-    font-weight: 700;
+    color: var(--brand-primary);
+    font-weight: 600;
 }
 
 .progress-line .active::before {
-    border-color: #00897b;
+    border-color: var(--brand-primary);
     background: #d8f3ef;
 }
 
 .current-order {
     margin: 0;
-    color: #475467;
+    color: var(--text-subtle);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .current-order strong {
-    color: #00897b;
+    color: var(--brand-primary);
 }
 
 .operation-grid {
@@ -1549,14 +2075,524 @@ onBeforeUnmount(() => {
     min-height: 116px;
     border: 1px solid #e4e7ed;
     border-radius: 8px;
-    color: #172033;
+    color: var(--text-primary);
     background: #fff;
-    font-size: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
 }
 
 .operation-grid .el-icon {
-    color: #00897b;
+    color: var(--brand-primary);
     font-size: 30px;
+}
+
+.owner-workbench {
+    max-width: 100%;
+}
+
+.owner-house-summary {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    min-height: 112px;
+    padding: 18px 26px;
+}
+
+.owner-house-copy {
+    min-width: 0;
+}
+
+.owner-house-copy h2 {
+    margin: 0 0 8px;
+    color: var(--text-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 32px;
+}
+
+.owner-house-copy p {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.owner-house-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 110px;
+    justify-content: center;
+    padding: 8px 12px;
+    border: 1px solid #bfe8e3;
+    border-radius: 8px;
+    color: var(--brand-primary);
+    background: #eefaf8;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    white-space: nowrap;
+}
+
+.owner-house-status.pending {
+    color: #d97706;
+    border-color: #ffe0a3;
+    background: #fff8eb;
+}
+
+.owner-home-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 16px;
+    align-items: start;
+}
+
+.owner-main-stack,
+.owner-side-stack {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.owner-recent-list,
+.owner-side-notice-list,
+.owner-service-list,
+.owner-phone-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.owner-recent-item {
+    display: grid;
+    grid-template-columns: 46px minmax(180px, 1fr) minmax(120px, 180px) 78px 78px;
+    align-items: center;
+    gap: 14px;
+    min-height: 74px;
+    padding: 12px 0;
+    border-bottom: 1px solid #eef1f5;
+}
+
+.owner-recent-item:last-child {
+    border-bottom: 0;
+}
+
+.owner-recent-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: var(--tone);
+    background: var(--tone-soft);
+    font-size: 22px;
+}
+
+.owner-recent-copy {
+    min-width: 0;
+}
+
+.owner-recent-copy strong,
+.owner-recent-copy span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-recent-copy strong {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.owner-recent-copy span {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.owner-task-extra {
+    min-width: 0;
+}
+
+.owner-task-extra > strong {
+    display: block;
+    color: #ef4444;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 28px;
+}
+
+.owner-progress {
+    min-width: 0;
+}
+
+.owner-progress span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-subtle);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.owner-progress i {
+    display: block;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+
+.owner-progress b {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--brand-primary);
+}
+
+.owner-outline-button {
+    height: 34px;
+    border: 1px solid #8ccfca;
+    border-radius: 6px;
+    color: var(--brand-primary);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    cursor: pointer;
+}
+
+.owner-empty-state {
+    display: flex;
+    min-height: 96px;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.owner-empty-state.compact {
+    min-height: 48px;
+}
+
+.owner-calendar-panel {
+    padding: 18px 20px;
+}
+
+.owner-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.owner-calendar-header > div:first-child,
+.owner-calendar-month {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.owner-calendar-header h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.owner-calendar-header .el-icon {
+    color: var(--text-subtle);
+    font-size: 18px;
+}
+
+.owner-calendar-month strong {
+    min-width: 96px;
+    text-align: center;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.owner-calendar-month button {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-subtle);
+    background: transparent;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.owner-calendar-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 20px;
+    align-items: stretch;
+}
+
+.owner-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-top: 1px solid #eef1f5;
+    border-left: 1px solid #eef1f5;
+}
+
+.owner-calendar-grid > span,
+.owner-calendar-cell {
+    min-height: 42px;
+    border-right: 1px solid #eef1f5;
+    border-bottom: 1px solid #eef1f5;
+}
+
+.owner-calendar-grid > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-subtle);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.owner-calendar-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 0;
+    border-left: 0;
+    color: var(--text-primary);
+    background: #fff;
+    cursor: pointer;
+}
+
+.owner-calendar-cell.empty {
+    cursor: default;
+}
+
+.owner-calendar-cell:disabled {
+    color: transparent;
+    cursor: default;
+}
+
+.calendar-day-number {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.owner-calendar-cell.has-event .calendar-day-number {
+    color: #fff;
+    background: var(--brand-primary);
+    font-weight: 700;
+}
+
+.owner-calendar-cell.today:not(.has-event) .calendar-day-number {
+    color: var(--brand-primary);
+    background: #e0f4f1;
+    font-weight: 700;
+}
+
+.owner-calendar-cell i {
+    position: absolute;
+    bottom: 6px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #f59f00;
+}
+
+.owner-calendar-events {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-left: 1px solid #eef1f5;
+    padding-left: 18px;
+}
+
+.owner-calendar-event {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 2px 10px;
+    border: 0;
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+}
+
+.owner-calendar-event b {
+    grid-row: span 2;
+    color: var(--brand-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.owner-calendar-event span,
+.owner-calendar-event em {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-calendar-event span {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.owner-calendar-event em {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: normal;
+    line-height: 18px;
+}
+
+.owner-side-notice-list li,
+.owner-phone-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    border-bottom: 1px solid #eef1f5;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.owner-side-notice-list li:last-child,
+.owner-phone-list li:last-child {
+    border-bottom: 0;
+}
+
+.owner-side-notice-list span {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    padding-left: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-side-notice-list span::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transform: translateY(-50%);
+}
+
+.owner-side-notice-list em,
+.owner-phone-list em {
+    color: var(--text-muted);
+    font-style: normal;
+    white-space: nowrap;
+}
+
+.owner-service-list li + li {
+    margin-top: 8px;
+}
+
+.owner-service-list button {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    gap: 2px 10px;
+    border: 0;
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+}
+
+.owner-service-list .dot {
+    grid-row: span 2;
+    align-self: center;
+    width: 12px;
+    height: 12px;
+}
+
+.owner-service-list strong,
+.owner-service-list small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-service-list strong {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.owner-service-list small {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.owner-service-list em {
+    color: var(--brand-primary);
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 600;
+    line-height: 20px;
+    white-space: nowrap;
+}
+
+.owner-service-list time {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 18px;
+    white-space: nowrap;
+}
+
+.owner-phone-list span {
+    display: inline-flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+}
+
+.owner-phone-list .el-icon {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--brand-primary);
+    background: #d8f3ef;
 }
 
 .owner-hero {
@@ -1566,6 +2602,10 @@ onBeforeUnmount(() => {
     gap: 18px;
 }
 
+.owner-hero > div:not(.owner-house-icon):not(.owner-hero-actions) {
+    min-width: 0;
+}
+
 .owner-house-icon {
     display: flex;
     align-items: center;
@@ -1573,20 +2613,27 @@ onBeforeUnmount(() => {
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    color: #00897b;
+    color: var(--brand-primary);
     background: #d8f3ef;
     font-size: 34px;
 }
 
 .owner-hero h2 {
     margin: 5px 0 8px;
+    color: var(--text-heading);
     font-size: 24px;
+    font-weight: 700;
+    line-height: 32px;
+    overflow-wrap: anywhere;
 }
 
 .owner-hero span,
 .owner-hero p {
     margin: 0;
-    color: #667085;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .owner-hero-actions {
@@ -1604,26 +2651,32 @@ onBeforeUnmount(() => {
     min-height: 68px;
     border: 1px solid #e4e7ed;
     border-radius: 6px;
-    color: #00897b;
+    color: var(--brand-primary);
     background: #fff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
+    line-height: 20px;
 }
 
 .owner-card-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 14px;
     margin-bottom: 16px;
 }
 
 .owner-card {
     display: grid;
-    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-columns: 50px minmax(0, 1fr);
     gap: 12px;
     align-items: center;
     min-height: 128px;
     padding: 16px;
+    overflow: hidden;
+}
+
+.owner-card > div {
+    min-width: 0;
 }
 
 .owner-card > .el-icon {
@@ -1636,21 +2689,36 @@ onBeforeUnmount(() => {
 .owner-card strong {
     display: block;
     margin-top: 4px;
-    font-size: 24px;
+    color: var(--text-heading);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(20px, 1.35vw, 28px);
+    font-weight: 700;
+    line-height: 32px;
+}
+
+.owner-card p,
+.owner-card span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .owner-card button {
     grid-column: 1 / -1;
     height: 32px;
     border-top: 1px solid #eef1f5;
-    color: #00897b;
+    color: var(--brand-primary);
     background: transparent;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
 }
 
 .owner-task-list li {
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) 150px 92px;
+    grid-template-columns: 42px minmax(0, 1fr) minmax(108px, max-content) 92px;
     align-items: center;
     gap: 12px;
     min-height: 58px;
@@ -1667,6 +2735,8 @@ onBeforeUnmount(() => {
     color: #fff;
     background: #f59f00;
     font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
 }
 
 .owner-task-list strong,
@@ -1676,14 +2746,23 @@ onBeforeUnmount(() => {
 
 .owner-task-list span {
     margin-top: 4px;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .owner-task-list em {
     color: #ef4444;
-    font-size: 20px;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(22px, 1.35vw, 28px);
+    font-weight: 700;
     font-style: normal;
+    line-height: 32px;
 }
 
 .owner-task-list button,
@@ -1692,13 +2771,16 @@ onBeforeUnmount(() => {
     height: 32px;
     border-radius: 6px;
     font-weight: 600;
+    line-height: 20px;
 }
 
 .owner-task-list button,
 .ghost-button {
     border: 1px solid #d0ebe8;
-    color: #00897b;
+    color: var(--brand-primary);
     background: #fff;
+    font-size: 14px;
+    font-weight: 500;
 }
 
 .owner-property {
@@ -1714,7 +2796,7 @@ onBeforeUnmount(() => {
     width: 92px;
     min-height: 112px;
     border-radius: 8px;
-    color: #00897b;
+    color: var(--brand-primary);
     background: #e7f7f5;
     font-size: 48px;
 }
@@ -1730,13 +2812,18 @@ onBeforeUnmount(() => {
 
 .owner-property span {
     margin-top: 8px;
-    color: #475467;
+    color: var(--text-muted);
     font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .fee-remind {
     margin: 0 0 12px;
-    color: #667085;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
 }
 
 .fee-remind strong {
@@ -1771,6 +2858,7 @@ onBeforeUnmount(() => {
     .finance-grid,
     .repair-grid,
     .owner-grid,
+    .owner-home-grid,
     .bottom-grid.three,
     .bottom-grid.two {
         grid-template-columns: 1fr;
@@ -1783,6 +2871,43 @@ onBeforeUnmount(() => {
     .owner-hero-actions {
         grid-column: 1 / -1;
         grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .owner-recent-item {
+        grid-template-columns: 46px minmax(0, 1fr) minmax(110px, 150px) 76px 76px;
+    }
+}
+
+@media (max-width: 900px) {
+    .owner-house-summary {
+        grid-template-columns: 64px minmax(0, 1fr);
+    }
+
+    .owner-house-status {
+        grid-column: 1 / -1;
+        justify-self: start;
+    }
+
+    .owner-recent-item {
+        grid-template-columns: 42px minmax(0, 1fr);
+    }
+
+    .owner-task-extra,
+    .owner-recent-item > .status-pill,
+    .owner-outline-button {
+        grid-column: 2;
+        justify-self: start;
+    }
+
+    .owner-calendar-body {
+        grid-template-columns: 1fr;
+    }
+
+    .owner-calendar-events {
+        border-left: 0;
+        border-top: 1px solid #eef1f5;
+        padding-top: 14px;
+        padding-left: 0;
     }
 }
 </style>

@@ -151,7 +151,7 @@ onMounted(() => {
 
             <el-table-column label="操作" width="260">
                 <template #default="scope">
-                    <el-button type="success" size="small" @click="handleDetail(scope.row)">
+                    <el-button type="primary" size="small" @click="handleDetail(scope.row)">
                         查看
                     </el-button>
 
@@ -168,7 +168,7 @@ onMounted(() => {
                         禁用
                     </el-button>
 
-                    <el-button v-else type="success" size="small" @click="handleEnable(scope.row)">
+                    <el-button v-else type="primary" size="small" @click="handleEnable(scope.row)">
                         启用
                     </el-button>
 

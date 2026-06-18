@@ -18,7 +18,6 @@ import {
     Tickets,
     Tools,
     User,
-    UserFilled,
     Van,
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
@@ -157,7 +156,10 @@ const findMenuPathByRoute = (
         const menuPath = menu.path || ''
         const menuRoutePath = menuPath.split('?')[0]
 
-        if (menuPath === routeFullPath || (allowBaseMatch && menuRoutePath === routePath)) {
+        if (
+            menuPath === routeFullPath
+            || (allowBaseMatch && !menuPath.includes('?') && menuRoutePath === routePath)
+        ) {
             return currentPath
         }
 
@@ -226,6 +228,7 @@ const canReceiveNotice = computed(() => {
 })
 
 const notificationMessages = computed(() => {
+    // 只把真实业务事件计入通知角标，避免无消息时用占位文案误导管理员。
     const messages = [
         ...parkingFeedbackMessages.value,
         ...repairEvaluationFeedbackMessages.value,
@@ -238,7 +241,7 @@ const notificationMessages = computed(() => {
         return messages.slice(0, 8)
     }
 
-    return ['系统运行正常，欢迎使用社区物业管理系统']
+    return []
 })
 
 const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
@@ -262,18 +265,17 @@ const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
 }
 
 const expandFirstMenu = (id: string) => {
-    if (!expandedFirstIds.value.includes(id)) {
-        expandedFirstIds.value.push(id)
-    }
+    // 左侧菜单采用手风琴模式，同一时间只展开并聚焦一个一级菜单。
+    expandedFirstIds.value = id ? [id] : []
 }
 
 const toggleFirstMenu = (id: string) => {
     if (expandedFirstIds.value.includes(id)) {
-        expandedFirstIds.value = expandedFirstIds.value.filter((item) => item !== id)
+        expandedFirstIds.value = []
         return
     }
 
-    expandedFirstIds.value.push(id)
+    expandFirstMenu(id)
 }
 
 const isFirstExpanded = (id: string) => {
@@ -594,9 +596,19 @@ const handleLogout = async () => {
         await logoutApi(refresh)
     } finally {
         clearAuthState()
-
-        router.push('/login')
     }
+
+    router.push('/login')
+}
+
+const handleUserCommand = (command: string) => {
+    if (command === 'logout') {
+        handleLogout()
+    }
+}
+
+const goRoleMessages = () => {
+    router.push('/message/center')
 }
 
 onMounted(() => {
@@ -637,12 +649,6 @@ watch(
             <div class="logo">
                 <el-icon><HomeFilled /></el-icon>
                 <span>{{ appMenuTitle }}</span>
-            </div>
-
-            <div class="role-switcher">
-                <el-icon><UserFilled /></el-icon>
-                <span>{{ roleTitle }}</span>
-                <el-icon class="role-arrow"><ArrowDown /></el-icon>
             </div>
 
             <div class="sidebar-menu">
@@ -712,16 +718,38 @@ watch(
                 </div>
 
                 <div class="header-user">
-                    <el-badge :value="notificationCount" :max="99" class="notification-badge">
-                        <el-icon class="notification-icon"><Bell /></el-icon>
-                    </el-badge>
+                    <button
+                        type="button"
+                        class="notification-button"
+                        aria-label="查看角色消息"
+                        @click="goRoleMessages"
+                    >
+                        <el-badge
+                            :value="notificationCount"
+                            :max="99"
+                            :hidden="notificationCount === 0"
+                            class="notification-badge"
+                        >
+                            <el-icon class="notification-icon"><Bell /></el-icon>
+                        </el-badge>
+                    </button>
                     <span class="role-pill">{{ roleTitle }}</span>
-                    <span class="avatar-chip">
-                        <span class="avatar-circle">{{ usernameInitial }}</span>
-                        <span>{{ username }}</span>
-                        <el-icon><ArrowDown /></el-icon>
-                    </span>
-                    <el-button link type="primary" @click="handleLogout">退出登录</el-button>
+                    <el-dropdown
+                        trigger="click"
+                        popper-class="user-dropdown-popper"
+                        @command="handleUserCommand"
+                    >
+                        <span class="avatar-chip">
+                            <span class="avatar-circle">{{ usernameInitial }}</span>
+                            <span>{{ username }}</span>
+                            <el-icon><ArrowDown /></el-icon>
+                        </span>
+                        <template #dropdown>
+                            <el-dropdown-menu>
+                                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </template>
+                    </el-dropdown>
                 </div>
             </header>
 
@@ -777,16 +805,22 @@ watch(
     display: flex;
     min-width: 1180px;
     height: 100vh;
-    color: #172033;
-    background: #f5f7fa;
+    color: var(--text-primary);
+    background: var(--surface-page);
+    font-family: var(--font-family-base);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: 0;
 }
 
 .second-sidebar {
     position: relative;
     width: 230px;
     flex: 0 0 230px;
-    background: #ffffff;
-    border-right: 1px solid #e4e7ed;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-card);
+    border-right: 1px solid var(--border-color);
     z-index: 20;
 }
 
@@ -796,40 +830,23 @@ watch(
     align-items: center;
     gap: 10px;
     padding: 0 20px;
-    font-size: 18px;
+    color: var(--brand-primary);
+    font-size: 20px;
     font-weight: 700;
-    color: #111827;
-    border-bottom: 1px solid #e4e7ed;
+    line-height: 28px;
+    border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
 }
 
 .logo .el-icon {
-    color: #00897b;
+    color: var(--brand-primary);
     font-size: 26px;
 }
 
-.role-switcher {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 46px;
-    margin: 20px 12px 12px;
-    padding: 0 14px;
-    border-radius: 6px;
-    color: #00897b;
-    background: #e4f5f2;
-    font-size: 16px;
-    font-weight: 700;
-}
-
-.role-switcher .role-arrow {
-    margin-left: auto;
-    font-size: 14px;
-}
-
 .sidebar-menu {
-    height: calc(100vh - 144px);
-    padding: 0 12px 14px;
+    flex: 1;
+    min-height: 0;
+    padding: 20px 12px 14px;
     overflow-y: auto;
 }
 
@@ -846,7 +863,7 @@ watch(
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: #344054;
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     display: flex;
@@ -854,8 +871,9 @@ watch(
     justify-content: space-between;
     min-height: 44px;
     padding: 0 12px;
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 22px;
 }
 
 .menu-label {
@@ -866,7 +884,7 @@ watch(
 }
 
 .menu-label .el-icon {
-    color: #667085;
+    color: var(--text-muted);
     font-size: 18px;
 }
 
@@ -877,24 +895,26 @@ watch(
 }
 
 .first-menu-item:hover {
-    color: #00897b;
-    background: #edf8f6;
+    color: var(--brand-primary);
+    background: var(--brand-primary-subtle);
 }
 
 .first-menu-item:hover .el-icon,
 .first-menu-item:hover .menu-arrow {
-    color: #00897b;
+    color: var(--brand-primary);
 }
 
 .first-menu-item.expanded:not(.active) {
-    color: #006d63;
-    background: #f3fbfa;
+    color: var(--brand-primary);
+    background: var(--brand-primary-subtle);
 }
 
 .first-menu-item.active {
     color: #ffffff;
-    background: linear-gradient(135deg, #009688, #00796b);
-    box-shadow: 0 8px 18px rgba(0, 137, 123, 0.22);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-hover));
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.18);
+    font-weight: 600;
+    line-height: 22px;
 }
 
 .first-menu-item.active .el-icon,
@@ -907,8 +927,8 @@ watch(
     flex-direction: column;
     gap: 4px;
     margin: 4px 0 6px 16px;
-    padding: 4px 0 4px 10px;
-    border-left: 2px solid #e4f5f2;
+    padding: 6px 0 6px 10px;
+    border-left: 2px solid var(--brand-primary-soft);
 }
 
 .second-menu-item {
@@ -917,8 +937,8 @@ watch(
     padding: 0 10px;
     border: 0;
     border-radius: 5px;
-    background: transparent;
-    color: #475467;
+    background: var(--brand-primary-subtle);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     display: flex;
@@ -926,12 +946,25 @@ watch(
     justify-content: space-between;
     gap: 8px;
     font-size: 14px;
+    font-weight: 500;
+    line-height: 22px;
 }
 
-.second-menu-item:hover,
+.second-menu-item:hover {
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
+    font-weight: 600;
+}
+
 .second-menu-item.active {
-    color: #00897b;
-    background: #e4f5f2;
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
+    box-shadow: inset 3px 0 0 var(--brand-primary);
+    font-weight: 600;
+}
+
+.second-menu-item.active .el-icon {
+    color: var(--brand-primary);
 }
 
 .menu-empty {
@@ -948,29 +981,33 @@ watch(
 .layout-header {
     height: 66px;
     display: grid;
-    grid-template-columns: 180px minmax(320px, 1fr) auto;
+    grid-template-columns: minmax(180px, 1fr) minmax(430px, 560px) minmax(300px, 1fr);
     align-items: center;
     gap: 24px;
     padding: 0 28px;
-    background: #ffffff;
-    border-bottom: 1px solid #e4e7ed;
+    background: var(--surface-card);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .community-select {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 180px;
     min-height: 38px;
+    justify-self: start;
     padding: 0 12px;
     border: 1px solid #dfe5ef;
     border-radius: 6px;
-    color: #344054;
-    background: #ffffff;
+    color: var(--text-subtle);
+    background: var(--surface-card);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .community-select .el-icon:first-child {
-    color: #667085;
+    color: var(--text-muted);
 }
 
 .community-arrow {
@@ -981,13 +1018,13 @@ watch(
 .global-search {
     display: flex;
     align-items: center;
-    width: min(430px, 100%);
+    width: 100%;
     min-height: 38px;
     justify-self: center;
     padding: 0 14px;
     border: 1px solid #dfe5ef;
     border-radius: 6px;
-    background: #ffffff;
+    background: var(--surface-card);
 }
 
 .global-search .el-icon {
@@ -1000,38 +1037,80 @@ watch(
     min-width: 0;
     border: 0;
     outline: 0;
-    color: #667085;
+    color: var(--text-subtle);
     background: transparent;
     cursor: default;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .header-user {
     display: flex;
     align-items: center;
     gap: 14px;
+    justify-self: end;
     white-space: nowrap;
 }
 
+.notification-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.notification-button:hover,
+.notification-button:focus-visible {
+    background: var(--brand-primary-subtle);
+    outline: none;
+}
+
+.notification-button:hover .notification-icon,
+.notification-button:focus-visible .notification-icon {
+    color: var(--brand-primary);
+}
+
 .notification-icon {
-    color: #344054;
+    color: var(--text-primary);
     font-size: 22px;
+    transition: color 0.2s ease;
 }
 
 .role-pill {
     min-width: 78px;
     padding: 9px 18px;
     border-radius: 18px;
-    color: #00897b;
-    background: #d8f3ef;
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
     text-align: center;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 22px;
 }
 
 .avatar-chip {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #172033;
+    color: var(--text-subtle);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
+    transition: color 0.2s ease;
+    user-select: none;
+}
+
+.avatar-chip:hover {
+    color: var(--brand-primary);
 }
 
 .avatar-circle {
@@ -1044,6 +1123,19 @@ watch(
     color: #ffffff;
     background: #2563eb;
     font-weight: 700;
+}
+
+:global(.user-dropdown-popper .el-dropdown-menu__item) {
+    cursor: pointer;
+    color: var(--text-subtle);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+:global(.user-dropdown-popper .el-dropdown-menu__item:hover),
+:global(.user-dropdown-popper .el-dropdown-menu__item:focus) {
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
 }
 
 .third-bar {
@@ -1067,8 +1159,10 @@ watch(
 .selected-function {
     flex: 0 0 auto;
     margin-left: 8px;
-    color: #667085;
+    color: var(--text-muted);
     font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
 }
 
 .layout-content {
@@ -1076,5 +1170,192 @@ watch(
     min-width: 0;
     padding: 20px 28px 28px;
     overflow-y: auto;
+}
+
+.layout-content :deep(.el-card) {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.04);
+}
+
+.layout-content :deep(.el-card__header) {
+    color: var(--text-heading);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+    padding: 22px 24px;
+}
+
+.layout-content :deep(.el-card__body) {
+    padding: 24px;
+}
+
+.layout-content :deep(.el-button) {
+    min-height: 40px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.layout-content :deep(.el-button--primary) {
+    border-color: var(--brand-primary);
+    background: var(--brand-primary);
+}
+
+.layout-content :deep(.el-button--primary:hover),
+.layout-content :deep(.el-button--primary:focus) {
+    border-color: var(--brand-primary-hover);
+    background: var(--brand-primary-hover);
+}
+
+.layout-content :deep(.el-button--primary.is-link) {
+    color: var(--brand-primary);
+    background: transparent;
+}
+
+.layout-content :deep(.el-button--warning) {
+    border-color: var(--warning-primary);
+    background: var(--warning-primary);
+}
+
+.layout-content :deep(.el-input__wrapper),
+.layout-content :deep(.el-select__wrapper) {
+    border-radius: 6px;
+    box-shadow: 0 0 0 1px #dfe5ef inset;
+}
+
+.layout-content :deep(.el-input),
+.layout-content :deep(.el-select),
+.layout-content :deep(.el-date-editor.el-input) {
+    --el-input-height: 40px;
+}
+
+.layout-content :deep(.el-table) {
+    overflow: hidden;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.layout-content :deep(.el-table th.el-table__cell) {
+    padding: 16px 0;
+    color: var(--text-subtle);
+    background: var(--surface-muted);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.layout-content :deep(.el-table td.el-table__cell) {
+    padding: 16px 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
+}
+
+.layout-content :deep(.el-table .cell) {
+    display: flex;
+    align-items: center;
+    min-height: 24px;
+}
+
+.layout-content :deep(.card-header),
+.layout-content :deep(.notice-header) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 28px;
+}
+
+.layout-content :deep(.list-toolbar),
+.layout-content :deep(.filter-form) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.layout-content :deep(.filter-form) {
+    row-gap: 16px;
+}
+
+.layout-content :deep(.filter-form .el-date-editor.el-input) {
+    width: 190px;
+}
+
+.layout-content :deep(.el-form-item) {
+    align-items: center;
+    margin-right: 0;
+    margin-bottom: 22px;
+}
+
+.layout-content :deep(.el-form-item:last-child) {
+    margin-bottom: 0;
+}
+
+.layout-content :deep(.filter-form .el-form-item),
+.layout-content :deep(.list-toolbar .el-form-item),
+.layout-content :deep(.el-form--inline .el-form-item) {
+    margin-bottom: 0;
+}
+
+.layout-content :deep(.el-form-item__label) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 40px;
+    color: var(--text-subtle);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 22px;
+}
+
+.layout-content :deep(.el-form-item__content) {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    line-height: 22px;
+}
+
+.layout-content :deep(.el-form-item:has(.el-textarea) .el-form-item__label) {
+    align-items: flex-start;
+    padding-top: 9px;
+}
+
+.layout-content :deep(.el-form-item:has(.el-textarea) .el-form-item__content) {
+    align-items: flex-start;
+}
+
+.layout-content :deep(.el-radio-group) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+}
+
+.layout-content :deep(.el-radio-button__inner) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 18px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.layout-content :deep(.el-upload) {
+    display: inline-flex;
+    align-items: center;
+}
+
+.layout-content :deep(.el-tag) {
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
 }
 </style>

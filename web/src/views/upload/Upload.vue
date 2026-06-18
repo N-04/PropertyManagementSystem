@@ -7,9 +7,11 @@ const emit = defineEmits(['success'])
 const props = withDefaults(
     defineProps<{
         uploadType?: string
+        buttonText?: string
     }>(),
     {
         uploadType: 'file',
+        buttonText: '上传文件',
     }
 )
 
@@ -22,11 +24,20 @@ const handleSuccess = (response: any) => {
 
 <template>
     <el-upload
+        class="upload-trigger"
         action="http://127.0.0.1:8000/api/upload/"
         :data="{ type: props.uploadType }"
         :show-file-list="false"
         :on-success="handleSuccess"
     >
-        <el-button type="primary"> 上传文件 </el-button>
+        <el-button type="primary">{{ props.buttonText }}</el-button>
     </el-upload>
 </template>
+
+<style scoped>
+.upload-trigger,
+.upload-trigger :deep(.el-upload) {
+    display: inline-flex;
+    align-items: center;
+}
+</style>

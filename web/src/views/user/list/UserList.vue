@@ -49,7 +49,6 @@ const loadData = async () => {
 
     tableData.value = res.data.data
     total.value = res.data.total
-    console.log(res.data.data)
 }
 
 const searchUsers = () => {
@@ -120,7 +119,11 @@ onMounted(() => {
 
 <template>
     <el-card>
-        <template #header> 用户列表 </template>
+        <template #header>
+            <div class="card-header">
+                <span>用户列表</span>
+            </div>
+        </template>
 
         <div class="list-toolbar">
             <el-input
@@ -161,13 +164,14 @@ onMounted(() => {
             <el-table-column prop="created_at" label="创建时间" width="180" />
             <el-table-column label="操作" width="280">
                 <template #default="scope">
-                    <el-button type="primary" @click="router.push(`/user/edit/${scope.row.id}`)">
+                    <el-button type="primary" size="small" @click="router.push(`/user/edit/${scope.row.id}`)">
                         编辑
                     </el-button>
 
                     <el-button
                         v-if="scope.row.status !== 1"
-                        type="success"
+                        type="primary"
+                        size="small"
                         @click="handleAudit(scope.row, 'approved')"
                     >
                         通过审核
@@ -176,6 +180,7 @@ onMounted(() => {
                     <el-button
                         v-else
                         type="warning"
+                        size="small"
                         @click="handleAudit(scope.row, 'rejected')"
                     >
                         禁用账号
@@ -195,12 +200,3 @@ onMounted(() => {
         />
     </el-card>
 </template>
-
-<style scoped>
-.list-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-</style>

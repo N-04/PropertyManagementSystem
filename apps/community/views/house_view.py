@@ -1,7 +1,6 @@
 # 文件说明：处理 apps/community/views/house_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
-from turtledemo.penrose import start
-
+from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -55,10 +54,25 @@ class HouseListView(APIView):
     def get(self, request):
         page = int(request.GET.get("page", 1))
         page_size = int(request.GET.get("page_size", 10))
-        queryset = House.objects.all().order_by("-id")
+        keyword = request.GET.get("keyword", "").strip()
+        page = max(page, 1)
+        page_size = min(max(page_size, 1), 100)
+        queryset = House.objects.select_related("unit__building__community").all().order_by("-id")
 
         if is_owner_user(request.user):
             queryset = queryset.filter(owners__phone=request.user.phone).distinct()
+
+        if keyword:
+            queryset = queryset.filter(
+                Q(room_no__icontains=keyword)
+                | Q(house_type__icontains=keyword)
+                | Q(status__icontains=keyword)
+                | Q(unit__name__icontains=keyword)
+                | Q(unit__building__name__icontains=keyword)
+                | Q(unit__building__community__name__icontains=keyword)
+            )
+
+        total = queryset.count()
         start = (page - 1) * page_size
         end = start + page_size
 
@@ -71,7 +85,12 @@ class HouseListView(APIView):
             {
                 "code": 200,
                 "msg": "success",
-                "data": serializer.data,
+                "data": {
+                    "results": serializer.data,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                },
             }
         )
 

@@ -74,15 +74,23 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header>
-            <div style="display: flex; justify-content: space-between">
+            <div class="card-header">
                 <span>业主列表</span>
-                <el-input v-model="keyword" placeholder="姓名/手机号" />
-
-                <el-button type="primary" @click="searchOwner"> 筛选 </el-button>
-
                 <el-button type="primary" @click="handleCreate"> 新增业主 </el-button>
             </div>
         </template>
+
+        <div class="list-toolbar">
+            <el-input
+                v-model="keyword"
+                clearable
+                placeholder="姓名/手机号"
+                style="width: 260px"
+                @keyup.enter="searchOwner"
+                @clear="searchOwner"
+            />
+            <el-button type="primary" @click="searchOwner">筛选</el-button>
+        </div>
 
         <el-table :data="pagedTableData" border style="width: 100%">
             <el-table-column prop="id" label="ID" width="80" />
@@ -123,11 +131,11 @@ onMounted(() => {
                 </template>
             </el-table-column>
 
-            <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="240">
                 <template #default="scope">
-                    <el-button type="success" @click="handleDetail(scope.row)"> 查看 </el-button>
+                    <el-button type="primary" size="small" @click="handleDetail(scope.row)"> 查看 </el-button>
 
-                    <el-button type="primary" @click="handleEdit(scope.row)"> 编辑 </el-button>
+                    <el-button type="primary" size="small" @click="handleEdit(scope.row)"> 编辑 </el-button>
 
                     <el-button type="danger" size="small" @click="handleDelete(scope.row)">
                         删除

@@ -169,11 +169,15 @@ export const getAuthItem = (key: AuthKey) => {
     return safeRead(sessionStorage, key) ?? ''
 }
 
-export const setAuthItem = (key: AuthKey, value: string, persist = false) => {
+export const setAuthItem = (key: AuthKey, value: string, persist = false, notify = false) => {
     safeWrite(sessionStorage, key, value)
 
     if (persist) {
         safeWrite(localStorage, key, value)
+    }
+
+    if (notify) {
+        notifyAuthStateChanged()
     }
 }
 
