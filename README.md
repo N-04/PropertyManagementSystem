@@ -1,4 +1,4 @@
-<img width="1728" height="1002" alt="image" src="https://github.com/user-attachments/assets/59af417b-897e-4f39-bac7-922baff4b5a8" /># 物业管理系统
+# 物业管理系统
 
 物业管理系统统一仓库，包含 Django 后端接口服务和 Vue 前端 Web 管理界面，支持用户、房产、缴费、报修、公告、消息等物业业务管理，可作为计算机相关专业毕业设计项目参考使用。
 
@@ -30,7 +30,8 @@
 - 文件上传、登录日志和系统操作记录
 
 - 业主
-- 
+<img width="1728" height="1002" alt="image" src="https://github.com/user-attachments/assets/59af417b-897e-4f39-bac7-922baff4b5a8" />
+
 
 ## 技术栈
 
