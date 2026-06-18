@@ -29,6 +29,10 @@
 - 站内客服会话、消息发送和会话状态维护
 - 文件上传、登录日志和系统操作记录
 
+- 业主
+<img width="1728" height="1002" alt="image" src="https://github.com/user-attachments/assets/59af417b-897e-4f39-bac7-922baff4b5a8" />
+
+
 ## 技术栈
 
 ### 后端
