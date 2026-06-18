@@ -8,13 +8,11 @@ import {
     ChatDotRound,
     Check,
     CircleCheck,
-    CreditCard,
     DataAnalysis,
     Document,
     Money,
     OfficeBuilding,
     Phone,
-    Service,
     Tickets,
     Tools,
     User,
@@ -31,6 +29,7 @@ import { getOwnerList } from '@/api/owner'
 import { getRepairList } from '@/api/repair'
 import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
+import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
 import {
     AUTH_STATE_CHANGED_EVENT,
     getStoredRole,
@@ -66,6 +65,21 @@ type FinanceBillRow = [string, string, string, string, string, string, string]
 type RepairOrderRow = [string, string, string, string, string, string, string]
 type SimplePairRow = [string, string]
 type ActivityRow = [string, string, string]
+type RepairPriorityKey = 'all' | 'urgent' | 'high' | 'normal' | 'low'
+
+type RepairWorkbenchOrder = {
+    id?: number
+    code: string
+    owner: string
+    room: string
+    title: string
+    priority: string
+    status: string
+    statusRaw: string
+    time: string
+    priorityKey: RepairPriorityKey
+    raw: any
+}
 
 type OwnerTaskItem = {
     id: string
@@ -128,6 +142,11 @@ const ownerRepairsData = ref<any[]>([])
 const ownerComplaints = ref<any[]>([])
 const ownerNotices = ref<any[]>([])
 const ownerCalendarCursor = ref(new Date())
+const repairerRepairs = ref<any[]>([])
+const repairCalendarCursor = ref(new Date())
+const selectedRepairPriority = ref<RepairPriorityKey>('all')
+const repairResultDrawerVisible = ref(false)
+const selectedRepairResult = ref<any | null>(null)
 
 const data = ref<DashboardData>({
     house_count: 0,
@@ -309,6 +328,14 @@ const repairOrders: RepairOrderRow[] = [
     ['WD20250519006', '赵先生', '4栋-1单元-0901', '插座故障', '低', '待接单', '明天 10:30'],
 ]
 
+const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = [
+    { key: 'all', label: '全部' },
+    { key: 'urgent', label: '紧急' },
+    { key: 'high', label: '高' },
+    { key: 'normal', label: '普通' },
+    { key: 'low', label: '低' },
+]
+
 const notices: SimplePairRow[] = [
     ['关于小区电梯维护保养的通知', '05-18'],
     ['关于2025年端午节放假安排的通知', '05-16'],
@@ -447,6 +474,227 @@ const formatMonthLabel = (date: Date) => `${date.getFullYear()}年${date.getMont
 const feeTypeText = (item: any) => item.fee_type_text || feeTypeLabels[item.fee_type] || '费用'
 const repairStatusText = (item: any) => item.status_text || repairStatusLabels[item.status] || '待处理'
 const complaintStatusText = (item: any) => item.status_text || complaintStatusLabels[item.status] || '待处理'
+
+const getRepairCode = (item: any) => {
+    if (item.order_no || item.code) {
+        return item.order_no || item.code
+    }
+
+    return item.id ? `WD${String(item.id).padStart(12, '0')}` : '未生成'
+}
+
+const getRepairRoomText = (item: any) => {
+    const parts = [item.building_name, item.unit_name, item.room_no].filter(Boolean)
+
+    return parts.length ? parts.join('-') : item.room || '-'
+}
+
+const getRepairPriorityText = (item: any) => {
+    const text = `${item.title || ''}${item.content || ''}${item.priority || ''}`
+
+    if (/紧急|爆裂|停电|电梯|严重|漏水|urgent/.test(text)) return '紧急'
+    if (/高|电路|门禁|堵塞|门锁|插座|high/.test(text)) return '高'
+    if (/低|咨询|轻微|low/.test(text)) return '低'
+
+    return '普通'
+}
+
+const getRepairPriorityKey = (priority: string): RepairPriorityKey => {
+    if (priority.includes('紧急')) return 'urgent'
+    if (priority.includes('高')) return 'high'
+    if (priority.includes('低')) return 'low'
+
+    return 'normal'
+}
+
+const getRepairTimeText = (item: any) => {
+    return item.appointment_time || item.expected_time || formatDateTimeShort(item.created_at) || item.time || '-'
+}
+
+const getRepairEventDate = (item: any) => {
+    return item.appointment_time || item.expected_time || item.finish_time || item.created_at || item.time
+}
+
+const fallbackRepairWorkbenchOrders = computed<RepairWorkbenchOrder[]>(() => {
+    return repairOrders.map((row, index) => {
+        const raw = {
+            code: row[0],
+            owner: row[1],
+            room: row[2],
+            title: row[3],
+            status: index === 0 ? 'processing' : 'assigned',
+            time: row[6],
+        }
+        const priority = row[4]
+
+        return {
+            code: row[0],
+            owner: row[1],
+            room: row[2],
+            title: row[3],
+            priority,
+            status: row[5],
+            statusRaw: raw.status,
+            time: row[6],
+            priorityKey: getRepairPriorityKey(priority),
+            raw,
+        }
+    })
+})
+
+const repairWorkbenchOrders = computed<RepairWorkbenchOrder[]>(() => {
+    const activeOrders = repairerRepairs.value.filter((item) => item.status !== 'finished')
+
+    if (!activeOrders.length) {
+        return fallbackRepairWorkbenchOrders.value
+    }
+
+    return activeOrders.map((item) => {
+        const priority = getRepairPriorityText(item)
+
+        return {
+            id: item.id,
+            code: getRepairCode(item),
+            owner: item.owner_name || item.owner || '业主',
+            room: getRepairRoomText(item),
+            title: item.title || item.content || '报修工单',
+            priority,
+            status: repairStatusText(item),
+            statusRaw: item.status || '',
+            time: getRepairTimeText(item),
+            priorityKey: getRepairPriorityKey(priority),
+            raw: item,
+        }
+    })
+})
+
+const repairPriorityTabs = computed(() => {
+    return repairPriorityOptions.map((item) => {
+        const count = item.key === 'all'
+            ? repairWorkbenchOrders.value.length
+            : repairWorkbenchOrders.value.filter((row) => row.priorityKey === item.key).length
+
+        return {
+            ...item,
+            count,
+        }
+    })
+})
+
+const filteredRepairWorkbenchOrders = computed(() => {
+    if (selectedRepairPriority.value === 'all') {
+        return repairWorkbenchOrders.value
+    }
+
+    return repairWorkbenchOrders.value.filter((row) => row.priorityKey === selectedRepairPriority.value)
+})
+
+const currentVisibleRepairOrder = computed(() => {
+    return filteredRepairWorkbenchOrders.value.find((row) => row.statusRaw === 'processing')
+        || filteredRepairWorkbenchOrders.value.find((row) => row.statusRaw === 'accepted')
+        || filteredRepairWorkbenchOrders.value[0]
+        || repairWorkbenchOrders.value[0]
+        || null
+})
+
+const repairCalendarEvents = computed<OwnerCalendarEvent[]>(() => {
+    return repairWorkbenchOrders.value
+        .map((item) => {
+            const sourceDate = getRepairEventDate(item.raw)
+            const dateKey = dateKeyFromValue(sourceDate)
+
+            if (!dateKey) return null
+
+            return {
+                id: `repair-${item.code}`,
+                dateKey,
+                title: item.title,
+                time: formatCalendarEventTime(sourceDate) || item.time,
+                path: '/repair/list',
+            }
+        })
+        .filter(Boolean)
+        .sort((a, b) => a!.dateKey.localeCompare(b!.dateKey)) as OwnerCalendarEvent[]
+})
+
+const repairCalendarEventMap = computed(() => {
+    return repairCalendarEvents.value.reduce<Record<string, OwnerCalendarEvent[]>>((map, item) => {
+        map[item.dateKey] = [...(map[item.dateKey] || []), item]
+        return map
+    }, {})
+})
+
+const repairCalendarDays = computed<CalendarDay[]>(() => {
+    const cursor = repairCalendarCursor.value
+    const firstDay = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+    const dayOffset = (firstDay.getDay() + 6) % 7
+    const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate()
+    const todayKey = toDateKey(new Date())
+    const cells: CalendarDay[] = []
+
+    for (let index = 0; index < dayOffset; index += 1) {
+        cells.push({
+            key: `repair-empty-${index}`,
+            day: null,
+            dateKey: '',
+            hasEvent: false,
+            isToday: false,
+        })
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        const dateKey = toDateKey(new Date(cursor.getFullYear(), cursor.getMonth(), day))
+
+        cells.push({
+            key: `repair-${dateKey}`,
+            day,
+            dateKey,
+            hasEvent: Boolean(repairCalendarEventMap.value[dateKey]?.length),
+            isToday: dateKey === todayKey,
+        })
+    }
+
+    while (cells.length % 7 !== 0) {
+        cells.push({
+            key: `repair-tail-${cells.length}`,
+            day: null,
+            dateKey: '',
+            hasEvent: false,
+            isToday: false,
+        })
+    }
+
+    return cells
+})
+
+const visibleRepairCalendarEvents = computed(() => {
+    const monthKey = `${repairCalendarCursor.value.getFullYear()}-${`${repairCalendarCursor.value.getMonth() + 1}`.padStart(2, '0')}`
+
+    return repairCalendarEvents.value
+        .filter((item) => item.dateKey.startsWith(monthKey))
+        .slice(0, 4)
+})
+
+const shiftRepairCalendarMonth = (offset: number) => {
+    repairCalendarCursor.value = new Date(
+        repairCalendarCursor.value.getFullYear(),
+        repairCalendarCursor.value.getMonth() + offset,
+        1,
+    )
+}
+
+const goToRepairCalendarDay = (day: CalendarDay) => {
+    const firstEvent = repairCalendarEventMap.value[day.dateKey]?.[0]
+
+    if (firstEvent) {
+        goTo(firstEvent.path)
+    }
+}
+
+const openRepairResultDrawer = (row?: RepairWorkbenchOrder | null) => {
+    selectedRepairResult.value = row?.raw || currentVisibleRepairOrder.value?.raw || null
+    repairResultDrawerVisible.value = true
+}
 
 const isUnpaidFee = (item: any) => ['unpaid', 'overdue'].includes(item.status)
 const isActiveRepair = (item: any) => item.status !== 'finished'
@@ -794,6 +1042,19 @@ const loadOwnerHomeData = async () => {
     ownerNotices.value = readSettledList(noticeResult)
 }
 
+const loadRepairerHomeData = async () => {
+    const [repairResult] = await Promise.allSettled([
+        getRepairList({ page_size: 1000 }),
+    ])
+
+    repairerRepairs.value = readSettledList(repairResult)
+}
+
+const handleRepairResultSubmitted = async () => {
+    selectedRepairResult.value = null
+    await loadRepairerHomeData()
+}
+
 const loadData = async () => {
     try {
         const res = await getDashboard()
@@ -808,6 +1069,10 @@ const loadData = async () => {
 
     if (isOwnerRole.value) {
         await loadOwnerHomeData()
+    }
+
+    if (isRepairRole.value) {
+        await loadRepairerHomeData()
     }
 }
 
@@ -1146,149 +1411,204 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
-        <section v-else-if="isRepairRole" class="workbench">
+        <section v-else-if="isRepairRole" class="workbench repair-workbench">
             <div class="workbench-heading">
                 <div>
                     <h1>维修工作台</h1>
-                    <p>欢迎回来，{{ username }}！高效处理工单，及时响应业主需求。</p>
+                    <p>欢迎回来，{{ username }}！</p>
                 </div>
             </div>
 
-            <div class="metric-grid">
-                <article
-                    v-for="item in repairMetrics"
-                    :key="item.label"
-                    class="metric-card"
-                    :class="`tone-${item.tone}`"
-                >
-                    <div class="metric-icon">
-                        <el-icon><component :is="item.icon" /></el-icon>
-                    </div>
-                    <div>
-                        <p>{{ item.label }}</p>
-                        <strong>{{ item.value }} <small>{{ item.unit }}</small></strong>
-                        <span>{{ item.hint }}</span>
-                    </div>
-                </article>
-            </div>
-
-            <div class="workbench-grid repair-grid">
-                <section class="panel main-panel">
-                    <div class="panel-header">
-                        <h2>待处理工单</h2>
-                        <div class="filter-line">
-                            <span>工单号 / 业主 / 房号</span>
-                            <button type="button">刷新</button>
-                        </div>
-                    </div>
-
-                    <div class="tab-row">
-                        <span class="active">全部 18</span>
-                        <span>水电 6</span>
-                        <span>门禁 3</span>
-                        <span>电梯 4</span>
-                        <span>公共设施 5</span>
-                    </div>
-
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>工单号</th>
-                                <th>业主</th>
-                                <th>房号</th>
-                                <th>报修类型</th>
-                                <th>紧急程度</th>
-                                <th>状态</th>
-                                <th>预约时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="row in repairOrders" :key="row[0]">
-                                <td>{{ row[0] }}</td>
-                                <td>{{ row[1] }}</td>
-                                <td>{{ row[2] }}</td>
-                                <td>{{ row[3] }}</td>
-                                <td><span class="status-pill" :class="statusClass(row[4])">{{ row[4] }}</span></td>
-                                <td><span class="status-pill info">{{ row[5] }}</span></td>
-                                <td>{{ row[6] }}</td>
-                                <td>
-                                    <button type="button" class="solid-mini" @click="goTo('/repair/list')">接单</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
-
-                <aside class="side-stack">
-                    <section class="panel">
+            <div class="repair-workspace">
+                <main class="repair-main-stack">
+                    <section class="panel repair-summary-panel">
                         <div class="panel-header">
-                            <h2>紧急工单</h2>
-                            <button type="button" class="text-button">更多</button>
+                            <h2>今日工作摘要</h2>
                         </div>
-                        <ul class="compact-list">
-                            <li v-for="row in repairOrders.slice(0, 3)" :key="`repair-urgent-${row[0]}`">
-                                <span class="dot danger" />
-                                <strong>{{ row[0] }}</strong>
-                                <span>{{ row[3] }}</span>
-                                <em>{{ row[4] }}</em>
-                            </li>
-                        </ul>
+                        <div class="repair-summary-grid">
+                            <div>
+                                <span class="repair-summary-icon"><el-icon><Calendar /></el-icon></span>
+                                <p>最早预约</p>
+                                <strong>{{ currentVisibleRepairOrder?.time || '-' }}</strong>
+                            </div>
+                            <div>
+                                <span class="repair-summary-icon"><el-icon><Tickets /></el-icon></span>
+                                <p>待处理</p>
+                                <strong>{{ filteredRepairWorkbenchOrders.length }} 单</strong>
+                            </div>
+                            <div>
+                                <span class="repair-summary-icon"><el-icon><Tools /></el-icon></span>
+                                <p>平均响应</p>
+                                <strong>12分钟</strong>
+                            </div>
+                        </div>
                     </section>
 
-                    <section class="panel">
+                    <section class="panel main-panel repair-order-pool">
                         <div class="panel-header">
-                            <h2>今日安排</h2>
-                            <button type="button" class="text-button">更多</button>
+                            <h2>待接工单池</h2>
+                            <div class="filter-line">
+                                <span>工单号 / 业主 / 房号</span>
+                                <button type="button" @click="loadRepairerHomeData">刷新</button>
+                            </div>
                         </div>
-                        <ul class="schedule-list">
-                            <li v-for="row in repairOrders.slice(0, 5)" :key="`schedule-${row[0]}`">
-                                <span>{{ row[6].replace('今天 ', '') }}</span>
-                                <p>{{ row[2] }} {{ row[3] }}</p>
-                                <em>{{ row[5] }}</em>
-                            </li>
-                        </ul>
+
+                        <div class="tab-row">
+                            <button
+                                v-for="item in repairPriorityTabs"
+                                :key="item.key"
+                                type="button"
+                                :class="{ active: selectedRepairPriority === item.key }"
+                                @click="selectedRepairPriority = item.key"
+                            >
+                                {{ item.label }} {{ item.count }}
+                            </button>
+                        </div>
+
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>工单号</th>
+                                    <th>业主</th>
+                                    <th>房号</th>
+                                    <th>报修类型</th>
+                                    <th>紧急程度</th>
+                                    <th>期望时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in filteredRepairWorkbenchOrders.slice(0, 6)" :key="row.code">
+                                    <td>{{ row.code }}</td>
+                                    <td>{{ row.owner }}</td>
+                                    <td>{{ row.room }}</td>
+                                    <td>{{ row.title }}</td>
+                                    <td><span class="status-pill" :class="statusClass(row.priority)">{{ row.priority }}</span></td>
+                                    <td>{{ row.time }}</td>
+                                    <td>
+                                        <button
+                                            v-if="row.statusRaw === 'processing'"
+                                            type="button"
+                                            class="outline-mini"
+                                            @click="openRepairResultDrawer(row)"
+                                        >
+                                            上传结果
+                                        </button>
+                                        <button
+                                            v-else
+                                            type="button"
+                                            class="solid-mini"
+                                            @click="goTo('/repair/list')"
+                                        >
+                                            {{ row.statusRaw === 'assigned' ? '接单' : '查看' }}
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredRepairWorkbenchOrders.length === 0">
+                                    <td colspan="7" class="table-empty">当前分类暂无工单</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </section>
 
-                    <section class="panel">
-                        <div class="panel-header">
-                            <h2>消息通知</h2>
-                            <button type="button" class="text-button">更多</button>
+                    <section class="panel repair-calendar-panel">
+                        <div class="owner-calendar-header">
+                            <div>
+                                <el-icon><Calendar /></el-icon>
+                                <h2>维修日历</h2>
+                            </div>
+                            <div class="owner-calendar-month">
+                                <button type="button" @click="shiftRepairCalendarMonth(-1)">&lt;</button>
+                                <strong>{{ formatMonthLabel(repairCalendarCursor) }}</strong>
+                                <button type="button" @click="shiftRepairCalendarMonth(1)">&gt;</button>
+                            </div>
                         </div>
-                        <ul class="notice-list">
-                            <li><span>新工单：WD20250519001</span><em>09:15</em></li>
-                            <li><span>工单完成：WD20250518015</span><em>08:45</em></li>
-                            <li><span>业主评价：WD20250518013</span><em>08:30</em></li>
-                            <li><span>系统公告：端午节放假通知</span><em>昨天</em></li>
+
+                        <div class="owner-calendar-body repair-calendar-body">
+                            <div class="owner-calendar-grid">
+                                <span>一</span>
+                                <span>二</span>
+                                <span>三</span>
+                                <span>四</span>
+                                <span>五</span>
+                                <span>六</span>
+                                <span>日</span>
+                                <button
+                                    v-for="day in repairCalendarDays"
+                                    :key="day.key"
+                                    type="button"
+                                    class="owner-calendar-cell"
+                                    :class="{ 'has-event': day.hasEvent, today: day.isToday, empty: !day.day }"
+                                    :disabled="!day.day"
+                                    @click="goToRepairCalendarDay(day)"
+                                >
+                                    <span v-if="day.day" class="calendar-day-number">{{ day.day }}</span>
+                                    <i v-if="day.hasEvent" />
+                                </button>
+                            </div>
+
+                            <div class="owner-calendar-events">
+                                <button
+                                    v-for="item in visibleRepairCalendarEvents"
+                                    :key="item.id"
+                                    type="button"
+                                    class="owner-calendar-event"
+                                    @click="goTo(item.path)"
+                                >
+                                    <b>{{ item.dateKey.slice(5) }}</b>
+                                    <span>{{ item.title }}</span>
+                                    <em>{{ item.time }}</em>
+                                </button>
+                                <div>
+                                    <button type="button" class="text-button" @click="goTo('/repair/list')">查看全部</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </main>
+
+                <aside class="repair-side-stack">
+                    <section class="panel repair-route-panel">
+                        <div class="panel-header">
+                            <h2>今日路线</h2>
+                            <button type="button" class="text-button" @click="loadRepairerHomeData">刷新</button>
+                        </div>
+                        <ul class="repair-route-list">
+                            <li v-for="(row, index) in repairWorkbenchOrders.slice(0, 4)" :key="`route-${row.code}`">
+                                <span class="route-dot" :class="{ danger: row.priorityKey === 'urgent' }" />
+                                <time>{{ row.time.replace('今天 ', '') }}</time>
+                                <div>
+                                    <strong>{{ row.code }}</strong>
+                                    <b>{{ row.title }}</b>
+                                    <p>{{ row.room }} ｜ {{ row.owner }}</p>
+                                </div>
+                                <button
+                                    v-if="index === 0 || row.statusRaw === 'processing'"
+                                    type="button"
+                                    class="outline-mini"
+                                    @click="openRepairResultDrawer(row)"
+                                >
+                                    上传结果
+                                </button>
+                                <span v-else class="status-pill" :class="statusClass(row.priority)">{{ row.priority }}</span>
+                            </li>
+                        </ul>
+                        <button type="button" class="route-more" @click="goTo('/repair/list')">查看全部路线</button>
+                    </section>
+
+                    <section class="panel repair-tools-panel">
+                        <div class="panel-header">
+                            <h2>工具与备件</h2>
+                            <button type="button" class="text-button">查看更多</button>
+                        </div>
+                        <ul class="repair-tools-list">
+                            <li><span>水管接头</span><em>库存 18 个</em></li>
+                            <li><span>门禁卡扣</span><em>库存 26 个</em></li>
+                            <li><span>电路测试笔</span><em>库存 12 支</em></li>
+                            <li><span>绝缘胶带</span><em>库存 15 卷</em></li>
                         </ul>
                     </section>
                 </aside>
-            </div>
-
-            <div class="bottom-grid two">
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>维修进度</h2>
-                    </div>
-                    <div class="progress-line">
-                        <span>接单</span>
-                        <span>出发</span>
-                        <span class="active">维修中</span>
-                        <span>待验收</span>
-                        <span>已完成</span>
-                    </div>
-                    <p class="current-order">当前工单：<strong>WD20250518012</strong> 电路故障，预计完成时间：今天 12:00</p>
-                </section>
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>常用操作</h2>
-                    </div>
-                    <div class="operation-grid">
-                        <button type="button" @click="goTo('/upload')"><el-icon><CreditCard /></el-icon>拍照上传</button>
-                        <button type="button" @click="goTo('/profile')"><el-icon><Service /></el-icon>联系业主</button>
-                        <button type="button" @click="goTo('/repair/list')"><el-icon><CircleCheck /></el-icon>提交结果</button>
-                    </div>
-                </section>
             </div>
         </section>
 
