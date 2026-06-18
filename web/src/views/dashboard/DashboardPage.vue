@@ -1778,6 +1778,12 @@ onBeforeUnmount(() => {
                 <p>欢迎您，{{ username }}。请选择左侧菜单开始办理业务。</p>
             </div>
         </section>
+
+        <RepairResultDrawer
+            v-model="repairResultDrawerVisible"
+            :repair="selectedRepairResult"
+            @submitted="handleRepairResultSubmitted"
+        />
     </div>
 </template>
 
@@ -1839,6 +1845,7 @@ onBeforeUnmount(() => {
 
 .quick-action,
 .solid-mini,
+.outline-mini,
 .primary-wide,
 .ghost-button,
 .text-button,
@@ -2065,14 +2072,28 @@ onBeforeUnmount(() => {
     margin-bottom: 12px;
 }
 
-.tab-row span {
+.tab-row span,
+.tab-row button {
     padding: 7px 16px;
     border: 1px solid #e4e7ed;
     border-radius: 6px;
     color: var(--text-subtle);
     background: #f8fafc;
     font-size: 13px;
+    font-family: inherit;
     line-height: 20px;
+}
+
+.tab-row button {
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.tab-row button:hover,
+.tab-row button:focus-visible {
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    outline: none;
 }
 
 .tab-row .active {
@@ -2109,6 +2130,12 @@ onBeforeUnmount(() => {
     font-size: 13px;
     font-weight: 600;
     line-height: 20px;
+}
+
+.data-table .table-empty {
+    padding: 28px 12px;
+    color: var(--text-muted);
+    text-align: center;
 }
 
 .status-pill {
@@ -2159,6 +2186,25 @@ onBeforeUnmount(() => {
     font-size: 14px;
     font-weight: 600;
     line-height: 20px;
+}
+
+.outline-mini {
+    min-width: 70px;
+    height: 30px;
+    border: 1px solid rgba(15, 118, 110, 0.38);
+    border-radius: 6px;
+    color: var(--brand-primary);
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.outline-mini:hover,
+.outline-mini:focus-visible {
+    border-color: var(--brand-primary);
+    background: var(--brand-primary-subtle);
+    outline: none;
 }
 
 .side-stack {
@@ -2407,6 +2453,205 @@ onBeforeUnmount(() => {
     font-size: 30px;
 }
 
+.repair-workbench {
+    gap: 14px;
+}
+
+.repair-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 16px;
+    align-items: start;
+}
+
+.repair-main-stack,
+.repair-side-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.repair-summary-panel {
+    min-height: 118px;
+}
+
+.repair-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    align-items: center;
+}
+
+.repair-summary-grid > div {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    column-gap: 14px;
+    align-items: center;
+    min-width: 0;
+}
+
+.repair-summary-icon {
+    display: inline-flex;
+    grid-row: span 2;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
+    font-size: 24px;
+}
+
+.repair-summary-grid p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.repair-summary-grid strong {
+    color: var(--text-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 32px;
+}
+
+.repair-order-pool .filter-line span {
+    min-width: 190px;
+}
+
+.repair-calendar-panel {
+    padding-bottom: 18px;
+}
+
+.repair-calendar-body {
+    grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.repair-route-list,
+.repair-tools-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.repair-route-list {
+    position: relative;
+    display: grid;
+    gap: 0;
+}
+
+.repair-route-list::before {
+    content: '';
+    position: absolute;
+    top: 14px;
+    bottom: 20px;
+    left: 6px;
+    width: 1px;
+    background: #dbe5ef;
+}
+
+.repair-route-list li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px 52px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+    min-height: 86px;
+    padding: 0 0 18px;
+    border-bottom: 1px solid #eef1f5;
+}
+
+.repair-route-list li:last-child {
+    border-bottom: 0;
+}
+
+.route-dot {
+    z-index: 1;
+    width: 14px;
+    height: 14px;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: #1677ff;
+    box-shadow: 0 0 0 4px #fff;
+}
+
+.route-dot.danger {
+    background: #ef4444;
+}
+
+.repair-route-list time {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.repair-route-list div {
+    min-width: 0;
+}
+
+.repair-route-list strong,
+.repair-route-list b {
+    display: block;
+    color: var(--text-heading);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 22px;
+}
+
+.repair-route-list p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.route-more {
+    display: block;
+    margin: 4px auto 0;
+    border: 0;
+    color: var(--brand-primary);
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.repair-tools-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 42px;
+    border-bottom: 1px solid #eef1f5;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.repair-tools-list li:last-child {
+    border-bottom: 0;
+}
+
+.repair-tools-list em {
+    color: var(--text-muted);
+    font-style: normal;
+    white-space: nowrap;
+}
+
 .owner-workbench {
     max-width: 100%;
 }
@@ -2617,10 +2862,12 @@ onBeforeUnmount(() => {
 }
 
 .owner-calendar-header {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 14px;
+    min-height: 32px;
     margin-bottom: 14px;
 }
 
@@ -2628,7 +2875,16 @@ onBeforeUnmount(() => {
 .owner-calendar-month {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
+}
+
+.owner-calendar-month {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 180px;
+    transform: translate(-50%, -50%);
 }
 
 .owner-calendar-header h2 {
@@ -2650,16 +2906,21 @@ onBeforeUnmount(() => {
     color: var(--text-primary);
     font-size: 15px;
     font-weight: 600;
+    line-height: 22px;
 }
 
 .owner-calendar-month button {
+    display: inline-flex;
     width: 28px;
     height: 28px;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 6px;
     color: var(--text-subtle);
     background: transparent;
     font-size: 20px;
+    line-height: 1;
     cursor: pointer;
 }
 

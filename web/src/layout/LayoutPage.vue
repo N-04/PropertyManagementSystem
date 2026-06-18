@@ -23,11 +23,8 @@ import {
 import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
-import { getComplaintList } from '@/api/complaint'
-import { getFeeList } from '@/api/fee'
-import { getNoticeList } from '@/api/notice'
-import { getRepairList } from '@/api/repair'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
+import { loadMessageCenterRows, type MessageRow } from '@/utils/messageCenterRows'
 import {
     AUTH_STATE_CHANGED_EVENT,
     clearAuthState,
@@ -50,17 +47,7 @@ const selectedSecondId = ref('')
 const selectedThirdId = ref('')
 const selectedFunctionTitle = ref('')
 const expandedFirstIds = ref<string[]>([])
-const noticeMessages = ref<string[]>([])
-const roleMessages = ref<string[]>([])
-const parkingFeedbackMessages = ref<string[]>([])
-const repairEvaluationFeedbackMessages = ref<string[]>([])
-const serviceRatingFeedbackMessages = ref<string[]>([])
-const PARKING_FEEDBACK_EVENT = 'property-management-parking-feedback'
-const PARKING_FEEDBACK_STORAGE_KEY = 'parkingPurchaseFeedback'
-const REPAIR_EVALUATION_FEEDBACK_EVENT = 'property-management-repair-evaluation-feedback'
-const REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY = 'repairEvaluationFeedback'
-const SERVICE_RATING_FEEDBACK_EVENT = 'property-management-service-rating-feedback'
-const SERVICE_RATING_FEEDBACK_STORAGE_KEY = 'serviceRatingFeedback'
+const messageCenterRows = ref<MessageRow[]>([])
 
 const roleTitleMap: Record<string, string> = {
     admin: '物业管理员',
@@ -78,7 +65,7 @@ const roleTitleMap: Record<string, string> = {
 
 const roleTitle = computed(() => roleTitleMap[role.value] || '用户')
 const usernameInitial = computed(() => (username.value || '用').slice(0, 1).toUpperCase())
-const notificationCount = computed(() => notificationMessages.value.length)
+const notificationCount = computed(() => messageCenterRows.value.length)
 
 const searchPlaceholder = computed(() => {
     if (['repair_staff', 'repairer', 'repair'].includes(role.value)) {
@@ -220,28 +207,6 @@ const thirdMenus = computed(() => {
 
 const activeThirdMenu = computed(() => {
     return thirdMenus.value.find((item) => menuKey(item) === selectedThirdId.value)
-})
-
-const canReceiveNotice = computed(() => {
-    // 公告接收方只包含管理员和业主；财务/维修只进入公告发布列表。
-    return ['owner', 'property_admin', 'admin', 'super_admin'].includes(role.value)
-})
-
-const notificationMessages = computed(() => {
-    // 只把真实业务事件计入通知角标，避免无消息时用占位文案误导管理员。
-    const messages = [
-        ...parkingFeedbackMessages.value,
-        ...repairEvaluationFeedbackMessages.value,
-        ...serviceRatingFeedbackMessages.value,
-        ...noticeMessages.value,
-        ...roleMessages.value,
-    ].filter(Boolean)
-
-    if (messages.length) {
-        return messages.slice(0, 8)
-    }
-
-    return []
 })
 
 const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
@@ -418,150 +383,8 @@ const loadMenus = async () => {
     }
 }
 
-const loadNoticeMessages = async () => {
-    if (!canReceiveNotice.value) {
-        noticeMessages.value = []
-        return
-    }
-
-    try {
-        const res = await getNoticeList()
-        const list = res.data.data || []
-
-        noticeMessages.value = list
-            .filter((item: any) => item.status !== 'draft')
-            .slice(0, 3)
-            .map((item: any) => `公告通知：${item.title}`)
-    } catch (error) {
-        noticeMessages.value = []
-    }
-}
-
-const loadRoleMessages = async () => {
-    const messages: string[] = []
-    const currentRole = role.value
-
-    try {
-        if (['owner', 'finance', 'finance_staff', 'admin', 'super_admin'].includes(currentRole)) {
-            const feeRes = await getFeeList()
-            const fees = feeRes.data.data || []
-            const unpaidFees = fees.filter((item: any) => item.status === 'unpaid' || item.status === 'overdue')
-
-            if (unpaidFees.length) {
-                messages.push(`缴费提醒：当前有 ${unpaidFees.length} 条待缴或逾期账单`)
-            }
-        }
-    } catch (error) {
-        // 通知角标只是提醒入口，接口失败不影响页面主体。
-    }
-
-    try {
-        if (['owner', 'repair_staff', 'repair', 'property_admin', 'admin', 'super_admin'].includes(currentRole)) {
-            const repairRes = await getRepairList({})
-            const repairs = repairRes.data.data || []
-            const activeRepairs = repairs.filter((item: any) => item.status !== 'finished')
-
-            if (activeRepairs.length) {
-                messages.push(`工单通知：当前有 ${activeRepairs.length} 条待处理或进行中工单`)
-            }
-        }
-    } catch (error) {
-        // 通知角标只是提醒入口，接口失败不影响页面主体。
-    }
-
-    try {
-        if (['property_admin', 'customer_service', 'service', 'admin', 'super_admin'].includes(currentRole)) {
-            const complaintRes = await getComplaintList({ status: 'pending' })
-            const complaints = complaintRes.data.data || []
-
-            if (complaints.length) {
-                messages.push(`投诉提醒：当前有 ${complaints.length} 条投诉/建议待处理`)
-            }
-        }
-    } catch (error) {
-        // 通知角标只是提醒入口，接口失败不影响页面主体。
-    }
-
-    roleMessages.value = messages
-}
-
-const loadNotificationMessages = () => {
-    loadNoticeMessages()
-    loadRoleMessages()
-}
-
-const readParkingFeedbackMessages = () => {
-    try {
-        const raw = localStorage.getItem(PARKING_FEEDBACK_STORAGE_KEY)
-        const item = raw ? JSON.parse(raw) : null
-
-        if (!item?.message) {
-            parkingFeedbackMessages.value = []
-            return
-        }
-
-        parkingFeedbackMessages.value = [`车位反馈：${item.message}`]
-    } catch {
-        parkingFeedbackMessages.value = []
-    }
-}
-
-const readRepairEvaluationFeedbackMessages = () => {
-    try {
-        const raw = localStorage.getItem(REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY)
-        const item = raw ? JSON.parse(raw) : null
-
-        if (!item?.message) {
-            repairEvaluationFeedbackMessages.value = []
-            return
-        }
-
-        repairEvaluationFeedbackMessages.value = [`评价反馈：${item.message}`]
-    } catch {
-        repairEvaluationFeedbackMessages.value = []
-    }
-}
-
-const readServiceRatingFeedbackMessages = () => {
-    try {
-        const raw = localStorage.getItem(SERVICE_RATING_FEEDBACK_STORAGE_KEY)
-        const item = raw ? JSON.parse(raw) : null
-
-        if (!item?.message) {
-            serviceRatingFeedbackMessages.value = []
-            return
-        }
-
-        serviceRatingFeedbackMessages.value = [`服务反馈：${item.message}`]
-    } catch {
-        serviceRatingFeedbackMessages.value = []
-    }
-}
-
-const handleParkingFeedback = () => {
-    readParkingFeedbackMessages()
-}
-
-const handleRepairEvaluationFeedback = () => {
-    readRepairEvaluationFeedbackMessages()
-}
-
-const handleServiceRatingFeedback = () => {
-    readServiceRatingFeedbackMessages()
-}
-
-const handleStorageFeedback = (event: StorageEvent) => {
-    if (event.key === PARKING_FEEDBACK_STORAGE_KEY) {
-        readParkingFeedbackMessages()
-    }
-
-    if (event.key === REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY) {
-        readRepairEvaluationFeedbackMessages()
-    }
-
-    if (event.key === SERVICE_RATING_FEEDBACK_STORAGE_KEY) {
-        readServiceRatingFeedbackMessages()
-    }
+const loadNotificationMessages = async () => {
+    messageCenterRows.value = await loadMessageCenterRows(role.value)
 }
 
 const reloadMenusForCurrentRole = () => {
@@ -613,23 +436,12 @@ const goRoleMessages = () => {
 
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
-    window.addEventListener(PARKING_FEEDBACK_EVENT, handleParkingFeedback)
-    window.addEventListener(REPAIR_EVALUATION_FEEDBACK_EVENT, handleRepairEvaluationFeedback)
-    window.addEventListener(SERVICE_RATING_FEEDBACK_EVENT, handleServiceRatingFeedback)
-    window.addEventListener('storage', handleStorageFeedback)
     loadMenus()
-    readParkingFeedbackMessages()
-    readRepairEvaluationFeedbackMessages()
-    readServiceRatingFeedbackMessages()
     loadNotificationMessages()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
-    window.removeEventListener(PARKING_FEEDBACK_EVENT, handleParkingFeedback)
-    window.removeEventListener(REPAIR_EVALUATION_FEEDBACK_EVENT, handleRepairEvaluationFeedback)
-    window.removeEventListener(SERVICE_RATING_FEEDBACK_EVENT, handleServiceRatingFeedback)
-    window.removeEventListener('storage', handleStorageFeedback)
 })
 
 watch(
@@ -981,9 +793,9 @@ watch(
 .layout-header {
     height: 66px;
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) minmax(430px, 560px) minmax(300px, 1fr);
+    grid-template-columns: 220px minmax(280px, 560px) max-content;
     align-items: center;
-    gap: 24px;
+    column-gap: 28px;
     padding: 0 28px;
     background: var(--surface-card);
     border-bottom: 1px solid var(--border-color);
@@ -1019,6 +831,8 @@ watch(
     display: flex;
     align-items: center;
     width: 100%;
+    max-width: 560px;
+    min-width: 0;
     min-height: 38px;
     justify-self: center;
     padding: 0 14px;
@@ -1050,6 +864,7 @@ watch(
     align-items: center;
     gap: 14px;
     justify-self: end;
+    min-width: max-content;
     white-space: nowrap;
 }
 

@@ -233,23 +233,8 @@ const financeDisplayMenus = (): AppMenuItem[] => [
 
 const repairDisplayMenus = (): AppMenuItem[] => [
     leafMenu('repair-dashboard', '维修工作台', '/dashboard'),
-    groupMenu('repair-pending', '待接工单', [
-        leafMenu('repairer-pending', '待接单', '/repair/list'),
-    ]),
-    groupMenu('repair-processing', '维修中', [
-        leafMenu('repairer-accepted', '已接单', '/repair/list'),
-        leafMenu('repairer-fixing', '维修中', '/repair/list'),
-    ]),
-    groupMenu('repair-finished', '完成工单', [
-        leafMenu('repairer-finished', '完成工单', '/repair/list'),
-    ]),
-    groupMenu('repair-history', '工单历史', [
-        leafMenu('repairer-history', '历史记录', '/repair/list'),
-    ]),
-    groupMenu('repair-profile', '个人中心', [
-        leafMenu('repair-profile-page', '个人资料', '/profile'),
-        leafMenu('repair-profile-password', '修改密码', '/profile/password'),
-    ]),
+    leafMenu('repair-history', '工单历史', '/repair/list'),
+    leafMenu('repair-profile', '个人中心', '/profile'),
 ]
 
 const ownerDisplayMenus = (): AppMenuItem[] => [

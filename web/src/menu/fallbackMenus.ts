@@ -91,23 +91,8 @@ export const fallbackMenus: AppMenuItem[] = [
     ]),
     item('repairer', '维修员', undefined, [
         item('repair-dashboard', '维修工作台', '/dashboard'),
-        item('repair-pending', '待接工单', undefined, [
-            item('repairer-pending', '待接单', '/repair/list'),
-        ]),
-        item('repair-processing', '维修中', undefined, [
-            item('repairer-accepted', '已接单', '/repair/list'),
-            item('repairer-fixing', '维修中', '/repair/list'),
-        ]),
-        item('repair-finished', '完成工单', undefined, [
-            item('repairer-finished', '完成工单', '/repair/list'),
-        ]),
-        item('repair-history', '工单历史', undefined, [
-            item('repairer-history', '历史记录', '/repair/list'),
-        ]),
-        item('repair-profile', '个人中心', undefined, [
-            item('repair-profile-page', '个人资料', '/profile'),
-            item('repair-profile-password', '修改密码', '/profile/password'),
-        ]),
+        item('repair-history', '工单历史', '/repair/list'),
+        item('repair-profile', '个人中心', '/profile'),
     ]),
     item('owner', '业主', undefined, [
         item('owner-dashboard', '业主首页', '/dashboard'),
