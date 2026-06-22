@@ -7,6 +7,11 @@ from apps.finance.models import Fee
 
 class FeeSerializer(serializers.ModelSerializer):
 
+    owner_name = serializers.CharField(
+        source="owner.name",
+        read_only=True,
+    )
+
     room_no = serializers.CharField(
         source="house.room_no",
         read_only=True,

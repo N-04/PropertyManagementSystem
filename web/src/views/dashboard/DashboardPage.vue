@@ -20,7 +20,6 @@ import {
     User,
     UserFilled,
     Van,
-    Wallet,
 } from '@element-plus/icons-vue'
 import { getComplaintList } from '@/api/complaint'
 import { getDashboard } from '@/api/dashboard'
@@ -64,7 +63,41 @@ type MetricCard = {
 }
 
 type AdminWorkOrderRow = [string, string, string, string, string, string, string, string]
-type FinanceBillRow = [string, string, string, string, string, string, string]
+type FinanceBillRow = {
+    id: string
+    billNo: string
+    owner: string
+    room: string
+    feeType: string
+    amount: string
+    status: string
+    deadline: string
+}
+type FinancePaymentRow = {
+    id: string
+    owner: string
+    room: string
+    feeType: string
+    amount: string
+    time: string
+}
+type FinancePaymentMethod = {
+    label: string
+    amount: number
+    tone: string
+    badge: string
+}
+type FinanceCategoryRow = {
+    label: string
+    amount: number
+    percent: string
+    width: number
+}
+type FinanceTrendPoint = {
+    label: string
+    paid: number
+    due: number
+}
 type SimplePairRow = [string, string]
 type ActivityRow = [string, string, string]
 type RepairPriorityKey = 'all' | 'urgent' | 'high' | 'normal' | 'low'
@@ -145,6 +178,7 @@ const ownerRepairsData = ref<any[]>([])
 const ownerComplaints = ref<any[]>([])
 const ownerNotices = ref<any[]>([])
 const ownerCalendarCursor = ref(new Date())
+const financeFees = ref<any[]>([])
 const repairerRepairs = ref<any[]>([])
 const repairCalendarCursor = ref(new Date())
 const selectedRepairPriority = ref<RepairPriorityKey>('all')
@@ -231,41 +265,6 @@ const adminMetrics = computed<MetricCard[]>(() => [
     },
 ])
 
-const financeMetrics = computed<MetricCard[]>(() => [
-    {
-        label: '本月应收',
-        value: formatMoney(feeTotal.value),
-        unit: '',
-        hint: '较上月 +8.6%',
-        tone: 'teal',
-        icon: Money,
-    },
-    {
-        label: '本月实收',
-        value: formatMoney(feePaid.value),
-        unit: '',
-        hint: '较上月 +12.3%',
-        tone: 'blue',
-        icon: Wallet,
-    },
-    {
-        label: '缴费率',
-        value: feeRate.value,
-        unit: '',
-        hint: '较上月 +6.4%',
-        tone: 'amber',
-        icon: DataAnalysis,
-    },
-    {
-        label: '欠费户数',
-        value: formatNumber(numberOrFallback(data.value.unpaid_count, 173)),
-        unit: '户',
-        hint: '较上月 -12 户',
-        tone: 'red',
-        icon: User,
-    },
-])
-
 const repairMetrics = computed<MetricCard[]>(() => [
     {
         label: '待接单',
@@ -314,15 +313,6 @@ const adminWorkOrders: AdminWorkOrderRow[] = [
     ['WD20250519003', '刘女士', '5栋-1单元-1101', '门锁损坏', '处理中', '中', '陈师傅', '05-19 08:54'],
     ['WD20250519004', '王先生', '2栋-2单元-0801', '空调不制冷', '待验收', '中', '孙师傅', '05-19 08:33'],
     ['WD20250518021', '陈女士', '6栋-2单元-1002', '下水道堵塞', '待处理', '高', '-', '05-18 17:25'],
-]
-
-const financeBills: FinanceBillRow[] = [
-    ['BILL20250519001', '张先生', '1栋-1单元-1201', '物业费', '¥ 1,280.00', '未缴费', '2025-05-31'],
-    ['BILL20250519002', '李女士', '2栋-2单元-0803', '水费', '¥ 68.00', '未缴费', '2025-05-31'],
-    ['BILL20250519003', '王先生', '1栋-1单元-1502', '电费', '¥ 124.50', '未缴费', '2025-05-31'],
-    ['BILL20250519004', '赵女士', '3栋-1单元-0601', '物业费', '¥ 1,280.00', '部分缴费', '2025-05-31'],
-    ['BILL20250519005', '刘先生', '2栋-1单元-1103', '车位费', '¥ 180.00', '部分缴费', '2025-05-31'],
-    ['BILL20250519006', '陈女士', '5栋-2单元-1002', '水费', '¥ 68.00', '已逾期', '2025-05-20'],
 ]
 
 const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = [
@@ -468,9 +458,247 @@ const formatCalendarEventTime = (value?: string | null) => {
 
 const formatMonthLabel = (date: Date) => `${date.getFullYear()}年${date.getMonth() + 1}月`
 
-const feeTypeText = (item: any) => item.fee_type_text || feeTypeLabels[item.fee_type] || '费用'
+const feeStatusLabels: Record<string, string> = {
+    unpaid: '未缴费',
+    paid: '已缴费',
+    overdue: '已逾期',
+}
+
+const paymentMethodLabels: Record<string, string> = {
+    wechat: '微信支付',
+    alipay: '支付宝',
+    bank_card: '银行转账',
+    apple_pay: 'Apple Pay',
+    union_pay: '云闪付',
+    unknown: '其他方式',
+}
+
+const paymentMethodTones: Record<string, { tone: string; badge: string }> = {
+    wechat: { tone: 'wechat', badge: '微' },
+    alipay: { tone: 'alipay', badge: '支' },
+    bank_card: { tone: 'bank', badge: '银' },
+    apple_pay: { tone: 'apple', badge: 'A' },
+    union_pay: { tone: 'union', badge: '云' },
+    unknown: { tone: 'other', badge: '其' },
+}
+
+const feeTypeText = (item: any) => feeTypeLabels[item.fee_type] || item.fee_type_text || '费用'
+const feeStatusText = (item: any) => feeStatusLabels[item.status] || item.status_text || item.status || '-'
 const repairStatusText = (item: any) => item.status_text || repairStatusLabels[item.status] || '待处理'
 const complaintStatusText = (item: any) => item.status_text || complaintStatusLabels[item.status] || '待处理'
+
+const isPaidFee = (item: any) => item.status === 'paid' || item.status_text === '已缴费'
+
+const formatFinanceDate = (value?: string | null) => {
+    const date = parseDateFromValue(value)
+
+    if (!date) return '-'
+
+    return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+const formatFinanceTime = (value?: string | null) => {
+    return formatDateTimeShort(value) || '-'
+}
+
+const getFinanceBillNo = (item: any) => {
+    return item.bill_no || item.order_no || (item.id ? `BILL${String(item.id).padStart(12, '0')}` : '未生成')
+}
+
+const getFinanceOwnerName = (item: any) => {
+    return item.owner_name || item.owner?.name || item.owner_real_name || '业主'
+}
+
+const getFinanceRoomText = (item: any) => {
+    const parts = [item.building_name, item.unit_name, item.room_no].filter(Boolean)
+
+    if (parts.length) return parts.join('-')
+
+    return item.room || item.house_name || item.house?.room_no || '-'
+}
+
+const getFinancePaymentMethodKey = (item: any) => {
+    if (item.payment_method) return item.payment_method
+
+    const methodText = item.payment_method_text || ''
+
+    if (methodText.includes('微信')) return 'wechat'
+    if (methodText.includes('支付宝')) return 'alipay'
+    if (methodText.includes('银行') || methodText.includes('银行卡')) return 'bank_card'
+    if (methodText.includes('Apple')) return 'apple_pay'
+    if (methodText.includes('云闪付')) return 'union_pay'
+
+    return 'unknown'
+}
+
+const sumFeeAmount = (items: any[]) => {
+    return items.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+}
+
+const financeCurrentMonthKey = computed(() => {
+    const now = new Date()
+
+    return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}`
+})
+
+const financeBillRows = computed<FinanceBillRow[]>(() => {
+    return financeFees.value
+        .filter((item) => !isPaidFee(item))
+        .slice(0, 6)
+        .map((item) => ({
+            id: String(item.id || getFinanceBillNo(item)),
+            billNo: getFinanceBillNo(item),
+            owner: getFinanceOwnerName(item),
+            room: getFinanceRoomText(item),
+            feeType: feeTypeText(item),
+            amount: formatMoney(Number(item.amount || 0)),
+            status: feeStatusText(item),
+            deadline: formatFinanceDate(item.deadline),
+        }))
+})
+
+const financePaidFees = computed(() => {
+    return financeFees.value
+        .filter(isPaidFee)
+        .sort((a, b) => {
+            const timeA = parseDateFromValue(a.pay_time || a.updated_at || a.created_at)?.getTime() || 0
+            const timeB = parseDateFromValue(b.pay_time || b.updated_at || b.created_at)?.getTime() || 0
+
+            return timeB - timeA
+        })
+})
+
+const financeTodayPaidFees = computed(() => {
+    const todayKey = toDateKey(new Date())
+
+    return financePaidFees.value.filter((item) => dateKeyFromValue(item.pay_time) === todayKey)
+})
+
+const financeTodayCollectionTotal = computed(() => sumFeeAmount(financeTodayPaidFees.value))
+
+const financePaymentMethods = computed<FinancePaymentMethod[]>(() => {
+    const grouped = financeTodayPaidFees.value.reduce<Record<string, number>>((map, item) => {
+        const key = getFinancePaymentMethodKey(item)
+
+        map[key] = (map[key] || 0) + Number(item.amount || 0)
+
+        return map
+    }, {})
+
+    return Object.entries(grouped)
+        .sort((a, b) => b[1] - a[1])
+        .map(([method, amount]) => {
+            const toneConfig = paymentMethodTones[method] ?? { tone: 'other', badge: '其' }
+
+            return {
+                label: paymentMethodLabels[method] || method,
+                amount,
+                tone: toneConfig.tone,
+                badge: toneConfig.badge,
+            }
+        })
+})
+
+const financePaymentPercent = (amount: number) => {
+    if (!financeTodayCollectionTotal.value) return '0.00%'
+
+    return `${((amount / financeTodayCollectionTotal.value) * 100).toFixed(2)}%`
+}
+
+const financeRecentPayments = computed<FinancePaymentRow[]>(() => {
+    return financePaidFees.value.slice(0, 5).map((item) => ({
+        id: String(item.id || getFinanceBillNo(item)),
+        owner: getFinanceOwnerName(item),
+        room: getFinanceRoomText(item),
+        feeType: feeTypeText(item),
+        amount: formatMoney(Number(item.amount || 0)),
+        time: formatFinanceTime(item.pay_time || item.updated_at || item.created_at),
+    }))
+})
+
+const financeCurrentMonthFees = computed(() => {
+    return financeFees.value.filter((item) => {
+        const dateKey = dateKeyFromValue(item.deadline || item.created_at)
+
+        return dateKey.startsWith(financeCurrentMonthKey.value)
+    })
+})
+
+const financeCategoryRows = computed<FinanceCategoryRow[]>(() => {
+    const grouped = financeCurrentMonthFees.value.reduce<Record<string, number>>((map, item) => {
+        const label = feeTypeText(item)
+
+        map[label] = (map[label] || 0) + Number(item.amount || 0)
+
+        return map
+    }, {})
+    const total = Object.values(grouped).reduce((sum, amount) => sum + amount, 0)
+
+    return Object.entries(grouped)
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, amount]) => {
+            const percent = total ? (amount / total) * 100 : 0
+
+            return {
+                label,
+                amount,
+                percent: `${percent.toFixed(2)}%`,
+                width: Math.max(percent, 4),
+            }
+        })
+})
+
+const financeTrendPoints = computed<FinanceTrendPoint[]>(() => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const dayMap = new Map<number, { paid: number; due: number }>()
+
+    financeFees.value.forEach((item) => {
+        const amount = Number(item.amount || 0)
+        const deadline = parseDateFromValue(item.deadline || item.created_at)
+        const payTime = parseDateFromValue(item.pay_time)
+
+        if (deadline && deadline.getFullYear() === year && deadline.getMonth() === month) {
+            const current = dayMap.get(deadline.getDate()) || { paid: 0, due: 0 }
+            current.due += amount
+            dayMap.set(deadline.getDate(), current)
+        }
+
+        if (isPaidFee(item) && payTime && payTime.getFullYear() === year && payTime.getMonth() === month) {
+            const current = dayMap.get(payTime.getDate()) || { paid: 0, due: 0 }
+            current.paid += amount
+            dayMap.set(payTime.getDate(), current)
+        }
+    })
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+        const day = index + 1
+        const values = dayMap.get(day) || { paid: 0, due: 0 }
+        const showLabel = day === 1 || day === 8 || day === 15 || day === 22 || day === daysInMonth
+
+        return {
+            label: showLabel ? `${`${month + 1}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}` : '',
+            paid: values.paid,
+            due: values.due,
+        }
+    })
+})
+
+const financeTrendMax = computed(() => {
+    const maxValue = Math.max(
+        ...financeTrendPoints.value.flatMap((item) => [item.paid, item.due]),
+        0,
+    )
+
+    return maxValue || 1
+})
+
+const financeTrendHasData = computed(() => financeTrendPoints.value.some((item) => item.paid || item.due))
+const financeMonthPaidTotal = computed(() => {
+    return sumFeeAmount(financePaidFees.value.filter((item) => dateKeyFromValue(item.pay_time).startsWith(financeCurrentMonthKey.value)))
+})
 
 const getRepairCode = (item: any) => {
     if (item.order_no || item.code) {
@@ -1120,6 +1348,14 @@ const loadOwnerHomeData = async () => {
     ownerNotices.value = readSettledList(noticeResult)
 }
 
+const loadFinanceHomeData = async () => {
+    const [feeResult] = await Promise.allSettled([
+        getFeeList({ page_size: 1000 }),
+    ])
+
+    financeFees.value = readSettledList(feeResult)
+}
+
 const loadRepairerHomeData = async () => {
     const [repairResult] = await Promise.allSettled([
         getRepairList({ page_size: 1000 }),
@@ -1147,6 +1383,10 @@ const loadData = async () => {
 
     if (isOwnerRole.value) {
         await loadOwnerHomeData()
+    }
+
+    if (isFinanceRole.value) {
+        await loadFinanceHomeData()
     }
 
     if (isRepairRole.value) {
@@ -1378,138 +1618,212 @@ onBeforeUnmount(() => {
             </div>
         </section>
 
-        <section v-else-if="isFinanceRole" class="workbench">
+        <section v-else-if="isFinanceRole" class="workbench finance-workbench">
             <div class="workbench-heading">
                 <div>
                     <h1>财务工作台</h1>
+                    <p>实时掌握收支动态，高效处理账务，提升资金管理效率。</p>
                 </div>
             </div>
 
-            <div class="metric-grid">
-                <article
-                    v-for="item in financeMetrics"
-                    :key="item.label"
-                    class="metric-card"
-                    :class="`tone-${item.tone}`"
-                >
-                    <div class="metric-icon">
-                        <el-icon><component :is="item.icon" /></el-icon>
-                    </div>
-                    <div>
-                        <p>{{ item.label }}</p>
-                        <strong>{{ item.value }} <small>{{ item.unit }}</small></strong>
-                        <span>{{ item.hint }}</span>
-                    </div>
-                </article>
-            </div>
-
-            <div class="workbench-grid finance-grid">
-                <section class="panel main-panel">
-                    <div class="panel-header">
-                        <h2>待处理账单</h2>
-                        <div class="filter-line">
-                            <span>小区</span>
-                            <span>楼栋</span>
-                            <span>费用类型</span>
-                            <span>缴费状态</span>
-                            <button type="button">查询</button>
+            <div class="finance-workspace">
+                <main class="finance-main-column">
+                    <section class="panel finance-bill-panel">
+                        <div class="panel-header finance-panel-title">
+                            <h2>待处理账单</h2>
                         </div>
-                    </div>
 
-                    <div class="tab-row">
-                        <span class="active">全部 128</span>
-                        <span>物业费 86</span>
-                        <span>水费 18</span>
-                        <span>电费 15</span>
-                        <span>车位费 9</span>
-                    </div>
-
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>账单号</th>
-                                <th>业主</th>
-                                <th>房号</th>
-                                <th>费用类型</th>
-                                <th>应收金额</th>
-                                <th>缴费状态</th>
-                                <th>到期时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="row in financeBills" :key="row[0]">
-                                <td>{{ row[0] }}</td>
-                                <td>{{ row[1] }}</td>
-                                <td>{{ row[2] }}</td>
-                                <td>{{ row[3] }}</td>
-                                <td>{{ row[4] }}</td>
-                                <td><span class="status-pill" :class="statusClass(row[5])">{{ row[5] }}</span></td>
-                                <td>{{ row[6] }}</td>
-                                <td>
-                                    <button type="button" class="text-button" @click="goTo('/fee/list')">提醒</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
-
-                <aside class="side-stack">
-                    <section class="panel">
-                        <div class="panel-header">
-                            <h2>欠费提醒</h2>
-                            <button type="button" class="text-button">更多</button>
+                        <div class="finance-filter-grid">
+                            <label class="finance-filter-field">
+                                <span>小区</span>
+                                <button type="button" class="finance-select-like">全部</button>
+                            </label>
+                            <label class="finance-filter-field">
+                                <span>楼栋</span>
+                                <button type="button" class="finance-select-like">全部</button>
+                            </label>
+                            <label class="finance-filter-field">
+                                <span>费用类型</span>
+                                <button type="button" class="finance-select-like">全部</button>
+                            </label>
+                            <label class="finance-filter-field">
+                                <span>缴费状态</span>
+                                <button type="button" class="finance-select-like">全部</button>
+                            </label>
+                            <label class="finance-filter-field">
+                                <span>到期时间</span>
+                                <button type="button" class="finance-select-like">选择日期</button>
+                            </label>
+                            <button type="button" class="finance-query-button" @click="goTo('/fee/list')">
+                                查询
+                            </button>
                         </div>
-                        <ul class="amount-list">
-                            <li><span class="dot danger" />逾期 30 天以上 <strong>56 户</strong></li>
-                            <li><span class="dot warning" />逾期 15-30 天 <strong>38 户</strong></li>
-                            <li><span class="dot amber" />逾期 7-15 天 <strong>41 户</strong></li>
-                            <li><span class="dot info" />即将到期 <strong>72 户</strong></li>
-                        </ul>
+
+                        <div class="finance-table-wrap">
+                            <table class="data-table finance-table">
+                                <thead>
+                                    <tr>
+                                        <th>账单号</th>
+                                        <th>业主</th>
+                                        <th>房号</th>
+                                        <th>费用类型</th>
+                                        <th>应收金额</th>
+                                        <th>缴费状态</th>
+                                        <th>到期时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in financeBillRows" :key="row.id">
+                                        <td>{{ row.billNo }}</td>
+                                        <td>{{ row.owner }}</td>
+                                        <td>{{ row.room }}</td>
+                                        <td>{{ row.feeType }}</td>
+                                        <td>{{ row.amount }}</td>
+                                        <td>
+                                            <span class="status-pill" :class="statusClass(row.status)">
+                                                {{ row.status }}
+                                            </span>
+                                        </td>
+                                        <td>{{ row.deadline }}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                class="outline-mini"
+                                                @click="goTo('/fee/list?status=unpaid')"
+                                            >
+                                                提醒
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!financeBillRows.length">
+                                        <td class="table-empty" colspan="8">暂无待处理账单</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="finance-mini-pagination">
+                            <span>共 {{ financeBillRows.length }} 条</span>
+                            <button type="button" disabled>10条/页</button>
+                            <button type="button" disabled>‹</button>
+                            <button type="button" class="active">1</button>
+                            <button type="button" disabled>›</button>
+                            <span>前往</span>
+                            <button type="button" disabled>1</button>
+                            <span>页</span>
+                        </div>
                     </section>
 
-                    <section class="panel">
+                    <div class="finance-bottom-grid">
+                        <section class="panel finance-trend-panel">
+                            <div class="panel-header">
+                                <h2>收入趋势</h2>
+                                <strong>本月实收 {{ formatMoney(financeMonthPaidTotal) }}</strong>
+                            </div>
+                            <div class="finance-chart-legend">
+                                <span><i class="solid" />实收金额</span>
+                                <span><i class="dashed" />应收金额</span>
+                            </div>
+                            <div class="finance-trend-chart" :class="{ empty: !financeTrendHasData }">
+                                <div class="finance-y-axis">
+                                    <span>{{ formatMoney(financeTrendMax).replace('¥ ', '') }}</span>
+                                    <span>{{ formatMoney(financeTrendMax / 2).replace('¥ ', '') }}</span>
+                                    <span>0</span>
+                                </div>
+                                <div class="finance-trend-plot">
+                                    <div
+                                        v-for="(point, index) in financeTrendPoints"
+                                        :key="`finance-trend-${index}`"
+                                        class="finance-trend-point"
+                                    >
+                                        <span
+                                            class="finance-trend-bar due"
+                                            :style="{ height: `${point.due ? Math.max(6, (point.due / financeTrendMax) * 170) : 0}px` }"
+                                        />
+                                        <span
+                                            class="finance-trend-bar paid"
+                                            :style="{ height: `${point.paid ? Math.max(6, (point.paid / financeTrendMax) * 150) : 0}px` }"
+                                        />
+                                        <em>{{ point.label }}</em>
+                                    </div>
+                                    <p v-if="!financeTrendHasData" class="finance-empty">暂无本月收支趋势</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="panel finance-category-panel">
+                            <div class="panel-header">
+                                <h2>费用分类</h2>
+                                <span class="muted">本月</span>
+                            </div>
+                            <div v-if="financeCategoryRows.length" class="finance-category-list">
+                                <div v-for="row in financeCategoryRows" :key="row.label" class="finance-category-row">
+                                    <span>{{ row.label }}</span>
+                                    <div>
+                                        <i :style="{ width: `${row.width}%` }" />
+                                    </div>
+                                    <strong>{{ formatMoney(row.amount) }}</strong>
+                                    <em>{{ row.percent }}</em>
+                                </div>
+                            </div>
+                            <p v-else class="finance-empty">暂无本月费用分类</p>
+                        </section>
+                    </div>
+                </main>
+
+                <aside class="finance-side-column">
+                    <section class="panel finance-today-panel">
                         <div class="panel-header">
                             <h2>今日收款</h2>
-                            <button type="button" class="text-button">更多</button>
+                            <button type="button" class="text-button" @click="goTo('/fee/list?status=paid')">
+                                更多
+                            </button>
                         </div>
-                        <strong class="money-total">¥ 12,580.00</strong>
-                        <ul class="amount-list">
-                            <li>微信支付 <strong>¥ 5,230.00</strong></li>
-                            <li>支付宝 <strong>¥ 4,450.00</strong></li>
-                            <li>银行转账 <strong>¥ 2,900.00</strong></li>
-                            <li>现金 <strong>¥ 0.00</strong></li>
+                        <strong class="finance-today-total">{{ formatMoney(financeTodayCollectionTotal) }}</strong>
+                        <ul v-if="financePaymentMethods.length" class="finance-payment-list">
+                            <li v-for="method in financePaymentMethods" :key="method.label">
+                                <span class="finance-pay-icon" :class="`tone-${method.tone}`">
+                                    {{ method.badge }}
+                                </span>
+                                <span>{{ method.label }}</span>
+                                <strong>{{ formatMoney(method.amount) }}</strong>
+                                <em>{{ financePaymentPercent(method.amount) }}</em>
+                            </li>
                         </ul>
+                        <p v-else class="finance-empty">今日暂无收款</p>
+                    </section>
+
+                    <section class="panel finance-recent-panel">
+                        <div class="panel-header">
+                            <h2>近期缴费记录</h2>
+                            <button type="button" class="text-button" @click="goTo('/fee/list?status=paid')">
+                                更多
+                            </button>
+                        </div>
+                        <table v-if="financeRecentPayments.length" class="finance-recent-table">
+                            <thead>
+                                <tr>
+                                    <th>业主</th>
+                                    <th>房号</th>
+                                    <th>费用类型</th>
+                                    <th>金额</th>
+                                    <th>时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in financeRecentPayments" :key="row.id">
+                                    <td>{{ row.owner }}</td>
+                                    <td>{{ row.room }}</td>
+                                    <td>{{ row.feeType }}</td>
+                                    <td>{{ row.amount }}</td>
+                                    <td>{{ row.time }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else class="finance-empty">暂无缴费记录</p>
                     </section>
                 </aside>
-            </div>
-
-            <div class="bottom-grid three">
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>收入趋势</h2>
-                        <span class="muted">本月</span>
-                    </div>
-                    <FeeChart :dashboard-data="data" />
-                </section>
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>费用分类</h2>
-                    </div>
-                    <FeeChart :dashboard-data="data" />
-                </section>
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>近期缴费记录</h2>
-                    </div>
-                    <ul class="activity-list">
-                        <li v-for="row in financeBills.slice(0, 5)" :key="`paid-${row[0]}`">
-                            <span>收</span>
-                            <p>{{ row[1] }} {{ row[2] }} {{ row[3] }}</p>
-                            <em>{{ row[4] }}</em>
-                        </li>
-                    </ul>
-                </section>
             </div>
         </section>
 
@@ -2525,6 +2839,487 @@ onBeforeUnmount(() => {
     font-size: 28px;
     font-weight: 700;
     line-height: 36px;
+}
+
+.finance-workbench .workbench-heading p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
+}
+
+.finance-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 420px);
+    gap: 18px;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.finance-main-column,
+.finance-side-column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.finance-bill-panel,
+.finance-side-column .panel,
+.finance-trend-panel,
+.finance-category-panel {
+    padding: 22px;
+}
+
+.finance-panel-title {
+    margin-bottom: 16px;
+}
+
+.finance-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) 76px;
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 18px;
+    min-width: 0;
+}
+
+.finance-filter-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.finance-filter-field > span {
+    color: var(--text-subtle);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.finance-select-like {
+    display: flex;
+    width: 100%;
+    height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    border: 1px solid #dfe7f2;
+    border-radius: 6px;
+    color: var(--text-primary);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 22px;
+    text-align: left;
+}
+
+.finance-select-like::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 1px solid #94a3b8;
+    border-bottom: 1px solid #94a3b8;
+    transform: rotate(45deg) translateY(-2px);
+}
+
+.finance-query-button {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    border-radius: 6px;
+    color: #fff;
+    background: linear-gradient(135deg, #0f766e, #0b625b);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.finance-table-wrap {
+    overflow: hidden;
+    border: 1px solid #eef1f5;
+    border-radius: 6px;
+}
+
+.finance-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.finance-table th,
+.finance-table td {
+    padding: 14px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.finance-table th:nth-child(1),
+.finance-table td:nth-child(1) {
+    width: 18%;
+}
+
+.finance-table th:nth-child(2),
+.finance-table td:nth-child(2) {
+    width: 10%;
+}
+
+.finance-table th:nth-child(3),
+.finance-table td:nth-child(3) {
+    width: 15%;
+}
+
+.finance-table th:nth-child(4),
+.finance-table td:nth-child(4) {
+    width: 10%;
+}
+
+.finance-table th:nth-child(5),
+.finance-table td:nth-child(5) {
+    width: 11%;
+}
+
+.finance-table th:nth-child(6),
+.finance-table td:nth-child(6) {
+    width: 11%;
+}
+
+.finance-table th:nth-child(7),
+.finance-table td:nth-child(7) {
+    width: 14%;
+}
+
+.finance-table th:nth-child(8),
+.finance-table td:nth-child(8) {
+    width: 11%;
+}
+
+.finance-mini-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.finance-mini-pagination button {
+    min-width: 36px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid #dfe7f2;
+    border-radius: 6px;
+    color: var(--text-subtle);
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.finance-mini-pagination button.active {
+    color: #fff;
+    border-color: var(--brand-primary);
+    background: var(--brand-primary);
+}
+
+.finance-mini-pagination button:disabled {
+    opacity: 0.72;
+}
+
+.finance-today-total {
+    display: block;
+    margin: 12px 0 20px;
+    color: var(--text-heading);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 36px;
+}
+
+.finance-payment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.finance-payment-list li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto 56px;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    border-bottom: 1px solid #eef1f5;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+.finance-payment-list li:last-child {
+    border-bottom: 0;
+}
+
+.finance-payment-list strong,
+.finance-payment-list em {
+    color: var(--text-muted);
+    font-style: normal;
+    white-space: nowrap;
+}
+
+.finance-pay-icon {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.finance-pay-icon.tone-wechat {
+    background: #22c55e;
+}
+
+.finance-pay-icon.tone-alipay {
+    background: #1677ff;
+}
+
+.finance-pay-icon.tone-bank {
+    background: #0ea5e9;
+}
+
+.finance-pay-icon.tone-apple,
+.finance-pay-icon.tone-union,
+.finance-pay-icon.tone-other {
+    background: #f59f00;
+}
+
+.finance-recent-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.finance-recent-table th,
+.finance-recent-table td {
+    padding: 12px 6px;
+    border-bottom: 1px solid #eef1f5;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.finance-recent-table th:nth-child(1),
+.finance-recent-table td:nth-child(1) {
+    width: 18%;
+}
+
+.finance-recent-table th:nth-child(2),
+.finance-recent-table td:nth-child(2) {
+    width: 30%;
+}
+
+.finance-recent-table th:nth-child(3),
+.finance-recent-table td:nth-child(3) {
+    width: 18%;
+}
+
+.finance-recent-table th:nth-child(4),
+.finance-recent-table td:nth-child(4) {
+    width: 18%;
+}
+
+.finance-recent-table th:nth-child(5),
+.finance-recent-table td:nth-child(5) {
+    width: 16%;
+}
+
+.finance-recent-table th {
+    color: var(--text-subtle);
+    font-weight: 600;
+}
+
+.finance-bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;
+}
+
+.finance-trend-panel,
+.finance-category-panel {
+    min-height: 340px;
+}
+
+.finance-trend-panel .panel-header strong {
+    color: var(--brand-primary);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 24px;
+}
+
+.finance-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 26px;
+    margin-bottom: 14px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.finance-chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.finance-chart-legend i {
+    width: 30px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--brand-primary);
+}
+
+.finance-chart-legend .dashed {
+    border-top: 2px dashed rgba(15, 118, 110, 0.58);
+    background: transparent;
+}
+
+.finance-trend-chart {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    min-height: 246px;
+}
+
+.finance-y-axis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 10px 28px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 18px;
+    text-align: right;
+}
+
+.finance-trend-plot {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(31, minmax(10px, 1fr));
+    align-items: end;
+    gap: 2px;
+    padding: 8px 0 28px;
+    border-left: 1px solid #eef1f5;
+    border-bottom: 1px solid #eef1f5;
+    background:
+        linear-gradient(to bottom, rgba(226, 232, 240, 0.7) 1px, transparent 1px) 0 0 / 100% 33.33%;
+}
+
+.finance-trend-point {
+    position: relative;
+    display: flex;
+    height: 180px;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+}
+
+.finance-trend-bar {
+    display: block;
+    width: 5px;
+    border-radius: 999px 999px 0 0;
+    transition: height 0.2s ease;
+}
+
+.finance-trend-bar.due {
+    background: rgba(15, 118, 110, 0.26);
+}
+
+.finance-trend-bar.paid {
+    background: var(--brand-primary);
+}
+
+.finance-trend-point em {
+    position: absolute;
+    bottom: -26px;
+    left: 50%;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: normal;
+    line-height: 18px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.finance-trend-chart.empty .finance-trend-plot {
+    align-items: center;
+}
+
+.finance-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 18px;
+}
+
+.finance-category-row {
+    display: grid;
+    grid-template-columns: 64px minmax(70px, 1fr) minmax(88px, auto) 54px;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+    min-width: 0;
+}
+
+.finance-category-row > span {
+    font-weight: 600;
+}
+
+.finance-category-row > div {
+    height: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #eef4f8;
+}
+
+.finance-category-row i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #0f766e, #14b8a6);
+}
+
+.finance-category-row strong,
+.finance-category-row em {
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-style: normal;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.finance-empty {
+    margin: 18px 0 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 22px;
+    text-align: center;
 }
 
 .progress-line {
@@ -3781,6 +4576,8 @@ onBeforeUnmount(() => {
 
     .admin-grid,
     .finance-grid,
+    .finance-workspace,
+    .finance-bottom-grid,
     .repair-grid,
     .repair-workspace,
     .owner-grid,
@@ -3801,6 +4598,14 @@ onBeforeUnmount(() => {
 
     .owner-recent-item {
         grid-template-columns: 46px minmax(0, 1fr) minmax(110px, 150px) 76px 76px;
+    }
+
+    .finance-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .finance-query-button {
+        grid-column: span 2;
     }
 }
 
