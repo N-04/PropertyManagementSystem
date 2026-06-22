@@ -40,6 +40,18 @@ const feeTypeTextMap = feeTypeOptions.reduce<Record<string, string>>((map, item)
 }, {})
 
 const feeTypeText = (row: any) => feeTypeTextMap[row.fee_type] || row.fee_type_text || row.fee_type || '-'
+const normalizeFeeStatus = (status: string) => {
+    const statusMap: Record<string, string> = {
+        unpaid: '未缴费',
+        paid: '已缴费',
+        overdue: '已逾期',
+    }
+
+    return statusMap[status] || status || '-'
+}
+const isPaidFeeRow = (item: any) => {
+    return item.status === 'paid' || item.status === '已缴费' || item.status_text === '已缴费'
+}
 const validFeeTypes = feeTypeOptions.map((item) => item.value)
 const validStatuses = ['unpaid', 'paid', 'overdue']
 const isPaidRecordPage = computed(() => filterForm.value.status === 'paid')
@@ -112,8 +124,12 @@ const isEndDateDisabled = (date: Date) => {
 const loadData = async (shouldResetPage = true) => {
     const res = await getFeeList(buildQueryParams())
     const rows = res.data.data || []
+    const rawRows = Array.isArray(rows) ? rows : rows.results || []
 
-    tableData.value = Array.isArray(rows) ? rows : rows.results || []
+    // 缴费记录页面只展示已缴费订单；如果后端未按 query 严格过滤，前端再做一次兜底。
+    tableData.value = isPaidRecordPage.value
+        ? rawRows.filter(isPaidFeeRow)
+        : rawRows
 
     if (shouldResetPage) {
         resetPage()
@@ -189,7 +205,7 @@ watch(
 </script>
 
 <template>
-    <el-card>
+    <el-card class="page-card fee-page-card">
         <template #header>
             <div class="card-header">
                 <span>费用账单</span>
@@ -262,7 +278,7 @@ watch(
             </el-form-item>
         </el-form>
 
-        <el-table :data="pagedTableData" border>
+        <el-table class="comfortable-table" :data="pagedTableData" border>
             <el-table-column prop="id" label="ID" width="80" />
 
             <el-table-column prop="building_name" label="楼栋" />
@@ -289,13 +305,17 @@ watch(
 
             <el-table-column label="状态">
                 <template #default="scope">
-                    <el-tag type="danger" v-if="scope.row.status === 'unpaid'"> 未缴费 </el-tag>
-
-                    <el-tag type="warning" v-else-if="scope.row.status === 'overdue'">
-                        已逾期
+                    <el-tag type="danger" v-if="scope.row.status === 'unpaid'">
+                        {{ normalizeFeeStatus(scope.row.status) }}
                     </el-tag>
 
-                    <el-tag type="success" v-else> 已缴费 </el-tag>
+                    <el-tag type="warning" v-else-if="scope.row.status === 'overdue'">
+                        {{ normalizeFeeStatus(scope.row.status) }}
+                    </el-tag>
+
+                    <el-tag type="success" v-else>
+                        {{ normalizeFeeStatus(scope.row.status) }}
+                    </el-tag>
                 </template>
             </el-table-column>
 
@@ -345,15 +365,65 @@ watch(
 </template>
 
 <style scoped>
+.fee-page-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+:deep(.fee-page-card > .el-card__header) {
+    padding: 22px 24px;
+    border-bottom-color: var(--border-color);
+}
+
+:deep(.fee-page-card > .el-card__body) {
+    padding: 24px;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--text-heading);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 26px;
+}
+
 .fee-tip {
-    margin-bottom: 16px;
+    margin-bottom: 22px;
 }
 
 .filter-form {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-bottom: 16px;
+    align-items: center;
+    gap: 14px 18px;
+    margin-bottom: 24px;
+}
+
+:deep(.filter-form .el-form-item) {
+    margin: 0;
+    align-items: center;
+}
+
+:deep(.filter-form .el-form-item__label) {
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-subtle);
+    font-weight: 600;
+}
+
+:deep(.filter-form .el-input__wrapper),
+:deep(.filter-form .el-select__wrapper) {
+    min-height: 38px;
+    border-radius: 6px;
+}
+
+.filter-form .el-input {
+    width: 220px;
 }
 
 .date-filter {
@@ -370,5 +440,30 @@ watch(
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+}
+
+.comfortable-table {
+    width: 100%;
+}
+
+:deep(.comfortable-table .el-table__header th) {
+    height: 48px;
+    background: var(--surface-muted);
+    color: var(--text-subtle);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+:deep(.comfortable-table .el-table__body td) {
+    padding: 14px 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+
+:deep(.el-pagination) {
+    margin-top: 24px;
+    justify-content: center;
 }
 </style>

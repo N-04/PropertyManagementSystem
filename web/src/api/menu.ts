@@ -14,7 +14,7 @@ export function getMenuTree() {
     return request.get('/menu/tree/')
 }
 
-const adminMenuIds = ['admin', 'finance', 'repairer', 'owner', 'message', 'file', 'security']
+const adminMenuIds = ['admin', 'finance', 'repairer', 'owner', 'file', 'security']
 const adminMenuRule: RoleMenuRule = {
     allow: adminMenuIds,
 }
@@ -37,27 +37,27 @@ const roleMenuMap: Record<string, RoleMenuRule> = {
     },
 
     finance_staff: {
-        allow: ['finance', 'message'],
+        allow: ['finance'],
     },
 
     finance: {
-        allow: ['finance', 'message'],
+        allow: ['finance'],
     },
 
     customer_service: {
-        allow: ['message'],
+        allow: [],
     },
 
     service: {
-        allow: ['message'],
+        allow: [],
     },
 
     repair_staff: {
-        allow: ['repairer', 'message'],
+        allow: ['repairer'],
     },
 
     repair: {
-        allow: ['repairer', 'message'],
+        allow: ['repairer'],
     },
 
     owner: {
@@ -100,6 +100,7 @@ const hiddenMenuIds = [
     'rbac-menu',
     'rbac-api',
     'admin-super-monitor',
+    'message',
     'file-oss',
     'file-security',
 ]
@@ -214,7 +215,6 @@ const financeDisplayMenus = (): AppMenuItem[] => [
     leafMenu('finance-dashboard', '财务工作台', '/dashboard'),
     groupMenu('finance-fee', '费用管理', [
         leafMenu('finance-fee-list', '账单管理', '/fee/list'),
-        leafMenu('finance-fee-unpaid', '待缴账单', '/fee/list?status=unpaid'),
     ]),
     groupMenu('finance-record', '缴费记录', [
         leafMenu('finance-paid-record', '收款记录', '/fee/list?status=paid'),

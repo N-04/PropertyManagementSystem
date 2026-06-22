@@ -73,7 +73,6 @@ export const fallbackMenus: AppMenuItem[] = [
         item('finance-dashboard', '财务工作台', '/dashboard'),
         item('finance-fee', '费用管理', undefined, [
             item('finance-fee-list', '账单管理', '/fee/list'),
-            item('finance-fee-unpaid', '待缴账单', '/fee/list?status=unpaid'),
         ]),
         item('finance-record', '缴费记录', undefined, [
             item('finance-paid-record', '收款记录', '/fee/list?status=paid'),

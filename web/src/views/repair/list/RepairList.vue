@@ -10,6 +10,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import DataPagination from '@/components/common/DataPagination.vue'
 import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
+import { appendMessageFeedback } from '@/utils/messageCenterRows'
 
 const router = useRouter()
 const route = useRoute()
@@ -146,7 +147,7 @@ const emitEvaluationFeedback = (repair: RepairItem, score: number) => {
         created_at: new Date().toLocaleString('zh-CN', { hour12: false }),
     }
 
-    localStorage.setItem(REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY, JSON.stringify(feedback))
+    appendMessageFeedback(REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY, feedback)
     window.dispatchEvent(new CustomEvent(REPAIR_EVALUATION_FEEDBACK_EVENT, { detail: feedback }))
 }
 

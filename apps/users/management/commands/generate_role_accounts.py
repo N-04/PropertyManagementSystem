@@ -141,17 +141,6 @@ MENU_TREE = [
         ],
     ),
     menu_node(
-        "rbac",
-        "RBAC权限管理模块",
-        children=[
-            menu_node("rbac-user", "用户管理", "/user/list"),
-            menu_node("rbac-role", "角色管理", "/role/list"),
-            menu_node("rbac-permission", "权限管理", "/permission/list"),
-            menu_node("rbac-menu", "菜单管理", "/menu/list", hidden=True),
-            menu_node("rbac-api", "接口权限", "/permission/list", hidden=True),
-        ],
-    ),
-    menu_node(
         "admin",
         "管理员模块",
         children=[
@@ -223,15 +212,7 @@ MENU_TREE = [
                             menu_node("admin-property-order-stat", "工单统计", "/dashboard"),
                         ],
                     ),
-                    menu_node(
-                        "admin-property-notice",
-                        "公告管理",
-                        children=[
-                            menu_node("admin-property-community-notice", "小区公告", "/notice/list"),
-                            menu_node("admin-property-activity", "活动通知", "/notice/list"),
-                            menu_node("admin-property-push", "消息推送", "/notice/list"),
-                        ],
-                    ),
+                    menu_node("admin-property-notice", "公告通知", "/notice/list"),
                     menu_node(
                         "admin-property-complaint",
                         "投诉管理",
@@ -259,13 +240,12 @@ MENU_TREE = [
         "finance",
         "财务人员模块",
         children=[
-            menu_node("finance-fee", "物业费管理", "/fee/list"),
-            menu_node("finance-water", "水费管理", "/fee/list"),
-            menu_node("finance-electric", "电费管理", "/fee/list"),
-            menu_node("finance-parking", "停车费管理", "/fee/list"),
-            menu_node("finance-pay", "在线支付", "/fee/list"),
-            menu_node("finance-record", "缴费记录", "/fee/list"),
-            menu_node("finance-arrears", "欠费提醒", "/fee/list"),
+            menu_node("finance-fee", "物业费管理", "/fee/list?fee_type=property"),
+            menu_node("finance-water", "水费管理", "/fee/list?fee_type=water"),
+            menu_node("finance-electric", "电费管理", "/fee/list?fee_type=electric"),
+            menu_node("finance-parking", "车位费管理", "/fee/list?fee_type=parking"),
+            menu_node("finance-record", "缴费记录", "/fee/list?status=paid"),
+            menu_node("finance-arrears", "欠费提醒", "/fee/list?status=unpaid"),
             menu_node("finance-report", "财务报表", "/dashboard"),
             menu_node("finance-income", "收入统计", "/dashboard"),
         ],
@@ -274,21 +254,8 @@ MENU_TREE = [
         "repairer",
         "维修员模块",
         children=[
-            menu_node("repairer-home", "首页", "/dashboard"),
-            menu_node(
-                "repairer-work-order",
-                "工单管理",
-                "/repair/list",
-                [
-                    menu_node("repairer-pending", "待接单工单", "/repair/list"),
-                    menu_node("repairer-accepted", "已接单工单", "/repair/list"),
-                    menu_node("repairer-fixing", "维修中工单", "/repair/list"),
-                    menu_node("repairer-finished", "完成工单", "/repair/list"),
-                    menu_node("repairer-history", "工单历史", "/repair/list"),
-                ],
-            ),
-            menu_node("repairer-upload-image", "上传维修图片", "/repair/list"),
-            menu_node("repairer-upload-result", "上传维修结果", "/repair/list"),
+            menu_node("repairer-dashboard", "维修工作台", "/dashboard"),
+            menu_node("repairer-history", "工单历史", "/repair/list"),
             menu_node("repairer-profile", "个人中心", "/profile"),
         ],
     ),
@@ -296,27 +263,14 @@ MENU_TREE = [
         "owner",
         "业主模块",
         children=[
-            menu_node(
-                "owner-home",
-                "首页",
-                "/dashboard",
-                [
-                    menu_node("owner-home-notice", "公告通知", "/notice/list"),
-                    menu_node("owner-home-activity", "小区活动", "/notice/list"),
-                    menu_node("owner-home-fee", "代缴费用", "/fee/list"),
-                    menu_node("owner-home-message", "消息提醒", "/message/center"),
-                ],
-            ),
+            menu_node("owner-home", "业主首页", "/dashboard"),
             menu_node(
                 "owner-profile",
                 "个人中心",
                 "/profile",
                 children=[
-                    menu_node("owner-realname", "实名认证", "/profile"),
-                    menu_node("owner-phone", "手机号修改", "/profile"),
-                    menu_node("owner-id-card-mask", "身份证脱敏显示", "/profile"),
-                    menu_node("owner-password", "修改密码", "/profile"),
-                    menu_node("owner-avatar", "头像上传", "/profile"),
+                    menu_node("owner-profile-info", "个人资料", "/profile"),
+                    menu_node("owner-password", "修改密码", "/profile/password"),
                 ],
             ),
             menu_node(
@@ -335,9 +289,12 @@ MENU_TREE = [
                 "车位信息",
                 "/parking/list",
                 [
-                    menu_node("owner-parking-my", "我的车位", "/parking/list"),
-                    menu_node("owner-parking-record", "停车记录", "/parking/list"),
-                    menu_node("owner-parking-pay", "停车缴费", "/fee/list"),
+                    menu_node("owner-parking-my", "我的车位", "/parking/list?parking_view=owner"),
+                    menu_node(
+                        "owner-parking-purchase",
+                        "购买车位",
+                        "/parking/list?parking_view=owner&parking_mode=available",
+                    ),
                 ],
             ),
             menu_node(
@@ -345,12 +302,8 @@ MENU_TREE = [
                 "缴费中心",
                 "/fee/list",
                 [
-                    menu_node("owner-pay-property", "物业费缴纳", "/fee/list"),
-                    menu_node("owner-pay-water", "水费缴纳", "/fee/list"),
-                    menu_node("owner-pay-electric", "电费缴纳", "/fee/list"),
-                    menu_node("owner-pay-parking", "停车费缴纳", "/fee/list"),
-                    menu_node("owner-pay-online", "在线支付", "/fee/list"),
-                    menu_node("owner-pay-record", "缴费记录", "/fee/list"),
+                    menu_node("owner-pay-online", "在线缴费", "/fee/list"),
+                    menu_node("owner-pay-record", "缴费记录", "/fee/list?status=paid"),
                 ],
             ),
             menu_node(
@@ -375,34 +328,20 @@ MENU_TREE = [
                     menu_node("owner-complaint-history", "历史投诉", "/complaint/list"),
                 ],
             ),
-            menu_node(
-                "owner-message",
-                "消息中心",
-                "/message/center",
-                children=[
-                    menu_node("owner-message-system", "系统通知", "/message/center"),
-                    menu_node("owner-message-fee", "缴费提醒", "/message/center"),
-                    menu_node("owner-message-work-order", "工单通知", "/message/center"),
-                    menu_node("owner-message-activity", "活动通知", "/message/center"),
-                ],
-            ),
+            menu_node("owner-notice", "公告活动", "/notice/list"),
         ],
-    ),
-    menu_node(
-        "contact-service",
-        "联系客服",
-        "/contact/service",
     ),
     menu_node(
         "message",
         "消息通知模块",
+        hidden=True,
         children=[
-            menu_node("message-sms", "短信通知"),
-            menu_node("message-notice", "系统公告", "/notice/list"),
-            menu_node("message-work-order", "工单通知", "/repair/list"),
-            menu_node("message-fee", "缴费提醒", "/fee/list"),
-            menu_node("message-websocket", "WebSocket实时通知"),
-            menu_node("message-mail", "站内信通知", "/message/center"),
+            menu_node("message-sms", "短信通知", hidden=True),
+            menu_node("message-notice", "系统公告", "/notice/list", hidden=True),
+            menu_node("message-work-order", "工单通知", "/repair/list", hidden=True),
+            menu_node("message-fee", "缴费提醒", "/fee/list", hidden=True),
+            menu_node("message-websocket", "WebSocket实时通知", hidden=True),
+            menu_node("message-mail", "站内信通知", "/message/center", hidden=True),
         ],
     ),
     menu_node(
@@ -442,11 +381,7 @@ ROLE_DEFINITIONS = [
         "real_name": "物业管理员",
         "phone": "13800000001",
         "roots": [
-            "rbac-user",
-            "rbac-role",
-            "rbac-permission",
             "admin-property",
-            "contact-service",
         ],
         "is_staff": True,
     },
@@ -456,7 +391,7 @@ ROLE_DEFINITIONS = [
         "username": "finance_demo",
         "real_name": "财务人员",
         "phone": "13800000002",
-        "roots": ["finance", "message", "contact-service"],
+        "roots": ["finance"],
     },
     {
         "code": "repair_staff",
@@ -464,7 +399,7 @@ ROLE_DEFINITIONS = [
         "username": "repairer_demo",
         "real_name": "维修员",
         "phone": "13800000003",
-        "roots": ["repairer", "message", "contact-service"],
+        "roots": ["repairer"],
     },
     {
         "code": "owner",
@@ -472,7 +407,7 @@ ROLE_DEFINITIONS = [
         "username": "owner_demo",
         "real_name": "业主",
         "phone": "13800000004",
-        "roots": ["owner", "contact-service"],
+        "roots": ["owner"],
     },
     {
         "code": "customer_service",

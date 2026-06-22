@@ -13,6 +13,8 @@ import {
     Money,
     OfficeBuilding,
     Phone,
+    Search,
+    Filter,
     Tickets,
     Tools,
     User,
@@ -26,7 +28,8 @@ import { getFeeList } from '@/api/fee'
 import { getHouseList } from '@/api/house'
 import { getNoticeList } from '@/api/notice'
 import { getOwnerList } from '@/api/owner'
-import { getRepairList } from '@/api/repair'
+import { getRepairList, updateRepair } from '@/api/repair'
+import { ElMessage } from 'element-plus'
 import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
 import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
@@ -62,7 +65,6 @@ type MetricCard = {
 
 type AdminWorkOrderRow = [string, string, string, string, string, string, string, string]
 type FinanceBillRow = [string, string, string, string, string, string, string]
-type RepairOrderRow = [string, string, string, string, string, string, string]
 type SimplePairRow = [string, string]
 type ActivityRow = [string, string, string]
 type RepairPriorityKey = 'all' | 'urgent' | 'high' | 'normal' | 'low'
@@ -79,6 +81,7 @@ type RepairWorkbenchOrder = {
     time: string
     priorityKey: RepairPriorityKey
     raw: any
+    isFallback?: boolean
 }
 
 type OwnerTaskItem = {
@@ -145,8 +148,11 @@ const ownerCalendarCursor = ref(new Date())
 const repairerRepairs = ref<any[]>([])
 const repairCalendarCursor = ref(new Date())
 const selectedRepairPriority = ref<RepairPriorityKey>('all')
+const repairSearchKeyword = ref('')
 const repairResultDrawerVisible = ref(false)
 const selectedRepairResult = ref<any | null>(null)
+const repairResponseNow = ref(Date.now())
+let repairResponseTimer: ReturnType<typeof window.setInterval> | null = null
 
 const data = ref<DashboardData>({
     house_count: 0,
@@ -317,15 +323,6 @@ const financeBills: FinanceBillRow[] = [
     ['BILL20250519004', '赵女士', '3栋-1单元-0601', '物业费', '¥ 1,280.00', '部分缴费', '2025-05-31'],
     ['BILL20250519005', '刘先生', '2栋-1单元-1103', '车位费', '¥ 180.00', '部分缴费', '2025-05-31'],
     ['BILL20250519006', '陈女士', '5栋-2单元-1002', '水费', '¥ 68.00', '已逾期', '2025-05-20'],
-]
-
-const repairOrders: RepairOrderRow[] = [
-    ['WD20250519001', '李女士', '3栋-2单元-0602', '水管漏水', '紧急', '待接单', '今天 10:30'],
-    ['WD20250519002', '张先生', '1栋-1单元-1203', '电路故障', '高', '待接单', '今天 11:00'],
-    ['WD20250519003', '王女士', '2栋-1单元-0801', '灯具损坏', '中', '待接单', '今天 14:00'],
-    ['WD20250519004', '陈先生', '5栋-3单元-1103', '门禁故障', '中', '待接单', '今天 15:30'],
-    ['WD20250519005', '刘女士', '6栋-2单元-0702', '水龙头漏水', '低', '待接单', '明天 09:00'],
-    ['WD20250519006', '赵先生', '4栋-1单元-0901', '插座故障', '低', '待接单', '明天 10:30'],
 ]
 
 const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = [
@@ -515,38 +512,11 @@ const getRepairEventDate = (item: any) => {
     return item.appointment_time || item.expected_time || item.finish_time || item.created_at || item.time
 }
 
-const fallbackRepairWorkbenchOrders = computed<RepairWorkbenchOrder[]>(() => {
-    return repairOrders.map((row, index) => {
-        const raw = {
-            code: row[0],
-            owner: row[1],
-            room: row[2],
-            title: row[3],
-            status: index === 0 ? 'processing' : 'assigned',
-            time: row[6],
-        }
-        const priority = row[4]
-
-        return {
-            code: row[0],
-            owner: row[1],
-            room: row[2],
-            title: row[3],
-            priority,
-            status: row[5],
-            statusRaw: raw.status,
-            time: row[6],
-            priorityKey: getRepairPriorityKey(priority),
-            raw,
-        }
-    })
-})
-
 const repairWorkbenchOrders = computed<RepairWorkbenchOrder[]>(() => {
     const activeOrders = repairerRepairs.value.filter((item) => item.status !== 'finished')
 
     if (!activeOrders.length) {
-        return fallbackRepairWorkbenchOrders.value
+        return []
     }
 
     return activeOrders.map((item) => {
@@ -582,11 +552,95 @@ const repairPriorityTabs = computed(() => {
 })
 
 const filteredRepairWorkbenchOrders = computed(() => {
-    if (selectedRepairPriority.value === 'all') {
-        return repairWorkbenchOrders.value
+    const priorityRows = selectedRepairPriority.value === 'all'
+        ? repairWorkbenchOrders.value
+        : repairWorkbenchOrders.value.filter((row) => row.priorityKey === selectedRepairPriority.value)
+    const keyword = repairSearchKeyword.value.trim().toLowerCase()
+
+    if (!keyword) {
+        return priorityRows
     }
 
-    return repairWorkbenchOrders.value.filter((row) => row.priorityKey === selectedRepairPriority.value)
+    // 维修工作台搜索只在当前分类内过滤，避免切换分类后旧搜索词造成视觉误判。
+    return priorityRows.filter((row) => {
+        return [
+            row.code,
+            row.owner,
+            row.room,
+            row.title,
+            row.priority,
+            row.status,
+            row.time,
+        ].some((value) => String(value || '').toLowerCase().includes(keyword))
+    })
+})
+
+const repairResponseFallbackMinutes: Record<RepairPriorityKey, number> = {
+    all: 12,
+    urgent: 8,
+    high: 10,
+    normal: 12,
+    low: 15,
+}
+
+const estimatedRepairHours = computed(() => {
+    const hourMap: Record<RepairPriorityKey, number> = {
+        all: 1.5,
+        urgent: 2,
+        high: 1.8,
+        normal: 1.5,
+        low: 1.2,
+    }
+    const totalHours = filteredRepairWorkbenchOrders.value.reduce((sum, row) => {
+        return sum + (hourMap[row.priorityKey] || hourMap.normal)
+    }, 0)
+
+    return totalHours ? `${totalHours.toFixed(totalHours % 1 === 0 ? 0 : 1)}h` : '0h'
+})
+
+const formatRepairResponseDuration = (minutes: number) => {
+    if (minutes < 60) {
+        return `${minutes}分钟`
+    }
+
+    const hours = Math.floor(minutes / 60)
+    const restMinutes = minutes % 60
+
+    if (hours < 24) {
+        return restMinutes ? `${hours}小时${restMinutes}分钟` : `${hours}小时`
+    }
+
+    const days = Math.floor(hours / 24)
+    const restHours = hours % 24
+
+    return restHours ? `${days}天${restHours}小时` : `${days}天`
+}
+
+const getRepairResponseMinutes = (row: RepairWorkbenchOrder) => {
+    // 后端暂未提供独立响应时长字段，工作台按工单创建时间和当前时钟即时计算。
+    const startDate = parseDateFromValue(row.raw?.created_at)
+
+    if (!startDate) {
+        return repairResponseFallbackMinutes[row.priorityKey] || repairResponseFallbackMinutes.normal
+    }
+
+    const diffMinutes = Math.ceil((repairResponseNow.value - startDate.getTime()) / 60000)
+
+    return Math.max(diffMinutes, 0)
+}
+
+const averageRepairResponseText = computed(() => {
+    const rows = filteredRepairWorkbenchOrders.value
+
+    if (!rows.length) {
+        return '-'
+    }
+
+    const averageMinutes = Math.round(
+        rows.reduce((sum, row) => sum + getRepairResponseMinutes(row), 0) / rows.length
+    )
+
+    return formatRepairResponseDuration(averageMinutes)
 })
 
 const currentVisibleRepairOrder = computed(() => {
@@ -683,6 +737,10 @@ const shiftRepairCalendarMonth = (offset: number) => {
     )
 }
 
+const selectRepairPriority = (priority: RepairPriorityKey) => {
+    selectedRepairPriority.value = priority
+}
+
 const goToRepairCalendarDay = (day: CalendarDay) => {
     const firstEvent = repairCalendarEventMap.value[day.dateKey]?.[0]
 
@@ -694,6 +752,26 @@ const goToRepairCalendarDay = (day: CalendarDay) => {
 const openRepairResultDrawer = (row?: RepairWorkbenchOrder | null) => {
     selectedRepairResult.value = row?.raw || currentVisibleRepairOrder.value?.raw || null
     repairResultDrawerVisible.value = true
+}
+
+const goRepairDetail = (row: RepairWorkbenchOrder) => {
+    const repairId = row.raw?.id || row.id
+
+    goTo(repairId ? `/repair/detail/${repairId}` : '/repair/list')
+}
+
+const acceptRepairOrder = async (row: RepairWorkbenchOrder) => {
+    const repairId = row.raw?.id || row.id
+
+    if (!repairId) {
+        ElMessage.warning('暂无可接的真实工单，请刷新后再操作')
+        await loadRepairerHomeData()
+        return
+    }
+
+    await updateRepair(repairId, { status: 'accepted' })
+    ElMessage.success('接单成功')
+    await loadRepairerHomeData()
 }
 
 const isUnpaidFee = (item: any) => ['unpaid', 'overdue'].includes(item.status)
@@ -1079,16 +1157,40 @@ const loadData = async () => {
 const refreshDashboardAuthState = () => {
     username.value = getStoredUsername() || '用户'
     role.value = getStoredRole()
+
+    if (!isRepairRole.value) {
+        repairResultDrawerVisible.value = false
+        selectedRepairResult.value = null
+    }
+
     loadData()
+}
+
+const startRepairResponseClock = () => {
+    repairResponseNow.value = Date.now()
+
+    if (repairResponseTimer) {
+        window.clearInterval(repairResponseTimer)
+    }
+
+    repairResponseTimer = window.setInterval(() => {
+        repairResponseNow.value = Date.now()
+    }, 30000)
 }
 
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshDashboardAuthState)
+    startRepairResponseClock()
     loadData()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshDashboardAuthState)
+
+    if (repairResponseTimer) {
+        window.clearInterval(repairResponseTimer)
+        repairResponseTimer = null
+    }
 })
 </script>
 
@@ -1433,13 +1535,13 @@ onBeforeUnmount(() => {
                             </div>
                             <div>
                                 <span class="repair-summary-icon"><el-icon><Tickets /></el-icon></span>
-                                <p>待处理</p>
-                                <strong>{{ filteredRepairWorkbenchOrders.length }} 单</strong>
+                                <p>预计工时</p>
+                                <strong>{{ estimatedRepairHours }}</strong>
                             </div>
                             <div>
                                 <span class="repair-summary-icon"><el-icon><Tools /></el-icon></span>
                                 <p>平均响应</p>
-                                <strong>12分钟</strong>
+                                <strong>{{ averageRepairResponseText }}</strong>
                             </div>
                         </div>
                     </section>
@@ -1447,9 +1549,23 @@ onBeforeUnmount(() => {
                     <section class="panel main-panel repair-order-pool">
                         <div class="panel-header">
                             <h2>待接工单池</h2>
-                            <div class="filter-line">
-                                <span>工单号 / 业主 / 房号</span>
-                                <button type="button" @click="loadRepairerHomeData">刷新</button>
+                            <div class="repair-pool-tools">
+                                <label class="repair-pool-search">
+                                    <el-icon><Search /></el-icon>
+                                    <input
+                                        v-model="repairSearchKeyword"
+                                        type="search"
+                                        placeholder="工单号 / 业主 / 房号"
+                                    >
+                                </label>
+                                <button
+                                    type="button"
+                                    class="repair-filter-button"
+                                    aria-label="清空工单筛选"
+                                    @click="repairSearchKeyword = ''"
+                                >
+                                    <el-icon><Filter /></el-icon>
+                                </button>
                             </div>
                         </div>
 
@@ -1459,7 +1575,7 @@ onBeforeUnmount(() => {
                                 :key="item.key"
                                 type="button"
                                 :class="{ active: selectedRepairPriority === item.key }"
-                                @click="selectedRepairPriority = item.key"
+                                @click="selectRepairPriority(item.key)"
                             >
                                 {{ item.label }} {{ item.count }}
                             </button>
@@ -1486,22 +1602,32 @@ onBeforeUnmount(() => {
                                     <td><span class="status-pill" :class="statusClass(row.priority)">{{ row.priority }}</span></td>
                                     <td>{{ row.time }}</td>
                                     <td>
-                                        <button
-                                            v-if="row.statusRaw === 'processing'"
-                                            type="button"
-                                            class="outline-mini"
-                                            @click="openRepairResultDrawer(row)"
-                                        >
-                                            上传结果
-                                        </button>
-                                        <button
-                                            v-else
-                                            type="button"
-                                            class="solid-mini"
-                                            @click="goTo('/repair/list')"
-                                        >
-                                            {{ row.statusRaw === 'assigned' ? '接单' : '查看' }}
-                                        </button>
+                                        <div class="repair-table-actions">
+                                            <button
+                                                v-if="row.statusRaw === 'assigned' && !row.isFallback"
+                                                type="button"
+                                                class="solid-mini"
+                                                @click="acceptRepairOrder(row)"
+                                            >
+                                                接单
+                                            </button>
+                                            <button
+                                                v-else-if="row.statusRaw === 'assigned'"
+                                                type="button"
+                                                class="outline-mini"
+                                                disabled
+                                            >
+                                                待同步
+                                            </button>
+                                            <button
+                                                v-if="!row.isFallback"
+                                                type="button"
+                                                class="outline-mini"
+                                                @click="goRepairDetail(row)"
+                                            >
+                                                查看
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 <tr v-if="filteredRepairWorkbenchOrders.length === 0">
@@ -1524,7 +1650,10 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div class="owner-calendar-body repair-calendar-body">
+                        <div
+                            class="owner-calendar-body repair-calendar-body"
+                            :class="{ 'no-events': visibleRepairCalendarEvents.length === 0 }"
+                        >
                             <div class="owner-calendar-grid">
                                 <span>一</span>
                                 <span>二</span>
@@ -1547,7 +1676,7 @@ onBeforeUnmount(() => {
                                 </button>
                             </div>
 
-                            <div class="owner-calendar-events">
+                            <div v-if="visibleRepairCalendarEvents.length" class="owner-calendar-events">
                                 <button
                                     v-for="item in visibleRepairCalendarEvents"
                                     :key="item.id"
@@ -1573,8 +1702,8 @@ onBeforeUnmount(() => {
                             <h2>今日路线</h2>
                             <button type="button" class="text-button" @click="loadRepairerHomeData">刷新</button>
                         </div>
-                        <ul class="repair-route-list">
-                            <li v-for="(row, index) in repairWorkbenchOrders.slice(0, 4)" :key="`route-${row.code}`">
+                        <ul v-if="repairWorkbenchOrders.length" class="repair-route-list">
+                            <li v-for="row in repairWorkbenchOrders.slice(0, 4)" :key="`route-${row.code}`">
                                 <span class="route-dot" :class="{ danger: row.priorityKey === 'urgent' }" />
                                 <time>{{ row.time.replace('今天 ', '') }}</time>
                                 <div>
@@ -1583,17 +1712,34 @@ onBeforeUnmount(() => {
                                     <p>{{ row.room }} ｜ {{ row.owner }}</p>
                                 </div>
                                 <button
-                                    v-if="index === 0 || row.statusRaw === 'processing'"
+                                    v-if="row.statusRaw === 'processing'"
                                     type="button"
                                     class="outline-mini"
                                     @click="openRepairResultDrawer(row)"
                                 >
                                     上传结果
                                 </button>
+                                <button
+                                    v-else-if="row.priorityKey === 'urgent'"
+                                    type="button"
+                                    class="outline-mini contact-owner"
+                                    @click="goRepairDetail(row)"
+                                >
+                                    <el-icon><Phone /></el-icon>
+                                    联系业主
+                                </button>
                                 <span v-else class="status-pill" :class="statusClass(row.priority)">{{ row.priority }}</span>
                             </li>
                         </ul>
-                        <button type="button" class="route-more" @click="goTo('/repair/list')">查看全部路线</button>
+                        <div v-else class="owner-empty-state compact">暂无今日路线</div>
+                        <button
+                            v-if="repairWorkbenchOrders.length"
+                            type="button"
+                            class="route-more"
+                            @click="goTo('/repair/list')"
+                        >
+                            查看全部路线
+                        </button>
                     </section>
 
                     <section class="panel repair-tools-panel">
@@ -1680,7 +1826,10 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div class="owner-calendar-body">
+                        <div
+                            class="owner-calendar-body"
+                            :class="{ 'no-events': visibleOwnerCalendarEvents.length === 0 }"
+                        >
                             <div class="owner-calendar-grid">
                                 <span>一</span>
                                 <span>二</span>
@@ -1703,7 +1852,7 @@ onBeforeUnmount(() => {
                                 </button>
                             </div>
 
-                            <div class="owner-calendar-events">
+                            <div v-if="visibleOwnerCalendarEvents.length" class="owner-calendar-events">
                                 <button
                                     v-for="item in visibleOwnerCalendarEvents"
                                     :key="item.id"
@@ -1780,6 +1929,7 @@ onBeforeUnmount(() => {
         </section>
 
         <RepairResultDrawer
+            v-if="isRepairRole"
             v-model="repairResultDrawerVisible"
             :repair="selectedRepairResult"
             @submitted="handleRepairResultSubmitted"
@@ -2454,13 +2604,13 @@ onBeforeUnmount(() => {
 }
 
 .repair-workbench {
-    gap: 14px;
+    gap: 16px;
 }
 
 .repair-workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 16px;
+    grid-template-columns: minmax(660px, 1fr) minmax(340px, 390px);
+    gap: 18px;
     align-items: start;
 }
 
@@ -2468,12 +2618,13 @@ onBeforeUnmount(() => {
 .repair-side-stack {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
     min-width: 0;
 }
 
 .repair-summary-panel {
-    min-height: 118px;
+    min-height: 128px;
+    padding: 20px 26px;
 }
 
 .repair-summary-grid {
@@ -2484,11 +2635,23 @@ onBeforeUnmount(() => {
 }
 
 .repair-summary-grid > div {
+    position: relative;
     display: grid;
     grid-template-columns: 52px minmax(0, 1fr);
     column-gap: 14px;
     align-items: center;
     min-width: 0;
+    padding-right: 18px;
+}
+
+.repair-summary-grid > div:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 0;
+    bottom: 8px;
+    width: 1px;
+    background: #e6ebf2;
 }
 
 .repair-summary-icon {
@@ -2521,16 +2684,171 @@ onBeforeUnmount(() => {
     line-height: 32px;
 }
 
-.repair-order-pool .filter-line span {
-    min-width: 190px;
+.repair-order-pool {
+    padding: 20px;
+}
+
+.repair-order-pool .panel-header {
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.repair-pool-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.repair-pool-search {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 210px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #dfe5ef;
+    border-radius: 6px;
+    color: var(--text-muted);
+    background: #fff;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.repair-pool-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    color: var(--text-primary);
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.repair-pool-search input::placeholder {
+    color: #98a2b3;
+}
+
+.repair-pool-search input::-webkit-search-cancel-button {
+    appearance: none;
+}
+
+.repair-pool-search > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repair-pool-search .el-icon {
+    flex: 0 0 auto;
+    color: #98a2b3;
+}
+
+.repair-filter-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #dfe5ef;
+    border-radius: 6px;
+    color: var(--text-subtle);
+    background: #fff;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.repair-filter-button:hover,
+.repair-filter-button:focus-visible {
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    background: var(--brand-primary-subtle);
+    outline: none;
+}
+
+.repair-order-pool .tab-row button {
+    position: relative;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.repair-order-pool .data-table {
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.repair-order-pool .data-table th,
+.repair-order-pool .data-table td {
+    padding: 13px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.repair-order-pool .data-table th:nth-child(1),
+.repair-order-pool .data-table td:nth-child(1) {
+    width: 17%;
+}
+
+.repair-order-pool .data-table th:nth-child(2),
+.repair-order-pool .data-table td:nth-child(2) {
+    width: 10%;
+}
+
+.repair-order-pool .data-table th:nth-child(3),
+.repair-order-pool .data-table td:nth-child(3) {
+    width: 16%;
+}
+
+.repair-order-pool .data-table th:nth-child(4),
+.repair-order-pool .data-table td:nth-child(4) {
+    width: 16%;
+}
+
+.repair-order-pool .data-table th:nth-child(5),
+.repair-order-pool .data-table td:nth-child(5) {
+    width: 12%;
+}
+
+.repair-order-pool .data-table th:nth-child(6),
+.repair-order-pool .data-table td:nth-child(6) {
+    width: 13%;
+}
+
+.repair-order-pool .data-table th:nth-child(7),
+.repair-order-pool .data-table td:nth-child(7) {
+    width: 16%;
+    overflow: visible;
+}
+
+.repair-table-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.repair-table-actions .solid-mini,
+.repair-table-actions .outline-mini {
+    min-width: 46px;
+    padding: 0 10px;
 }
 
 .repair-calendar-panel {
-    padding-bottom: 18px;
+    padding: 18px 20px 20px;
 }
 
 .repair-calendar-body {
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 210px;
+}
+
+.repair-route-panel {
+    padding: 20px;
+}
+
+.repair-tools-panel {
+    padding: 18px 20px;
 }
 
 .repair-route-list,
@@ -2559,11 +2877,11 @@ onBeforeUnmount(() => {
 .repair-route-list li {
     position: relative;
     display: grid;
-    grid-template-columns: 16px 52px minmax(0, 1fr) auto;
-    gap: 10px;
+    grid-template-columns: 16px 56px minmax(0, 1fr) 78px;
+    gap: 10px 12px;
     align-items: start;
-    min-height: 86px;
-    padding: 0 0 18px;
+    min-height: 92px;
+    padding: 0 0 20px;
     border-bottom: 1px solid #eef1f5;
 }
 
@@ -2616,6 +2934,24 @@ onBeforeUnmount(() => {
     white-space: nowrap;
     font-size: 13px;
     line-height: 20px;
+}
+
+.repair-route-list .outline-mini,
+.repair-route-list .status-pill {
+    align-self: center;
+    justify-self: end;
+}
+
+.repair-route-list .outline-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 78px;
+}
+
+.repair-route-list .contact-owner {
+    width: 98px;
+    gap: 4px;
 }
 
 .route-more {
@@ -2873,17 +3209,22 @@ onBeforeUnmount(() => {
 
 .owner-calendar-header > div:first-child,
 .owner-calendar-month {
-    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
+}
+
+.owner-calendar-header > div:first-child {
+    display: inline-flex;
 }
 
 .owner-calendar-month {
     position: absolute;
     top: 50%;
     left: 50%;
-    min-width: 180px;
+    display: grid;
+    grid-template-columns: 32px 124px 32px;
+    min-width: 208px;
     transform: translate(-50%, -50%);
 }
 
@@ -2901,7 +3242,6 @@ onBeforeUnmount(() => {
 }
 
 .owner-calendar-month strong {
-    min-width: 96px;
     text-align: center;
     color: var(--text-primary);
     font-size: 15px;
@@ -2929,6 +3269,10 @@ onBeforeUnmount(() => {
     grid-template-columns: minmax(0, 1fr) 220px;
     gap: 20px;
     align-items: stretch;
+}
+
+.owner-calendar-body.no-events {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .owner-calendar-grid {
@@ -3438,6 +3782,7 @@ onBeforeUnmount(() => {
     .admin-grid,
     .finance-grid,
     .repair-grid,
+    .repair-workspace,
     .owner-grid,
     .owner-home-grid,
     .bottom-grid.three,
@@ -3482,6 +3827,19 @@ onBeforeUnmount(() => {
 
     .owner-calendar-body {
         grid-template-columns: 1fr;
+    }
+
+    .repair-summary-grid,
+    .repair-calendar-body {
+        grid-template-columns: 1fr;
+    }
+
+    .repair-summary-grid > div {
+        padding-right: 0;
+    }
+
+    .repair-summary-grid > div:not(:last-child)::after {
+        display: none;
     }
 
     .owner-calendar-events {

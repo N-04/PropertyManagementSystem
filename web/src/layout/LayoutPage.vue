@@ -24,7 +24,12 @@ import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
-import { loadMessageCenterRows, type MessageRow } from '@/utils/messageCenterRows'
+import {
+    loadMessageCenterRows,
+    MESSAGE_FEEDBACK_EVENTS,
+    MESSAGE_FEEDBACK_STORAGE_KEYS,
+    type MessageRow,
+} from '@/utils/messageCenterRows'
 import {
     AUTH_STATE_CHANGED_EVENT,
     clearAuthState,
@@ -48,6 +53,8 @@ const selectedThirdId = ref('')
 const selectedFunctionTitle = ref('')
 const expandedFirstIds = ref<string[]>([])
 const messageCenterRows = ref<MessageRow[]>([])
+let menuLoadRequestId = 0
+let messageLoadRequestId = 0
 
 const roleTitleMap: Record<string, string> = {
     admin: '物业管理员',
@@ -167,19 +174,6 @@ const childrenOf = (menu?: AppMenuItem) => {
 const menuTargetPath = (menu?: AppMenuItem) => {
     if (!menu?.path) {
         return ''
-    }
-
-    const repairStatusMap: Record<string, string> = {
-        'repairer-pending': 'assigned',
-        'repairer-accepted': 'accepted',
-        'repairer-fixing': 'processing',
-        'repairer-finished': 'finished',
-        'repairer-history': '',
-    }
-    const repairStatus = repairStatusMap[menuKey(menu)]
-
-    if (repairStatus !== undefined) {
-        return repairStatus ? `/repair/list?status=${repairStatus}` : '/repair/list'
     }
 
     return menu.path
@@ -355,19 +349,39 @@ const handleFunctionSelect = (id: string) => {
 }
 
 const loadMenus = async () => {
-    const currentRole = role.value
+    const requestId = ++menuLoadRequestId
+    const requestRole = role.value
+    const requestUsername = username.value
+    menuLoaded.value = false
+    menuItems.value = []
+
+    const acceptCurrentMenuRequest = () => {
+        return (
+            requestId === menuLoadRequestId
+            && requestRole === role.value
+            && requestUsername === username.value
+        )
+    }
 
     try {
         const res = await getUserMenus()
 
+        if (!acceptCurrentMenuRequest()) {
+            return
+        }
+
         if (res.data.code === 200 && res.data.data?.length) {
-            menuItems.value = buildDisplayMenusByRole(visibleMenus(res.data.data), currentRole)
+            menuItems.value = buildDisplayMenusByRole(visibleMenus(res.data.data), requestRole)
             return
         }
 
         // 后端菜单还没配置时，使用本地菜单，并根据角色过滤
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), currentRole)
+        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), requestRole)
     } catch (error: any) {
+        if (!acceptCurrentMenuRequest()) {
+            return
+        }
+
         const status = error?.response?.status
 
         if (status === 401 || status === 403) {
@@ -376,15 +390,42 @@ const loadMenus = async () => {
         }
 
         // 后端菜单接口异常时，使用本地兜底菜单
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), currentRole)
+        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), requestRole)
     } finally {
+        if (!acceptCurrentMenuRequest()) {
+            return
+        }
+
         menuLoaded.value = true
         syncSelectionByCurrentRoute()
     }
 }
 
 const loadNotificationMessages = async () => {
-    messageCenterRows.value = await loadMessageCenterRows(role.value)
+    const requestId = ++messageLoadRequestId
+    const requestRole = role.value
+    const requestUsername = username.value
+    const rows = await loadMessageCenterRows(requestRole)
+
+    if (
+        requestId !== messageLoadRequestId
+        || requestRole !== role.value
+        || requestUsername !== username.value
+    ) {
+        return
+    }
+
+    messageCenterRows.value = rows
+}
+
+const handleMessageFeedbackChanged = () => {
+    loadNotificationMessages()
+}
+
+const handleMessageFeedbackStorage = (event: StorageEvent) => {
+    if (MESSAGE_FEEDBACK_STORAGE_KEYS.includes(event.key || '')) {
+        loadNotificationMessages()
+    }
 }
 
 const reloadMenusForCurrentRole = () => {
@@ -394,6 +435,7 @@ const reloadMenusForCurrentRole = () => {
     selectedFunctionTitle.value = ''
     expandedFirstIds.value = []
     menuLoaded.value = false
+    menuItems.value = []
     loadMenus()
 }
 
@@ -401,11 +443,15 @@ const refreshLayoutAuthState = () => {
     const nextUsername = getStoredUsername()
     const nextRole = getStoredRole()
     const roleChanged = nextRole !== role.value
+    const usernameChanged = nextUsername !== username.value
+    const authIdentityChanged = roleChanged || usernameChanged
 
     username.value = nextUsername
     role.value = nextRole
 
-    if (roleChanged) {
+    if (authIdentityChanged) {
+        // 复制标签、切换账号或同角色换用户时，先清空旧菜单和旧消息，避免短暂显示上一会话内容。
+        messageCenterRows.value = []
         reloadMenusForCurrentRole()
         loadNotificationMessages()
     }
@@ -436,12 +482,20 @@ const goRoleMessages = () => {
 
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
+    window.addEventListener('storage', handleMessageFeedbackStorage)
+    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
+        window.addEventListener(eventName, handleMessageFeedbackChanged)
+    })
     loadMenus()
     loadNotificationMessages()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
+    window.removeEventListener('storage', handleMessageFeedbackStorage)
+    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
+        window.removeEventListener(eventName, handleMessageFeedbackChanged)
+    })
 })
 
 watch(
@@ -793,10 +847,10 @@ watch(
 .layout-header {
     height: 66px;
     display: grid;
-    grid-template-columns: 220px minmax(280px, 560px) max-content;
+    grid-template-columns: minmax(170px, 220px) minmax(220px, 1fr) max-content;
     align-items: center;
-    column-gap: 28px;
-    padding: 0 28px;
+    column-gap: clamp(14px, 2vw, 28px);
+    padding: 0 clamp(18px, 2vw, 28px);
     background: var(--surface-card);
     border-bottom: 1px solid var(--border-color);
 }
@@ -862,10 +916,12 @@ watch(
 .header-user {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: clamp(10px, 1.4vw, 14px);
     justify-self: end;
     min-width: max-content;
     white-space: nowrap;
+    position: relative;
+    z-index: 1;
 }
 
 .notification-button {

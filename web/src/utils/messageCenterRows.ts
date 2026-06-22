@@ -14,6 +14,22 @@ export type MessageRow = {
     path: string
 }
 
+export const MESSAGE_FEEDBACK_STORAGE_KEYS = [
+    'parkingPurchaseFeedback',
+    'repairEvaluationFeedback',
+    'serviceRatingFeedback',
+]
+
+export const MESSAGE_FEEDBACK_EVENTS = [
+    'property-management-parking-feedback',
+    'property-management-repair-evaluation-feedback',
+    'property-management-service-rating-feedback',
+]
+
+const adminRoles = ['admin', 'super_admin', 'property_admin']
+const repairRoles = ['repair_staff', 'repairer', 'repair']
+const customerServiceRoles = ['customer_service', 'service']
+
 const extractList = (data: any) => {
     if (Array.isArray(data)) {
         return data
@@ -101,8 +117,113 @@ const complaintStatusText = (status: string) => {
     return status === 'processing' ? '处理中' : '待处理'
 }
 
-export const loadMessageCenterRows = async (role: string) => {
+const readFeedbackItems = (storageKey: string) => {
+    if (typeof window === 'undefined') {
+        return []
+    }
+
+    try {
+        const raw = window.localStorage.getItem(storageKey)
+        const parsed = raw ? JSON.parse(raw) : null
+
+        if (!parsed) {
+            return []
+        }
+
+        return Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+        return []
+    }
+}
+
+export const appendMessageFeedback = (storageKey: string, feedback: any) => {
+    if (typeof window === 'undefined') {
+        return
+    }
+
+    // 本地反馈只作为跨标签即时提醒，最多保留近期 50 条，避免长期使用后消息中心被旧缓存撑大。
+    const history = readFeedbackItems(storageKey)
+        .filter((item: any) => item.id !== feedback.id)
+        .slice(0, 49)
+
+    window.localStorage.setItem(storageKey, JSON.stringify([feedback, ...history]))
+}
+
+const roleMatchesTarget = (role: string, targetRole?: string) => {
+    if (adminRoles.includes(role)) {
+        return true
+    }
+
+    if (!targetRole) {
+        return customerServiceRoles.includes(role)
+    }
+
+    const roleAliases: Record<string, string[]> = {
+        customer_service: customerServiceRoles,
+        service: customerServiceRoles,
+        finance_staff: ['finance_staff', 'finance'],
+        finance: ['finance_staff', 'finance'],
+        repair_staff: repairRoles,
+        repairer: repairRoles,
+        repair: repairRoles,
+        property_admin: adminRoles,
+        admin: adminRoles,
+        super_admin: adminRoles,
+    }
+
+    return (roleAliases[targetRole] || [targetRole]).includes(role)
+}
+
+const feedbackRows = (role: string): MessageRow[] => {
     const rows: MessageRow[] = []
+
+    if (adminRoles.includes(role)) {
+        readFeedbackItems('parkingPurchaseFeedback').forEach((item: any, index) => {
+            rows.push({
+                id: `parking-feedback-${item.id || index}`,
+                type: '业主 → 物业管理员',
+                title: '车位购买反馈',
+                content: item.message || `车位 ${item.parking_no || ''} 已完成购买/绑定`,
+                status: '待跟进',
+                created_at: item.created_at || '',
+                path: '/parking/list?parking_view=owner',
+            })
+        })
+    }
+
+    if (adminRoles.includes(role) || repairRoles.includes(role)) {
+        readFeedbackItems('repairEvaluationFeedback').forEach((item: any, index) => {
+            rows.push({
+                id: `repair-evaluation-feedback-${item.id || index}`,
+                type: '业主 → 维修员',
+                title: item.title ? `工单评价：${item.title}` : '工单评价反馈',
+                content: item.message || `用户已提交 ${item.score || '-'} 分维修评价`,
+                status: '已评价',
+                created_at: item.created_at || '',
+                path: '/repair/list',
+            })
+        })
+    }
+
+    readFeedbackItems('serviceRatingFeedback')
+        .filter((item: any) => roleMatchesTarget(role, item.target_role))
+        .forEach((item: any, index) => {
+            rows.push({
+                id: `service-rating-feedback-${item.id || index}`,
+                type: `业主 → ${item.target_role_text || '相关人员'}`,
+                title: item.title ? `服务评分：${item.title}` : '服务评分反馈',
+                content: item.message || `用户已提交 ${item.score || '-'} 分服务评分`,
+                status: '已评价',
+                created_at: item.created_at || '',
+                path: customerServiceRoles.includes(role) ? '/service/chat' : '/message/center',
+            })
+        })
+
+    return rows
+}
+
+export const loadMessageCenterRows = async (role: string) => {
+    const rows: MessageRow[] = feedbackRows(role)
 
     try {
         const res = await getChatConversationList()

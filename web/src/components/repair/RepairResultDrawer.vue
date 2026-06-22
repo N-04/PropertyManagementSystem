@@ -106,7 +106,7 @@ const submitResult = async () => {
         v-model="visible"
         custom-class="repair-result-drawer"
         direction="rtl"
-        size="420px"
+        size="400px"
         :with-header="false"
     >
         <div class="drawer-shell">
@@ -267,12 +267,25 @@ const submitResult = async () => {
 }
 
 .drawer-step {
+    position: relative;
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr);
     gap: 14px;
 }
 
+.drawer-step:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    top: 34px;
+    bottom: -18px;
+    left: 14px;
+    width: 1px;
+    background: #dbe5ef;
+}
+
 .step-index {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -294,17 +307,34 @@ const submitResult = async () => {
     display: grid;
     place-items: center;
     gap: 10px;
-    min-height: 150px;
+    min-height: 190px;
     padding: 18px;
     border: 1px dashed #cbd5e1;
     border-radius: 8px;
-    background: var(--brand-primary-subtle);
+    background: #fff;
     text-align: center;
 }
 
 .upload-zone > .el-icon {
     color: var(--brand-primary);
-    font-size: 40px;
+    font-size: 44px;
+}
+
+.upload-zone :deep(.el-button) {
+    min-height: 0;
+    border: 0;
+    padding: 0;
+    color: var(--brand-primary);
+    background: transparent;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 22px;
+}
+
+.upload-zone :deep(.el-button:hover),
+.upload-zone :deep(.el-button:focus) {
+    color: var(--brand-primary-hover);
+    background: transparent;
 }
 
 .result-images {
@@ -371,6 +401,12 @@ const submitResult = async () => {
 
 :global(.repair-result-drawer .el-drawer__body) {
     padding: 24px;
+    overflow-y: auto;
+}
+
+:global(.repair-result-drawer) {
+    border-left: 1px solid var(--border-soft);
+    box-shadow: -14px 0 28px rgba(15, 23, 42, 0.08);
 }
 
 :global(.repair-result-drawer .el-drawer__footer) {

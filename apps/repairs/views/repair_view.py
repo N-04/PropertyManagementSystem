@@ -85,7 +85,11 @@ class RepairListView(APIView):
         if is_owner_user(request.user):
             queryset = queryset.filter(owner__phone=request.user.phone)
         elif is_repair_user(request.user):
-            queryset = queryset.filter(repair_user=request.user)
+            # 维修员既能查看已分配给自己的工单，也能看到尚未绑定人员的待接单池。
+            queryset = queryset.filter(
+                Q(repair_user=request.user)
+                | Q(status="assigned", repair_user__isnull=True)
+            ).distinct()
 
         keyword = request.GET.get("keyword")
 
@@ -140,15 +144,24 @@ class RepairUpdateView(APIView):
 
             return ResponseError(msg="报修记录不存在")
 
+        data = request.data.copy()
+
         if is_owner_user(request.user) and instance.owner.phone != request.user.phone:
             return ResponseError(msg="无权操作该报修")
 
-        if is_repair_user(request.user) and not instance.repair_user.filter(
-            id=request.user.id
-        ).exists():
-            return ResponseError(msg="无权操作该报修")
+        is_repair_claim = (
+            is_repair_user(request.user)
+            and instance.status == "assigned"
+            and data.get("status") == "accepted"
+            and not instance.repair_user.exists()
+        )
 
-        data = request.data.copy()
+        if (
+            is_repair_user(request.user)
+            and not is_repair_claim
+            and not instance.repair_user.filter(id=request.user.id).exists()
+        ):
+            return ResponseError(msg="无权操作该报修")
 
         if is_owner_user(request.user):
             evaluation_fields = {"evaluation_score", "evaluation_content"}
@@ -233,6 +246,9 @@ class RepairUpdateView(APIView):
         # 保存
 
         saved = serializer.save()
+
+        if is_repair_claim and not saved.repair_user.filter(id=request.user.id).exists():
+            saved.repair_user.add(request.user)
 
         if mark_finished:
             saved.finish_time = timezone.now()

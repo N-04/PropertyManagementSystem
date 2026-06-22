@@ -10,6 +10,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
+import { appendMessageFeedback } from '@/utils/messageCenterRows'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
@@ -117,7 +118,20 @@ const normalizeOwnerParkingMode = (mode: unknown): 'mine' | 'available' => {
 }
 
 const statusLabel = (status: string) => {
-    return status === 'idle' ? '空闲' : '使用中'
+    const statusMap: Record<string, string> = {
+        idle: '空闲',
+        used: '使用中',
+        occupied: '使用中',
+        sold: '已售',
+        disabled: '停用',
+    }
+
+    return statusMap[status] || status || '-'
+}
+
+const ownerParkingStatusText = (row: any) => {
+    // 后端 status_text 偶尔可能直接返回英文枚举，这里统一转成中文显示。
+    return statusLabel(row.status_text || row.status)
 }
 
 const visitorStatusText = (status: string) => {
@@ -242,7 +256,7 @@ const emitParkingFeedback = (parking: any) => {
         created_at: new Date().toLocaleString('zh-CN', { hour12: false }),
     }
 
-    localStorage.setItem(PARKING_FEEDBACK_STORAGE_KEY, JSON.stringify(feedback))
+    appendMessageFeedback(PARKING_FEEDBACK_STORAGE_KEY, feedback)
     window.dispatchEvent(new CustomEvent(PARKING_FEEDBACK_EVENT, { detail: feedback }))
 }
 
@@ -458,7 +472,7 @@ watch(
             <el-table-column label="状态">
                 <template #default="scope">
                     <el-tag :type="scope.row.status === 'idle' ? 'success' : 'info'">
-                        {{ scope.row.status_text || statusLabel(scope.row.status) }}
+                        {{ ownerParkingStatusText(scope.row) }}
                     </el-tag>
                 </template>
             </el-table-column>
