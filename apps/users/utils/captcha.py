@@ -64,11 +64,11 @@ def create_captcha():
     }
 
 
-def validate_captcha(captcha_key, captcha_code):
+def validate_captcha(captcha_key, captcha_code, consume=True):
     """
     校验图形验证码。
 
-    验证码使用一次后立即删除，防止同一个验证码被重复提交。
+    默认验证成功后立即删除；短信发送场景只做前置校验，不提前消费验证码。
     """
 
     if not captcha_key or not captcha_code:
@@ -80,5 +80,7 @@ def validate_captcha(captcha_key, captcha_code):
     if not cached_code:
         return False
 
-    cache.delete(cache_key)
+    if consume:
+        cache.delete(cache_key)
+
     return cached_code == captcha_code.lower()

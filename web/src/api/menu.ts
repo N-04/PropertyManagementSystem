@@ -129,29 +129,6 @@ const groupMenu = (id: string, title: string, children: AppMenuItem[] = []): App
     }
 }
 
-const cloneMenu = (menu: AppMenuItem): AppMenuItem => {
-    return {
-        ...menu,
-        children: (menu.children || []).map(cloneMenu),
-    }
-}
-
-const findMenuById = (menus: AppMenuItem[], id: string): AppMenuItem | undefined => {
-    for (const menu of menus) {
-        if (String(menu.id) === id) {
-            return menu
-        }
-
-        const child = findMenuById(menu.children || [], id)
-
-        if (child) {
-            return child
-        }
-    }
-
-    return undefined
-}
-
 const removeHiddenMenus = (menus: AppMenuItem[]): AppMenuItem[] => {
     return menus
         .filter((menu) => !hiddenMenuIds.includes(String(menu.id)))
@@ -159,11 +136,6 @@ const removeHiddenMenus = (menus: AppMenuItem[]): AppMenuItem[] => {
             ...menu,
             children: removeHiddenMenus(menu.children || []),
         }))
-}
-
-const getMenu = (menus: AppMenuItem[], id: string) => {
-    const menu = findMenuById(menus, id)
-    return menu ? cloneMenu(menu) : undefined
 }
 
 const adminDisplayMenus = (): AppMenuItem[] => {

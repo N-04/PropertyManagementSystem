@@ -88,7 +88,7 @@ class SmsCodeSerializer(serializers.Serializer):
         phone = attrs["phone"]
         purpose = attrs["purpose"]
 
-        if not validate_captcha(attrs["captcha_key"], attrs["captcha_code"]):
+        if not validate_captcha(attrs["captcha_key"], attrs["captcha_code"], consume=False):
             raise serializers.ValidationError("图形验证码错误或已过期")
 
         # 这里不改数据库结构，只按当前 User.phone 字段判断账号是否存在。

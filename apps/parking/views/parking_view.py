@@ -4,9 +4,11 @@ from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.chat.models import ChatConversation, ChatMessage
 from apps.parking.models import Parking
 from apps.parking.serializers.parking_serializer import ParkingSerializer
 from apps.owners.models import Owner
+from apps.users.models import User
 from apps.users.utils.role_access import has_any_role, is_owner_user
 
 from common.response.response import (
@@ -42,6 +44,50 @@ def _can_access_parking(user, parking):
         return parking.status == "idle" and not parking.owner_id
 
     return False
+
+
+def _property_admin_queryset():
+    """查询可接收车位购买反馈的物业管理员账号。"""
+
+    return User.objects.filter(
+        Q(role__code__in=PARKING_MANAGE_ROLES) | Q(roles__code__in=PARKING_MANAGE_ROLES),
+        is_active=True,
+        status=1,
+    ).distinct()
+
+
+def _notify_property_admins_for_parking(parking, owner, sender):
+    """把业主购买车位事件写入站内会话，确保管理员跨账号也能收到反馈。"""
+
+    if not is_owner_user(sender):
+        return None
+
+    admin_users = list(_property_admin_queryset())
+
+    if not admin_users:
+        return None
+
+    room_text = owner.house.room_no if owner.house_id else "未绑定房屋"
+    title = f"车位购买反馈：{owner.name} {parking.parking_no}"
+    content = (
+        f"{owner.name} 已成功购买/绑定车位 {parking.parking_no}，"
+        f"房号：{room_text}，请物业管理员及时跟进。"
+    )
+    conversation = ChatConversation.objects.create(
+        title=title,
+        target_role="property_admin",
+        created_by=sender,
+        last_message=content,
+    )
+    conversation.participants.set([sender, *admin_users])
+    ChatMessage.objects.create(
+        conversation=conversation,
+        sender=sender,
+        content=content,
+        message_type="system",
+    )
+
+    return conversation
 
 
 class ParkingCreateView(APIView):
@@ -156,6 +202,11 @@ class ParkingBindView(APIView):
         parking.status = "used"
         parking.save(update_fields=["owner", "status"])
         owner_room = owner.house.room_no if owner.house_id else "未绑定房屋"
+        feedback_conversation = _notify_property_admins_for_parking(
+            parking,
+            owner,
+            request.user,
+        )
 
         save_log(
             username=getattr(request.user, "username", "system"),
@@ -165,7 +216,7 @@ class ParkingBindView(APIView):
 
         return ResponseSuccess(
             data=ParkingSerializer(parking).data,
-            msg="车位购买/绑定成功，已反馈管理员",
+            msg="车位购买/绑定成功，已反馈管理员" if feedback_conversation else "车位购买/绑定成功",
         )
 
 

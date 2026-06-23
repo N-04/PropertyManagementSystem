@@ -17,15 +17,18 @@ const form = reactive({
 })
 
 const handleSubmit = async () => {
-    const res = await createUser(form)
+    try {
+        const res = await createUser(form)
 
-    console.log(res.data)
+        if (res.data.code === 200) {
+            ElMessage.success(res.data.msg || '创建成功')
+            router.push('/user/list')
+            return
+        }
 
-    if (res.data.code === 200) {
-        ElMessage.success(res.data.msg)
-        router.push('/user/list')
-    } else {
         ElMessage.error(JSON.stringify(res.data.msg))
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '创建失败')
     }
 }
 </script>

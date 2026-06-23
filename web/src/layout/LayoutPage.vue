@@ -25,6 +25,7 @@ import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
 import {
+    getImmediateMessageRows,
     loadMessageCenterRows,
     MESSAGE_FEEDBACK_EVENTS,
     MESSAGE_FEEDBACK_STORAGE_KEYS,
@@ -52,7 +53,7 @@ const selectedSecondId = ref('')
 const selectedThirdId = ref('')
 const selectedFunctionTitle = ref('')
 const expandedFirstIds = ref<string[]>([])
-const messageCenterRows = ref<MessageRow[]>([])
+const messageCenterRows = ref<MessageRow[]>(getImmediateMessageRows(role.value))
 let menuLoadRequestId = 0
 let messageLoadRequestId = 0
 
@@ -119,6 +120,16 @@ const visibleMenus = (menus: AppMenuItem[] = []): AppMenuItem[] => {
             ...item,
             children: visibleMenus(item.children || []),
         }))
+}
+
+const buildFallbackMenusForRole = (targetRole = role.value) => {
+    return buildDisplayMenusByRole(visibleMenus(fallbackMenus), targetRole)
+}
+
+const applyImmediateMenus = (targetRole = role.value) => {
+    menuItems.value = buildFallbackMenusForRole(targetRole)
+    menuLoaded.value = true
+    syncSelectionByCurrentRoute()
 }
 
 const findMenuById = (menus: AppMenuItem[], id: string): AppMenuItem | undefined => {
@@ -352,8 +363,6 @@ const loadMenus = async () => {
     const requestId = ++menuLoadRequestId
     const requestRole = role.value
     const requestUsername = username.value
-    menuLoaded.value = false
-    menuItems.value = []
 
     const acceptCurrentMenuRequest = () => {
         return (
@@ -361,6 +370,12 @@ const loadMenus = async () => {
             && requestRole === role.value
             && requestUsername === username.value
         )
+    }
+
+    if (!menuItems.value.length) {
+        applyImmediateMenus(requestRole)
+    } else {
+        menuLoaded.value = true
     }
 
     try {
@@ -376,7 +391,7 @@ const loadMenus = async () => {
         }
 
         // 后端菜单还没配置时，使用本地菜单，并根据角色过滤
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), requestRole)
+        menuItems.value = buildFallbackMenusForRole(requestRole)
     } catch (error: any) {
         if (!acceptCurrentMenuRequest()) {
             return
@@ -390,14 +405,12 @@ const loadMenus = async () => {
         }
 
         // 后端菜单接口异常时，使用本地兜底菜单
-        menuItems.value = buildDisplayMenusByRole(visibleMenus(fallbackMenus), requestRole)
+        menuItems.value = buildFallbackMenusForRole(requestRole)
     } finally {
-        if (!acceptCurrentMenuRequest()) {
-            return
+        if (acceptCurrentMenuRequest()) {
+            menuLoaded.value = true
+            syncSelectionByCurrentRoute()
         }
-
-        menuLoaded.value = true
-        syncSelectionByCurrentRoute()
     }
 }
 
@@ -405,6 +418,11 @@ const loadNotificationMessages = async () => {
     const requestId = ++messageLoadRequestId
     const requestRole = role.value
     const requestUsername = username.value
+
+    if (!messageCenterRows.value.length) {
+        messageCenterRows.value = getImmediateMessageRows(requestRole)
+    }
+
     const rows = await loadMessageCenterRows(requestRole)
 
     if (
@@ -434,8 +452,7 @@ const reloadMenusForCurrentRole = () => {
     selectedThirdId.value = ''
     selectedFunctionTitle.value = ''
     expandedFirstIds.value = []
-    menuLoaded.value = false
-    menuItems.value = []
+    applyImmediateMenus(role.value)
     loadMenus()
 }
 

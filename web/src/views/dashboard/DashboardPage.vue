@@ -23,7 +23,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getComplaintList } from '@/api/complaint'
 import { getDashboard } from '@/api/dashboard'
-import { getFeeList } from '@/api/fee'
+import { getFeeList, remindFee } from '@/api/fee'
 import { getHouseList } from '@/api/house'
 import { getNoticeList } from '@/api/notice'
 import { getOwnerList } from '@/api/owner'
@@ -37,6 +37,7 @@ import {
     getStoredRole,
     getStoredUsername,
 } from '@/utils/authState'
+import { MESSAGE_CENTER_REFRESH_EVENT } from '@/utils/messageCenterRows'
 
 type DashboardData = {
     house_count: number
@@ -65,6 +66,7 @@ type MetricCard = {
 type AdminWorkOrderRow = [string, string, string, string, string, string, string, string]
 type FinanceBillRow = {
     id: string
+    feeId: number
     billNo: string
     owner: string
     room: string
@@ -186,6 +188,7 @@ const repairSearchKeyword = ref('')
 const repairResultDrawerVisible = ref(false)
 const selectedRepairResult = ref<any | null>(null)
 const repairResponseNow = ref(Date.now())
+const remindingFeeId = ref<number | null>(null)
 let repairResponseTimer: ReturnType<typeof window.setInterval> | null = null
 
 const data = ref<DashboardData>({
@@ -547,6 +550,7 @@ const financeBillRows = computed<FinanceBillRow[]>(() => {
         .slice(0, 6)
         .map((item) => ({
             id: String(item.id || getFinanceBillNo(item)),
+            feeId: Number(item.id || 0),
             billNo: getFinanceBillNo(item),
             owner: getFinanceOwnerName(item),
             room: getFinanceRoomText(item),
@@ -1356,6 +1360,31 @@ const loadFinanceHomeData = async () => {
     financeFees.value = readSettledList(feeResult)
 }
 
+const handleFeeReminder = async (row: FinanceBillRow) => {
+    if (!row.feeId) {
+        ElMessage.warning('账单数据异常，无法发送提醒')
+        return
+    }
+
+    remindingFeeId.value = row.feeId
+
+    try {
+        const res = await remindFee(row.feeId)
+
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '提醒发送失败')
+            return
+        }
+
+        ElMessage.success(res.data.msg || '提醒已发送给业主')
+        window.dispatchEvent(new Event(MESSAGE_CENTER_REFRESH_EVENT))
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '提醒发送失败')
+    } finally {
+        remindingFeeId.value = null
+    }
+}
+
 const loadRepairerHomeData = async () => {
     const [repairResult] = await Promise.allSettled([
         getRepairList({ page_size: 1000 }),
@@ -1370,28 +1399,34 @@ const handleRepairResultSubmitted = async () => {
 }
 
 const loadData = async () => {
-    try {
-        const res = await getDashboard()
+    const loadDashboardSummary = async () => {
+        try {
+            const res = await getDashboard()
 
-        data.value = {
-            ...data.value,
-            ...res.data.data,
+            data.value = {
+                ...data.value,
+                ...res.data.data,
+            }
+        } catch {
+            // 工作台有兜底展示数据，统计接口异常时不影响页面可用性。
         }
-    } catch {
-        // 工作台有兜底展示数据，统计接口异常时不影响页面可用性。
     }
 
+    const tasks: Promise<void>[] = [loadDashboardSummary()]
+
     if (isOwnerRole.value) {
-        await loadOwnerHomeData()
+        tasks.push(loadOwnerHomeData())
     }
 
     if (isFinanceRole.value) {
-        await loadFinanceHomeData()
+        tasks.push(loadFinanceHomeData())
     }
 
     if (isRepairRole.value) {
-        await loadRepairerHomeData()
+        tasks.push(loadRepairerHomeData())
     }
+
+    await Promise.allSettled(tasks)
 }
 
 const refreshDashboardAuthState = () => {
@@ -1690,9 +1725,10 @@ onBeforeUnmount(() => {
                                             <button
                                                 type="button"
                                                 class="outline-mini"
-                                                @click="goTo('/fee/list?status=unpaid')"
+                                                :disabled="remindingFeeId === row.feeId"
+                                                @click="handleFeeReminder(row)"
                                             >
-                                                提醒
+                                                {{ remindingFeeId === row.feeId ? '发送中' : '提醒' }}
                                             </button>
                                         </td>
                                     </tr>
@@ -2669,6 +2705,11 @@ onBeforeUnmount(() => {
     border-color: var(--brand-primary);
     background: var(--brand-primary-subtle);
     outline: none;
+}
+
+.outline-mini:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
 }
 
 .side-stack {

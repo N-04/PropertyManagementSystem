@@ -20,10 +20,13 @@ export const MESSAGE_FEEDBACK_STORAGE_KEYS = [
     'serviceRatingFeedback',
 ]
 
+export const MESSAGE_CENTER_REFRESH_EVENT = 'property-management-message-center-refresh'
+
 export const MESSAGE_FEEDBACK_EVENTS = [
     'property-management-parking-feedback',
     'property-management-repair-evaluation-feedback',
     'property-management-service-rating-feedback',
+    MESSAGE_CENTER_REFRESH_EVENT,
 ]
 
 const adminRoles = ['admin', 'super_admin', 'property_admin']
@@ -222,60 +225,70 @@ const feedbackRows = (role: string): MessageRow[] => {
     return rows
 }
 
+const sortMessageRows = (rows: MessageRow[]) => {
+    return rows.sort((a, b) => `${b.created_at}`.localeCompare(`${a.created_at}`))
+}
+
+export const getImmediateMessageRows = (role: string) => {
+    return sortMessageRows(feedbackRows(role))
+}
+
 export const loadMessageCenterRows = async (role: string) => {
-    const rows: MessageRow[] = feedbackRows(role)
+    const tasks: Promise<MessageRow[]>[] = [
+        (async () => {
+            try {
+                const res = await getChatConversationList()
+                const conversations = extractList(res.data.data)
 
-    try {
-        const res = await getChatConversationList()
-        const conversations = extractList(res.data.data)
-
-        conversations.forEach((item: any) => {
-            rows.push({
-                id: `chat-${item.id}`,
-                type: `${item.created_by_real_name || item.created_by_name || '发起人'} → ${item.target_role_text || '处理角色'}`,
-                title: item.title || `会话 #${item.id}`,
-                content: item.last_message || '暂无最新消息',
-                status: item.status_text || '沟通中',
-                created_at: item.updated_at || item.created_at || '',
-                path: chatTargetPath(role),
-            })
-        })
-    } catch (error) {
-        // 站内会话加载失败不影响账单、工单等业务消息。
-    }
+                return conversations.map((item: any) => ({
+                    id: `chat-${item.id}`,
+                    type: `${item.created_by_real_name || item.created_by_name || '发起人'} → ${item.target_role_text || '处理角色'}`,
+                    title: item.title || `会话 #${item.id}`,
+                    content: item.last_message || '暂无最新消息',
+                    status: item.status_text || '沟通中',
+                    created_at: item.updated_at || item.created_at || '',
+                    path: chatTargetPath(role),
+                }))
+            } catch {
+                // 站内会话加载失败不影响账单、工单等业务消息。
+                return []
+            }
+        })(),
+    ]
 
     if (canSeeFee(role)) {
-        try {
-            const res = await getFeeList()
-            const fees = extractList(res.data.data)
+        tasks.push((async () => {
+            try {
+                const res = await getFeeList()
+                const fees = extractList(res.data.data)
 
-            fees.filter(
-                (item: any) => item.status === 'unpaid' || item.status === 'overdue'
-            ).forEach((item: any) => {
-                rows.push({
-                    id: `fee-${item.id}`,
-                    type: '财务人员 → 业主',
-                    title: `${item.owner_name || '业主'} ${feeTypeText(item)}待处理`,
-                    content: item.remark || `应缴 ${item.amount || 0} 元，截止时间：${item.deadline || '-'}`,
-                    status: feeStatusText(item.status),
-                    created_at: item.created_at || item.deadline || '',
-                    path: '/fee/list',
-                })
-            })
-        } catch (error) {
-            // 单类消息加载失败不影响其他消息。
-        }
+                return fees
+                    .filter((item: any) => item.status === 'unpaid' || item.status === 'overdue')
+                    .map((item: any) => ({
+                        id: `fee-${item.id}`,
+                        type: '财务人员 → 业主',
+                        title: `${item.owner_name || '业主'} ${feeTypeText(item)}待处理`,
+                        content: item.remark || `应缴 ${item.amount || 0} 元，截止时间：${item.deadline || '-'}`,
+                        status: feeStatusText(item.status),
+                        created_at: item.created_at || item.deadline || '',
+                        path: '/fee/list',
+                    }))
+            } catch {
+                // 单类消息加载失败不影响其他消息。
+                return []
+            }
+        })())
     }
 
     if (canSeeRepair(role)) {
-        try {
-            const res = await getRepairList({})
-            const repairs = extractList(res.data.data)
+        tasks.push((async () => {
+            try {
+                const res = await getRepairList({})
+                const repairs = extractList(res.data.data)
 
-            repairs
-                .filter((item: any) => item.status !== 'finished')
-                .forEach((item: any) => {
-                    rows.push({
+                return repairs
+                    .filter((item: any) => item.status !== 'finished')
+                    .map((item: any) => ({
                         id: `repair-${item.id}`,
                         type: '维修员 → 业主',
                         title: item.title || `报修工单 #${item.id}`,
@@ -283,20 +296,21 @@ export const loadMessageCenterRows = async (role: string) => {
                         status: repairStatusText(item.status),
                         created_at: item.created_at || '',
                         path: '/repair/list',
-                    })
-                })
-        } catch (error) {
-            // 单类消息加载失败不影响其他消息。
-        }
+                    }))
+            } catch {
+                // 单类消息加载失败不影响其他消息。
+                return []
+            }
+        })())
     }
 
     if (canSeeComplaint(role)) {
-        try {
-            const res = await getComplaintList({})
-            const complaints = extractList(res.data.data)
+        tasks.push((async () => {
+            try {
+                const res = await getComplaintList({})
+                const complaints = extractList(res.data.data)
 
-            complaints.forEach((item: any) => {
-                rows.push({
+                return complaints.map((item: any) => ({
                     id: `complaint-${item.id}`,
                     type: '客服人员 → 业主',
                     title: item.title || `投诉建议 #${item.id}`,
@@ -304,12 +318,19 @@ export const loadMessageCenterRows = async (role: string) => {
                     status: complaintStatusText(item.status),
                     created_at: item.updated_at || item.created_at || '',
                     path: '/complaint/list',
-                })
-            })
-        } catch (error) {
-            // 单类消息加载失败不影响其他消息。
-        }
+                }))
+            } catch {
+                // 单类消息加载失败不影响其他消息。
+                return []
+            }
+        })())
     }
 
-    return rows.sort((a, b) => `${b.created_at}`.localeCompare(`${a.created_at}`))
+    // 刷新进入页面时，各类消息互不依赖，使用并行请求避免顶部角标和消息中心被慢接口拖住。
+    const results = await Promise.all(tasks)
+
+    return sortMessageRows([
+        ...getImmediateMessageRows(role),
+        ...results.flat(),
+    ])
 }

@@ -9,8 +9,6 @@ const detail = ref<any>({})
 const loading = ref(false)
 const loadRepairDetail = async () => {
     const id = Number(route.params.id)
-
-    console.log(id)
     const res = await getRepairDetail(id)
 
     detail.value = res.data.data

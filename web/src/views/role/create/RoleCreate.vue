@@ -40,22 +40,24 @@ const form = reactive({
 // 提交表单
 // =====================================================
 const handleSubmit = async () => {
-    // 调用新增接口
-    const res = await createRole(form)
+    try {
+        // 调用新增接口
+        const res = await createRole(form)
 
-    // 打印结果
-    console.log(res.data)
+        // 判断是否成功
+        if (res.data.code === 200) {
+            // 成功提示
+            ElMessage.success('创建成功')
 
-    // 判断是否成功
-    if (res.data.code === 200) {
-        // 成功提示
-        ElMessage.success('创建成功')
+            // 跳转列表页
+            router.push('/role/list')
+            return
+        }
 
-        // 跳转列表页
-        router.push('/role/list')
-    } else {
         // 错误提示
         ElMessage.error(res.data.msg)
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '创建失败')
     }
 }
 </script>

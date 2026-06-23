@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from apps.logs.services.log_service import save_operation_log
 from apps.owners.models import Owner
 from apps.owners.serializers.owner_serializer import OwnerSerializer
+from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.users.utils.role_access import has_any_role, is_owner_user
 from common.response.response import (
     ResponseSuccess,
@@ -69,6 +70,7 @@ class OwnerCreateView(APIView):
                     return ResponseError(msg="该房屋已有主业主")
 
             owner = serializer.save()
+            ensure_owner_login_user(owner)
 
             # 记录操作日志
             save_operation_log(
@@ -186,7 +188,8 @@ class OwnerUpdateView(APIView):
                     return ResponseError(msg="该房屋已有主业主")
 
             instance = Owner.objects.filter(id=pk).first()
-            serializer.save()
+            owner = serializer.save()
+            ensure_owner_login_user(owner)
             save_operation_log(
                 username=request.user.username,
                 module="业主管理",

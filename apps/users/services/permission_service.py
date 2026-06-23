@@ -30,21 +30,13 @@ class PermissionService:
 
         except Permission.DoesNotExist:
             return None
+
     @staticmethod
     def create_permission(serializer):
 
         permission_obj = serializer.save()
 
         return permission_obj
-
-    @staticmethod
-    def get_permission_by_id(pk):
-
-        try:
-            return Permission.objects.get(pk=pk)
-
-        except Permission.DoesNotExist:
-            return None
 
     @staticmethod
     def update_permission(serializer):

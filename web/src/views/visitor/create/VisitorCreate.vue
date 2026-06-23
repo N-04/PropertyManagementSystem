@@ -65,31 +65,38 @@ function formatDateTime(date: Date) {
 const ownerList = reactive<any[]>([])
 
 const loadOwnerList = async () => {
-    const res = await getOwnerList()
+    try {
+        const res = await getOwnerList()
+        const rows = res.data.data
 
-    ownerList.push(...res.data.data)
+        ownerList.splice(0, ownerList.length, ...(Array.isArray(rows) ? rows : rows?.results || []))
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '业主列表加载失败')
+    }
 }
 
 // =====================================================
 // 提交表单
 // =====================================================
 const handleSubmit = async () => {
-    // 调用新增接口
-    const res = await createVisitor(form)
+    try {
+        // 调用新增接口
+        const res = await createVisitor(form)
 
-    // 打印结果
-    console.log(res.data)
+        // 判断是否成功
+        if (res.data.code === 200) {
+            // 成功提示
+            ElMessage.success('创建成功')
 
-    // 判断是否成功
-    if (res.data.code === 200) {
-        // 成功提示
-        ElMessage.success('创建成功')
+            // 跳转列表页
+            router.push('/visitor/list')
+            return
+        }
 
-        // 跳转列表页
-        router.push('/visitor/list')
-    } else {
         // 错误提示
         ElMessage.error(res.data.msg)
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '创建失败')
     }
 }
 onMounted(() => {

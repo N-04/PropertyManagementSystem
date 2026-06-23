@@ -6,8 +6,11 @@ from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.chat.models import ChatConversation, ChatMessage
+from apps.chat.serializers import ChatConversationSerializer
 from apps.finance.models import Fee
 from apps.finance.serializers.fee_serializer import FeeSerializer
+from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.users.utils.role_access import has_any_role, is_owner_user
 
 from common.response.response import (
@@ -58,6 +61,21 @@ def _parse_query_date(raw_value):
         return parsed_datetime.date()
 
     return None
+
+
+def _fee_type_text(fee):
+    """把账单费用类型转为面向用户的中文文案。"""
+
+    return dict(Fee.TYPE_CHOICES).get(fee.fee_type, fee.fee_type)
+
+
+def _format_fee_deadline(deadline):
+    """把截止时间格式化为提醒消息中的简短中文时间。"""
+
+    if not deadline:
+        return "-"
+
+    return timezone.localtime(deadline).strftime("%Y-%m-%d %H:%M")
 
 
 class FeeCreateView(APIView):
@@ -275,3 +293,101 @@ class FeePayView(APIView):
         )
 
         return ResponseSuccess(data=FeeSerializer(fee).data, msg="缴费成功")
+
+
+class FeeReminderView(APIView):
+    """
+    发送缴费提醒给账单对应业主。
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+
+        if not _can_manage_fee(request.user):
+            return ResponseError(msg="无权发送缴费提醒")
+
+        fee = (
+            Fee.objects.select_related(
+                "owner",
+                "house",
+                "house__unit",
+                "house__unit__building",
+            )
+            .filter(id=pk)
+            .first()
+        )
+
+        if not fee:
+            return ResponseError(msg="账单不存在")
+
+        if fee.status == "paid":
+            return ResponseError(msg="账单已缴费，无需提醒")
+
+        owner_user, owner_user_created = ensure_owner_login_user(fee.owner)
+
+        if not owner_user:
+            return ResponseError(msg="未找到该业主对应登录账号")
+
+        fee_type = _fee_type_text(fee)
+        room_parts = [
+            fee.house.unit.building.name if fee.house and fee.house.unit else "",
+            fee.house.unit.name if fee.house and fee.house.unit else "",
+            fee.house.room_no if fee.house else "",
+        ]
+        room_text = "-".join([item for item in room_parts if item]) or "对应房屋"
+        title = f"缴费提醒：{fee.owner.name}{fee_type}#{fee.id}"
+        content = (
+            f"您有一笔{fee_type}待缴，房屋：{room_text}，"
+            f"金额：{fee.amount}元，截止时间：{_format_fee_deadline(fee.deadline)}。"
+            "请及时在缴费中心处理。"
+        )
+
+        conversation = (
+            ChatConversation.objects.filter(
+                title=title,
+                target_role="owner",
+                participants=owner_user,
+            )
+            .order_by("-updated_at", "-id")
+            .first()
+        )
+
+        if not conversation:
+            conversation = ChatConversation.objects.create(
+                title=title,
+                target_role="owner",
+                created_by=request.user,
+            )
+            conversation.participants.set([request.user, owner_user])
+        else:
+            conversation.status = "active"
+            conversation.end_reason = None
+            conversation.ended_at = None
+            conversation.participants.add(request.user, owner_user)
+
+        ChatMessage.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            content=content,
+            message_type="system",
+        )
+
+        conversation.last_message = content
+        conversation.save(update_fields=["status", "end_reason", "ended_at", "last_message", "updated_at"])
+
+        save_operation_log(
+            username=request.user.username,
+            module="缴费提醒",
+            action=f"发送账单 {fee.id} 提醒给 {fee.owner.name}",
+        )
+        save_log(
+            username=request.user.username,
+            module="收费管理",
+            action=f"提醒账单 {fee.id}（业主账号{'已自动补齐' if owner_user_created else '已存在'}）",
+        )
+
+        return ResponseSuccess(
+            data=ChatConversationSerializer(conversation).data,
+            msg="提醒已发送给业主",
+        )

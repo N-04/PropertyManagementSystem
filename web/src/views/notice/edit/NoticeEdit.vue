@@ -80,21 +80,27 @@ const getDetail = async () => {
 // =====================================================
 
 const handleSubmit = async () => {
-    // 调用修改接口
-    const res = await updateNotice(
-        // 公告ID
-        Number(route.params.id),
+    try {
+        // 调用修改接口
+        const res = await updateNotice(
+            // 公告ID
+            Number(route.params.id),
 
-        // 表单数据
-        form
-    )
+            // 表单数据
+            form
+        )
 
-    // 打印结果
-    console.log(res.data)
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '修改失败')
+            return
+        }
 
-    // 提示成功
-    ElMessage.success('修改成功')
-    router.push('/notice/list')
+        // 提示成功
+        ElMessage.success('修改成功')
+        router.push('/notice/list')
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '修改失败')
+    }
 }
 
 // =====================================================

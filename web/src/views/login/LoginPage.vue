@@ -115,8 +115,7 @@ const saveLoginDataAndEnter = async (loginData: any) => {
         await router.push(isCustomerServiceRole(role) ? '/service/chat' : '/dashboard')
         refreshBrowserTitle()
         ElMessage.success('登录成功')
-    } catch (error) {
-        console.log('登录成功后跳转失败：', error)
+    } catch {
         ElMessage.error('登录成功，但进入后台失败，请检查路由或菜单配置')
     }
 }
@@ -149,8 +148,6 @@ const handlePasswordLogin = async () => {
             captcha_code: passwordForm.value.captcha_code,
         })
 
-        console.log('登录返回：', res.data)
-
         if (res.data.code !== 200) {
             ElMessage.error(getResponseMessage(res.data, '账号不存在或密码错误'))
             await loadCaptcha()
@@ -159,7 +156,6 @@ const handlePasswordLogin = async () => {
 
         loginData = res.data.data || {}
     } catch (error: any) {
-        console.log('登录接口失败：', error)
         ElMessage.error(getErrorMessage(error))
         await loadCaptcha()
         return

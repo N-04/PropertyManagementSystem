@@ -1,14 +1,14 @@
 <!-- 文件说明：实现 src/views/user/edit/UserEdit.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
-import { reactive } from 'vue'
-import { onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 // 修改用户接口
 import { getUserDetail, updateUser } from '@/api/user'
 
 // 获取用户id
 const route = useRoute()
-console.log(route.params.id)
+const router = useRouter()
 const form = reactive({
     username: '',
 
@@ -17,29 +17,42 @@ const form = reactive({
     phone: '',
 })
 const getDetail = async () => {
-    const res = await getUserDetail(Number(route.params.id))
+    try {
+        const res = await getUserDetail(Number(route.params.id))
 
-    form.username = res.data.data.username
+        form.username = res.data.data.username
 
-    form.real_name = res.data.data.real_name
+        form.real_name = res.data.data.real_name
 
-    form.phone = res.data.data.phone
+        form.phone = res.data.data.phone
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '用户详情加载失败')
+    }
 }
 // =====================================================
 // 保存修改
 // =====================================================
 const handleSubmit = async () => {
-    // 调用修改接口
-    const res = await updateUser(
-        // 用户ID
-        Number(route.params.id),
+    try {
+        // 调用修改接口
+        const res = await updateUser(
+            // 用户ID
+            Number(route.params.id),
 
-        // 表单数据
-        form
-    )
+            // 表单数据
+            form
+        )
 
-    // 打印结果
-    console.log(res.data)
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '保存失败')
+            return
+        }
+
+        ElMessage.success('保存成功')
+        router.push('/user/list')
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '保存失败')
+    }
 }
 
 onMounted(() => {

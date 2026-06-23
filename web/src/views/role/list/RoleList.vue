@@ -18,6 +18,7 @@ import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { ElMessage } from 'element-plus'
 
 // =====================================================
 // 角色列表数据
@@ -39,9 +40,6 @@ const {
 const getList = async () => {
     // 调用接口
     const res = await getRoleList()
-
-    // 打印结果
-    console.log(res.data)
 
     tableData.value = res.data.data
     resetPage()
@@ -74,14 +72,21 @@ const handleEdit = (row: any) => {
 // =====================================================
 
 const handleDelete = async (row: any) => {
-    // 调用删除接口
-    const res = await deleteRole(row.id)
+    try {
+        // 调用删除接口
+        const res = await deleteRole(row.id)
 
-    // 打印结果
-    console.log(res.data)
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '删除失败')
+            return
+        }
 
-    // 重新获取列表
-    getList()
+        ElMessage.success('删除成功')
+        // 重新获取列表
+        getList()
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '删除失败')
+    }
 }
 
 // =====================================================

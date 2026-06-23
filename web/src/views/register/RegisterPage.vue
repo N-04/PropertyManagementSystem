@@ -215,7 +215,6 @@ const sendSmsCode = async () => {
         }
 
         startSmsCountdown(res.data.data.cooldown_seconds || 60)
-        await loadCaptcha()
     } catch (error: any) {
         ElMessage.error(getResponseMessage(error?.response?.data, '短信验证码发送失败'))
         await loadCaptcha()
@@ -239,26 +238,31 @@ const handleRegister = async () => {
         return
     }
 
-    const res = await registerApi({
-        phone: form.phone,
-        real_name: form.real_name,
-        id_card: form.id_card,
-        password: form.password,
-        confirm_password: form.confirm_password,
-        captcha_key: captchaKey.value,
-        captcha_code: form.captcha_code,
-        sms_code: form.sms_code,
-        agreed: form.agreed,
-    })
+    try {
+        const res = await registerApi({
+            phone: form.phone,
+            real_name: form.real_name,
+            id_card: form.id_card,
+            password: form.password,
+            confirm_password: form.confirm_password,
+            captcha_key: captchaKey.value,
+            captcha_code: form.captcha_code,
+            sms_code: form.sms_code,
+            agreed: form.agreed,
+        })
 
-    if (res.data.code !== 200) {
-        ElMessage.error(getResponseMessage(res.data, '注册失败'))
+        if (res.data.code !== 200) {
+            ElMessage.error(getResponseMessage(res.data, '注册失败'))
+            await loadCaptcha()
+            return
+        }
+
+        ElMessage.success(res.data.msg)
+        router.push('/login')
+    } catch (error: any) {
+        ElMessage.error(getResponseMessage(error?.response?.data, '注册失败，请检查后端服务'))
         await loadCaptcha()
-        return
     }
-
-    ElMessage.success(res.data.msg)
-    router.push('/login')
 }
 
 onMounted(() => {

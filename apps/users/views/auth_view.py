@@ -199,38 +199,23 @@ class RegisterView(APIView):
     permission_classes = []
 
     def post(self, request):
-
-        print("注册请求数据：", request.data)
-
         serializer = RegisterSerializer(data=request.data)
 
         if not serializer.is_valid():
-
-            print("注册参数错误：", serializer.errors)
-
             return ResponseError(
                 msg="注册失败",
                 data=serializer.errors,
             )
 
-        serializer.save()
+        user = serializer.save()
 
         return ResponseSuccess(
             msg="注册成功，请等待管理员审核",
-            data=serializer.data,
+            data={
+                "id": user.id,
+                "phone": user.phone,
+            },
         )
-
-        # serializer = RegisterSerializer(data=request.data)
-        # serializer.is_valid(raise_exception=True)
-        # user = serializer.save()
-        #
-        # return ResponseSuccess(
-        #     data={
-        #         "id": user.id,
-        #         "phone": user.phone,
-        #     },
-        #     msg="注册提交成功，请等待管理员审核",
-        # )
 
 
 class PasswordResetView(APIView):

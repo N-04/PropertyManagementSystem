@@ -23,3 +23,8 @@ export function createFee(data: any) {
 export const payFee = (id: number, data: { payment_method: string }) => {
     return request.put(`/fee/pay/${id}/`, data)
 }
+
+// 发送缴费提醒给账单对应业主
+export const remindFee = (id: number) => {
+    return request.post(`/fee/remind/${id}/`)
+}

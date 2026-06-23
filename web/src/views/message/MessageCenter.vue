@@ -6,8 +6,9 @@ import { ChatLineRound, Refresh, Search, View } from '@element-plus/icons-vue'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import DataPagination from '@/components/common/DataPagination.vue'
-import { AUTH_STATE_CHANGED_EVENT, getStoredRole } from '@/utils/authState'
+import { AUTH_STATE_CHANGED_EVENT, getStoredRole, getStoredUsername } from '@/utils/authState'
 import {
+    getImmediateMessageRows,
     loadMessageCenterRows,
     MESSAGE_FEEDBACK_EVENTS,
     MESSAGE_FEEDBACK_STORAGE_KEYS,
@@ -16,10 +17,12 @@ import {
 
 const router = useRouter()
 const role = ref(getStoredRole())
+const username = ref(getStoredUsername())
 const loading = ref(false)
-const tableData = ref<MessageRow[]>([])
+const tableData = ref<MessageRow[]>(getImmediateMessageRows(role.value))
 const keyword = ref('')
 const typeFilter = ref('')
+let messageRequestId = 0
 const keywordFilteredData = useKeywordFilter(tableData, keyword, ['type', 'title', 'content', 'status'])
 const filteredTableData = computed(() => {
     if (!typeFilter.value) {
@@ -62,13 +65,36 @@ const statusTone = (status: string) => {
 }
 
 const loadMessages = async () => {
+    const requestId = ++messageRequestId
+    const requestRole = role.value
+    const requestUsername = username.value
     loading.value = true
 
+    if (!tableData.value.length) {
+        tableData.value = getImmediateMessageRows(requestRole)
+    }
+
     try {
-        tableData.value = await loadMessageCenterRows(role.value)
+        const rows = await loadMessageCenterRows(requestRole)
+
+        if (
+            requestId !== messageRequestId
+            || requestRole !== role.value
+            || requestUsername !== username.value
+        ) {
+            return
+        }
+
+        tableData.value = rows
         resetPage()
     } finally {
-        loading.value = false
+        if (
+            requestId === messageRequestId
+            && requestRole === role.value
+            && requestUsername === username.value
+        ) {
+            loading.value = false
+        }
     }
 }
 
@@ -93,12 +119,16 @@ const handleMessageFeedbackChanged = () => {
 
 const handleAuthStateChanged = () => {
     const nextRole = getStoredRole()
+    const nextUsername = getStoredUsername()
 
-    if (nextRole !== role.value) {
+    if (nextRole !== role.value || nextUsername !== username.value) {
         // 复制标签或切换账号后，消息中心必须跟随当前角色重新统计和展示。
         role.value = nextRole
+        username.value = nextUsername
         keyword.value = ''
         typeFilter.value = ''
+        tableData.value = getImmediateMessageRows(nextRole)
+        resetPage()
     }
 
     loadMessages()

@@ -10,13 +10,14 @@ import { ElMessage } from 'element-plus'
 const route = useRoute()
 const router = useRouter()
 const loadUser = async () => {
-    const res = await getUserList()
+    try {
+        const res = await getUserList({ page_size: 100 })
+        const rows = res.data.data
 
-    console.log(res)
-    console.log(res.data)
-    console.log(res.data.data)
-
-    userList.value = res.data.data
+        userList.value = Array.isArray(rows) ? rows : rows?.results || []
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '维修人员加载失败')
+    }
 }
 
 // 报修ID
@@ -33,11 +34,19 @@ const submit = async () => {
         return
     }
 
-    await assignRepair(repairId, form.value)
+    try {
+        const res = await assignRepair(repairId, form.value)
 
-    ElMessage.success('分配成功')
+        if (res.data.code !== 200) {
+            ElMessage.error(res.data.msg || '分配失败')
+            return
+        }
 
-    router.push('/repair/list')
+        ElMessage.success('分配成功')
+        router.push('/repair/list')
+    } catch (error: any) {
+        ElMessage.error(error?.response?.data?.msg || '分配失败')
+    }
 }
 
 // 用户列表
@@ -49,7 +58,6 @@ interface UserItem {
 const userList = ref<UserItem[]>([])
 
 onMounted(() => {
-    console.log(repairId)
     loadUser()
 })
 </script>

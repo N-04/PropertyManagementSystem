@@ -41,9 +41,6 @@ const getList = async () => {
     // 保存数据
     tableData.value = res.data.data
     resetPage()
-
-    // 打印结果
-    console.log(res.data)
 }
 
 const columns = [

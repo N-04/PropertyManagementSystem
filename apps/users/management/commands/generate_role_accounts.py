@@ -404,7 +404,7 @@ ROLE_DEFINITIONS = [
     {
         "code": "owner",
         "name": "业主",
-        "username": "owner_demo",
+        "username": "owner_dem",
         "real_name": "业主",
         "phone": "13800000004",
         "roots": ["owner"],

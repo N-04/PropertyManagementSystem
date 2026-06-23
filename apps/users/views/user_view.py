@@ -19,6 +19,7 @@ from apps.users.serializers.user_serializer import (
     UserInfoSerializer,
     UserSerializer,
 )
+from apps.users.utils.validators import mask_id_card
 from apps.users.views.menu_view import _build_menu_tree, _get_user_menu_ids
 from common.pagination.page_pagination import CustomPageNumberPagination
 from common.response.response import ResponseError, ResponseSuccess

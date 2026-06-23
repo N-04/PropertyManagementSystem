@@ -18,6 +18,7 @@ from apps.community.models.unit import Unit
 from apps.community.models.house import House
 
 from apps.owners.models.owner import Owner
+from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.parking.models.parking import Parking
 from apps.cars.models import Car
 from apps.visitors.models.visitor import Visitor
@@ -240,7 +241,11 @@ class Command(BaseCommand):
 
         self.owners = []
 
-        demo_owner_user = get_user_model().objects.filter(username="owner_demo").first()
+        User = get_user_model()
+        demo_owner_user = (
+            User.objects.filter(username="owner_dem").first()
+            or User.objects.filter(username="owner_demo").first()
+        )
 
         for house_index, house in enumerate(self.houses):
             relationships = self.select_house_family(house, house_index)
@@ -267,6 +272,9 @@ class Command(BaseCommand):
                 )
 
                 self.owners.append(owner)
+
+                if owner.is_primary:
+                    ensure_owner_login_user(owner)
 
             house.owner_count = len(relationships)
             house.resident_count = 0 if house.status == "vacant" else len(relationships)
@@ -488,7 +496,7 @@ class Command(BaseCommand):
                 return plate
 
     def select_house_family(self, house, house_index):
-        """按房屋状态生成家庭关系，首套房优先给 owner_demo 形成稳定演示数据。"""
+        """按房屋状态生成家庭关系，首套房优先给演示业主账号形成稳定数据。"""
 
         if house_index == 0:
             return ["self", "spouse", "child"]

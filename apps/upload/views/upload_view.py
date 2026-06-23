@@ -1,5 +1,7 @@
 # 文件说明：处理 apps/upload/views/upload_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
+import logging
+
 import os
 
 import uuid
@@ -18,6 +20,8 @@ from common.response.response import (
     ResponseSuccess,
     ResponseError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UploadView(APIView):
@@ -101,6 +105,6 @@ class UploadView(APIView):
                 result.save(save_path)
 
             except Exception as e:
-                print("水印失败：", e)
+                logger.warning("水印失败：%s", e)
 
         return ResponseSuccess(data={"url": f"{settings.MEDIA_URL}upload/{filename}"})

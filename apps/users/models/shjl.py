@@ -1,5 +1,10 @@
 # 文件说明：定义 apps/users/models/shjl.py 对应业务的数据模型和数据库映射。
 
+from django.db import models
+
+from apps.users.models.user import User
+
+
 class AuditLog(models.Model):
 
     AUDIT_RESULT = (

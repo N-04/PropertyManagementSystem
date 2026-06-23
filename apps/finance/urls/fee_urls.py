@@ -8,6 +8,7 @@ from apps.finance.views.fee_view import (
     FeeUpdateView,
     FeeDeleteView,
     FeePayView,
+    FeeReminderView,
 )
 
 urlpatterns = [
@@ -24,5 +25,9 @@ urlpatterns = [
     path(
         "pay/<int:pk>/",
         FeePayView.as_view(),
+    ),
+    path(
+        "remind/<int:pk>/",
+        FeeReminderView.as_view(),
     ),
 ]

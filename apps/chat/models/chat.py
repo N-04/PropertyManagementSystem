@@ -15,6 +15,7 @@ class ChatConversation(models.Model):
     )
 
     TARGET_ROLE_CHOICES = (
+        ("owner", "业主"),
         ("customer_service", "客服人员"),
         ("finance_staff", "财务人员"),
         ("repair_staff", "维修员"),
