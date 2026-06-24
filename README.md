@@ -33,8 +33,8 @@
 <img width="1728" height="1002" alt="image" src="https://github.com/user-attachments/assets/59af417b-897e-4f39-bac7-922baff4b5a8" />
 
 - 维修
-<img width="1727" height="999" alt="image" src="https://github.com/user-attachments/assets/fb851c32-17ac-4b2d-a563-b76b80c12372" />
-<img width="1413" height="921" alt="image" src="https://github.com/user-attachments/assets/b5baef6e-23a7-44bd-b3a1-2bf588b78b3e" />
+<img width="1727" height="999" alt="image" src="https://github.com/user-attachments/assets/880dc38e-4b1a-47e6-8c1d-43ce66e509e9" />
+
 
 ## 技术栈
 
