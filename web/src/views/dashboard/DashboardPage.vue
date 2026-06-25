@@ -28,10 +28,12 @@ import { getHouseList } from '@/api/house'
 import { getNoticeList } from '@/api/notice'
 import { getOwnerList } from '@/api/owner'
 import { getRepairList, updateRepair } from '@/api/repair'
+import { getVisitorStatistics } from '@/api/visitor'
 import { ElMessage } from 'element-plus'
 import FeeChart from '@/components/charts/FeeChart.vue'
 import RepairChart from '@/components/charts/RepairChart.vue'
 import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import {
     AUTH_STATE_CHANGED_EVENT,
     getStoredRole,
@@ -180,7 +182,12 @@ const ownerRepairsData = ref<any[]>([])
 const ownerComplaints = ref<any[]>([])
 const ownerNotices = ref<any[]>([])
 const ownerCalendarCursor = ref(new Date())
+const adminRepairsData = ref<any[]>([])
+const adminComplaints = ref<any[]>([])
+const adminNotices = ref<any[]>([])
+const adminVisitorStats = ref<Record<string, number>>({})
 const financeFees = ref<any[]>([])
+const financeDataLoading = ref(false)
 const repairerRepairs = ref<any[]>([])
 const repairCalendarCursor = ref(new Date())
 const selectedRepairPriority = ref<RepairPriorityKey>('all')
@@ -190,6 +197,7 @@ const selectedRepairResult = ref<any | null>(null)
 const repairResponseNow = ref(Date.now())
 const remindingFeeId = ref<number | null>(null)
 let repairResponseTimer: ReturnType<typeof window.setInterval> | null = null
+let financeHomeRequestId = 0
 
 const data = ref<DashboardData>({
     house_count: 0,
@@ -215,10 +223,7 @@ const isFinanceRole = computed(() => financeRoles.includes(role.value))
 const isRepairRole = computed(() => repairRoles.includes(role.value))
 const isOwnerRole = computed(() => role.value === 'owner')
 
-const numberOrFallback = (value: number, fallback: number) => {
-    const numericValue = Number(value || 0)
-    return numericValue > 0 ? numericValue : fallback
-}
+const numberValue = (value: number) => Number(value || 0)
 
 const formatNumber = (value: number) => Number(value || 0).toLocaleString('zh-CN')
 const formatMoney = (value: number) => `¥ ${Number(value || 0).toLocaleString('zh-CN', {
@@ -226,9 +231,9 @@ const formatMoney = (value: number) => `¥ ${Number(value || 0).toLocaleString('
     maximumFractionDigits: 2,
 })}`
 
-const feeTotal = computed(() => numberOrFallback(data.value.fee_total, 326850))
-const feePaid = computed(() => numberOrFallback(data.value.fee_paid, 283950))
-const feeUnpaid = computed(() => numberOrFallback(data.value.fee_unpaid, 42900))
+const feeTotal = computed(() => numberValue(data.value.fee_total))
+const feePaid = computed(() => numberValue(data.value.fee_paid))
+const feeUnpaid = computed(() => numberValue(data.value.fee_unpaid))
 const feeRate = computed(() => {
     return feeTotal.value ? `${((feePaid.value / feeTotal.value) * 100).toFixed(1)}%` : '0.0%'
 })
@@ -236,9 +241,9 @@ const feeRate = computed(() => {
 const adminMetrics = computed<MetricCard[]>(() => [
     {
         label: '待处理工单',
-        value: formatNumber(numberOrFallback(data.value.repair_pending, 32)),
+        value: formatNumber(adminActiveRepairs.value.length || data.value.repair_pending),
         unit: '件',
-        hint: '较昨日 +6 件',
+        hint: '实时统计',
         tone: 'teal',
         icon: Document,
     },
@@ -252,17 +257,17 @@ const adminMetrics = computed<MetricCard[]>(() => [
     },
     {
         label: '今日访客',
-        value: '128',
+        value: formatNumber(adminVisitorStats.value.today_count || 0),
         unit: '人',
-        hint: '较昨日 +18 人',
+        hint: '今日来访',
         tone: 'blue',
         icon: User,
     },
     {
         label: '投诉待回访',
-        value: '7',
+        value: formatNumber(adminActiveComplaints.value.length),
         unit: '件',
-        hint: '较昨日 +2 件',
+        hint: '待处理/处理中',
         tone: 'red',
         icon: ChatDotRound,
     },
@@ -271,52 +276,54 @@ const adminMetrics = computed<MetricCard[]>(() => [
 const repairMetrics = computed<MetricCard[]>(() => [
     {
         label: '待接单',
-        value: formatNumber(numberOrFallback(data.value.repair_pending, 18)),
+        value: formatNumber(repairWorkbenchOrders.value.filter((item) => ['pending', 'assigned'].includes(item.statusRaw)).length),
         unit: '单',
-        hint: '较昨日 +5',
+        hint: '当前待处理',
         tone: 'teal',
         icon: Tickets,
     },
     {
         label: '维修中',
-        value: formatNumber(numberOrFallback(data.value.repair_processing, 12)),
+        value: formatNumber(repairWorkbenchOrders.value.filter((item) => ['accepted', 'processing'].includes(item.statusRaw)).length),
         unit: '单',
-        hint: '较昨日 -2',
+        hint: '接单后服务中',
         tone: 'blue',
         icon: Tools,
     },
     {
         label: '今日完成',
-        value: '15',
+        value: formatNumber(repairerTodayFinishedCount.value),
         unit: '单',
-        hint: '较昨日 +6',
+        hint: '完成时间为今日',
         tone: 'green',
         icon: CircleCheck,
     },
     {
         label: '超时工单',
-        value: '3',
+        value: formatNumber(repairerOverdueCount.value),
         unit: '单',
-        hint: '较昨日 +1',
+        hint: '超过24小时未完成',
         tone: 'orange',
         icon: Bell,
     },
 ])
 
-const adminActions = [
-    { label: '新增工单', path: '/repair/create', icon: Tools, tone: 'teal' },
-    { label: '访客登记', path: '/visitor/create', icon: User, tone: 'blue' },
-    { label: '发布公告', path: '/notice/create', icon: Bell, tone: 'amber' },
-    { label: '录入缴费', path: '/fee/list', icon: Money, tone: 'green' },
-]
+const adminWorkOrders = computed<AdminWorkOrderRow[]>(() => {
+    return adminActiveRepairs.value.slice(0, 6).map((item) => {
+        const priority = getRepairPriorityText(item)
 
-const adminWorkOrders: AdminWorkOrderRow[] = [
-    ['WD20250519001', '李女士', '3栋-2单元-0602', '水管漏水', '待派单', '紧急', '-', '05-19 09:28'],
-    ['WD20250519002', '张先生', '1栋-1单元-1203', '电路故障', '待处理', '高', '王师傅', '05-19 09:15'],
-    ['WD20250519003', '刘女士', '5栋-1单元-1101', '门锁损坏', '处理中', '中', '陈师傅', '05-19 08:54'],
-    ['WD20250519004', '王先生', '2栋-2单元-0801', '空调不制冷', '待验收', '中', '孙师傅', '05-19 08:33'],
-    ['WD20250518021', '陈女士', '6栋-2单元-1002', '下水道堵塞', '待处理', '高', '-', '05-18 17:25'],
-]
+        return [
+            getRepairCode(item),
+            item.owner_name || item.owner || '业主',
+            getRepairRoomText(item),
+            item.title || item.content || '报修工单',
+            repairStatusText(item),
+            priority,
+            Array.isArray(item.repair_user_name) ? item.repair_user_name.join('、') : item.repair_user_name || '-',
+            formatDateTimeShort(item.created_at) || '-',
+        ]
+    })
+})
 
 const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = [
     { key: 'all', label: '全部' },
@@ -326,21 +333,27 @@ const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = 
     { key: 'low', label: '低' },
 ]
 
-const notices: SimplePairRow[] = [
-    ['关于小区电梯维护保养的通知', '05-18'],
-    ['关于2025年端午节放假安排的通知', '05-16'],
-    ['小区公共区域清洁消毒通知', '05-15'],
-    ['夏季用电安全温馨提示', '05-13'],
-    ['关于地下车库临时管制的通知', '05-12'],
-]
+const adminNoticeRows = computed<SimplePairRow[]>(() => {
+    return adminNotices.value
+        .filter((item) => item.status !== 'draft')
+        .slice(0, 5)
+        .map((item) => [item.title || '公告通知', formatDateShort(item.created_at)])
+})
 
-const activities: ActivityRow[] = [
-    ['工单', 'WD20250519001 已创建，待派单', '09:28'],
-    ['访客', '李女士 来访登记成功', '09:15'],
-    ['缴费', '3栋-2单元-0602 已完成物业费缴纳', '09:02'],
-    ['公告', '发布了新公告《关于小区电梯维护保养的通知》', '08:50'],
-    ['投诉', '投诉编号 TS20250518007 已回访', '08:35'],
-]
+const adminActivityRows = computed<ActivityRow[]>(() => {
+    const repairRows: ActivityRow[] = adminRepairsData.value.slice(0, 3).map((item) => [
+        '工单',
+        `${getRepairCode(item)} ${repairStatusText(item)}`,
+        formatCalendarEventTime(item.created_at) || '-',
+    ])
+    const complaintRows: ActivityRow[] = adminComplaints.value.slice(0, 2).map((item) => [
+        '投诉',
+        `${item.title || `投诉 #${item.id}`} ${complaintStatusText(item)}`,
+        formatCalendarEventTime(item.updated_at || item.created_at) || '-',
+    ])
+
+    return [...repairRows, ...complaintRows].slice(0, 5)
+})
 
 const ownerConveniencePhones: ConveniencePhone[] = [
     { label: '物业前台', phone: '0571-6386-9274' },
@@ -506,6 +519,24 @@ const formatFinanceTime = (value?: string | null) => {
 
 const getFinanceBillNo = (item: any) => {
     return item.bill_no || item.order_no || (item.id ? `BILL${String(item.id).padStart(12, '0')}` : '未生成')
+}
+
+const mergeFinanceFeeRows = (...groups: any[][]) => {
+    const rowMap = new Map<string, any>()
+
+    groups.flat().forEach((item) => {
+        if (!item) {
+            return
+        }
+
+        const key = String(item.id || item.bill_no || item.order_no || JSON.stringify(item))
+
+        if (!rowMap.has(key)) {
+            rowMap.set(key, item)
+        }
+    })
+
+    return Array.from(rowMap.values())
 }
 
 const getFinanceOwnerName = (item: any) => {
@@ -1010,6 +1041,28 @@ const isUnpaidFee = (item: any) => ['unpaid', 'overdue'].includes(item.status)
 const isActiveRepair = (item: any) => item.status !== 'finished'
 const isActiveComplaint = (item: any) => !['done', 'closed'].includes(item.status)
 
+const adminActiveRepairs = computed(() => adminRepairsData.value.filter(isActiveRepair))
+const adminActiveComplaints = computed(() => adminComplaints.value.filter(isActiveComplaint))
+
+const repairerTodayFinishedCount = computed(() => {
+    const todayKey = toDateKey(new Date())
+
+    return repairerRepairs.value.filter((item) => {
+        return item.status === 'finished' && dateKeyFromValue(item.finish_time || item.updated_at || item.created_at) === todayKey
+    }).length
+})
+
+const repairerOverdueCount = computed(() => {
+    const dayMs = 24 * 60 * 60 * 1000
+    const now = Date.now()
+
+    return repairWorkbenchOrders.value.filter((item) => {
+        const createdAt = parseDateFromValue(item.raw?.created_at)
+
+        return createdAt ? now - createdAt.getTime() > dayMs : false
+    }).length
+})
+
 const primaryOwnerProfile = computed(() => {
     return ownerProfiles.value.find((item) => item.is_primary) || ownerProfiles.value[0] || null
 })
@@ -1352,12 +1405,59 @@ const loadOwnerHomeData = async () => {
     ownerNotices.value = readSettledList(noticeResult)
 }
 
-const loadFinanceHomeData = async () => {
-    const [feeResult] = await Promise.allSettled([
-        getFeeList({ page_size: 1000 }),
+const loadAdminHomeData = async () => {
+    const [
+        repairResult,
+        complaintResult,
+        noticeResult,
+        visitorResult,
+    ] = await Promise.allSettled([
+        getRepairList({ page_size: 1000 }),
+        getComplaintList({ page_size: 1000 }),
+        getNoticeList(),
+        getVisitorStatistics(),
     ])
 
-    financeFees.value = readSettledList(feeResult)
+    adminRepairsData.value = readSettledList(repairResult)
+    adminComplaints.value = readSettledList(complaintResult)
+    adminNotices.value = readSettledList(noticeResult)
+
+    if (visitorResult.status === 'fulfilled') {
+        adminVisitorStats.value = visitorResult.value?.data?.data || {}
+    }
+}
+
+const loadFinanceHomeData = async () => {
+    const requestId = ++financeHomeRequestId
+    financeDataLoading.value = true
+
+    const isCurrentRequest = () => requestId === financeHomeRequestId
+    const fastBillRequest = Promise.allSettled([
+        getFeeList({ status: 'unpaid', page_size: 6 }),
+        getFeeList({ status: 'overdue', page_size: 6 }),
+    ]).then((results) => {
+        if (!isCurrentRequest()) {
+            return
+        }
+
+        const rows = results.flatMap(readSettledList)
+
+        if (rows.length) {
+            financeFees.value = mergeFinanceFeeRows(financeFees.value, rows)
+        }
+    })
+
+    const fullFeeRequest = getFeeList({ page_size: 1000 }).then((res) => {
+        if (isCurrentRequest()) {
+            financeFees.value = extractList(res.data?.data)
+        }
+    })
+
+    await Promise.allSettled([fastBillRequest, fullFeeRequest])
+
+    if (isCurrentRequest()) {
+        financeDataLoading.value = false
+    }
 }
 
 const handleFeeReminder = async (row: FinanceBillRow) => {
@@ -1414,6 +1514,10 @@ const loadData = async () => {
 
     const tasks: Promise<void>[] = [loadDashboardSummary()]
 
+    if (isAdminRole.value) {
+        tasks.push(loadAdminHomeData())
+    }
+
     if (isOwnerRole.value) {
         tasks.push(loadOwnerHomeData())
     }
@@ -1429,7 +1533,7 @@ const loadData = async () => {
     await Promise.allSettled(tasks)
 }
 
-const refreshDashboardAuthState = () => {
+const syncDashboardAuthState = () => {
     username.value = getStoredUsername() || '用户'
     role.value = getStoredRole()
 
@@ -1437,8 +1541,14 @@ const refreshDashboardAuthState = () => {
         repairResultDrawerVisible.value = false
         selectedRepairResult.value = null
     }
+}
 
-    loadData()
+const refreshDashboardData = async (_reason?: string, event?: Event) => {
+    if (event?.type === AUTH_STATE_CHANGED_EVENT) {
+        syncDashboardAuthState()
+    }
+
+    await loadData()
 }
 
 const startRepairResponseClock = () => {
@@ -1454,18 +1564,20 @@ const startRepairResponseClock = () => {
 }
 
 onMounted(() => {
-    window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshDashboardAuthState)
     startRepairResponseClock()
-    loadData()
 })
 
 onBeforeUnmount(() => {
-    window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshDashboardAuthState)
-
     if (repairResponseTimer) {
         window.clearInterval(repairResponseTimer)
         repairResponseTimer = null
     }
+})
+
+useRealtimeRefresh(refreshDashboardData, {
+    scope: 'dashboard',
+    intervalMs: 20000,
+    events: [AUTH_STATE_CHANGED_EVENT, MESSAGE_CENTER_REFRESH_EVENT],
 })
 </script>
 
@@ -1483,20 +1595,6 @@ onBeforeUnmount(() => {
                     <span>20°C 多云</span>
                     <span>幸福里小区</span>
                 </div>
-            </div>
-
-            <div class="quick-action-row">
-                <button
-                    v-for="item in adminActions"
-                    :key="item.label"
-                    type="button"
-                    class="quick-action"
-                    :class="`tone-${item.tone}`"
-                    @click="goTo(item.path)"
-                >
-                    <el-icon><component :is="item.icon" /></el-icon>
-                    <span>{{ item.label }}</span>
-                </button>
             </div>
 
             <div class="metric-grid">
@@ -1521,12 +1619,6 @@ onBeforeUnmount(() => {
                 <section class="panel main-panel">
                     <div class="panel-header">
                         <h2>待办工单</h2>
-                        <div class="filter-line">
-                            <span>全部状态</span>
-                            <span>全部类型</span>
-                            <span>全部优先级</span>
-                            <button type="button">查询</button>
-                        </div>
                     </div>
 
                     <div class="tab-row">
@@ -1548,7 +1640,6 @@ onBeforeUnmount(() => {
                                 <th>优先级</th>
                                 <th>处理人</th>
                                 <th>创建时间</th>
-                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1561,7 +1652,6 @@ onBeforeUnmount(() => {
                                 <td><span class="status-pill" :class="statusClass(row[5])">{{ row[5] }}</span></td>
                                 <td>{{ row[6] }}</td>
                                 <td>{{ row[7] }}</td>
-                                <td><button type="button" class="text-button" @click="goTo('/repair/list')">查看</button></td>
                             </tr>
                         </tbody>
                     </table>
@@ -1571,7 +1661,6 @@ onBeforeUnmount(() => {
                     <section class="panel">
                         <div class="panel-header">
                             <h2>紧急提醒</h2>
-                            <button type="button" class="text-button">更多</button>
                         </div>
                         <ul class="compact-list">
                             <li v-for="row in adminWorkOrders.slice(0, 5)" :key="`urgent-${row[0]}`">
@@ -1586,10 +1675,9 @@ onBeforeUnmount(() => {
                     <section class="panel">
                         <div class="panel-header">
                             <h2>公告通知</h2>
-                            <button type="button" class="text-button" @click="goTo('/notice/list')">更多</button>
                         </div>
                         <ul class="notice-list">
-                            <li v-for="item in notices" :key="item[0]">
+                            <li v-for="item in adminNoticeRows" :key="item[0]">
                                 <span>{{ item[0] }}</span>
                                 <em>{{ item[1] }}</em>
                             </li>
@@ -1599,10 +1687,9 @@ onBeforeUnmount(() => {
                     <section class="panel">
                         <div class="panel-header">
                             <h2>近期动态</h2>
-                            <button type="button" class="text-button">更多</button>
                         </div>
                         <ul class="activity-list">
-                            <li v-for="item in activities" :key="`${item[0]}-${item[2]}`">
+                            <li v-for="item in adminActivityRows" :key="`${item[0]}-${item[1]}-${item[2]}`">
                                 <span>{{ item[0] }}</span>
                                 <p>{{ item[1] }}</p>
                                 <em>{{ item[2] }}</em>
@@ -1628,17 +1715,17 @@ onBeforeUnmount(() => {
                     <div class="resource-grid">
                         <div>
                             <el-icon><OfficeBuilding /></el-icon>
-                            <strong>{{ formatNumber(numberOrFallback(data.house_count, 896)) }}</strong>
+                            <strong>{{ formatNumber(numberValue(data.house_count)) }}</strong>
                             <span>房屋总数</span>
                         </div>
                         <div>
                             <el-icon><User /></el-icon>
-                            <strong>{{ formatNumber(numberOrFallback(data.owner_count, 852)) }}</strong>
+                            <strong>{{ formatNumber(numberValue(data.owner_count)) }}</strong>
                             <span>业主总数</span>
                         </div>
                         <div>
                             <el-icon><Van /></el-icon>
-                            <strong>{{ formatNumber(numberOrFallback(data.parking_count, 632)) }}</strong>
+                            <strong>{{ formatNumber(numberValue(data.parking_count)) }}</strong>
                             <span>总车位</span>
                         </div>
                     </div>
@@ -1666,32 +1753,6 @@ onBeforeUnmount(() => {
                     <section class="panel finance-bill-panel">
                         <div class="panel-header finance-panel-title">
                             <h2>待处理账单</h2>
-                        </div>
-
-                        <div class="finance-filter-grid">
-                            <label class="finance-filter-field">
-                                <span>小区</span>
-                                <button type="button" class="finance-select-like">全部</button>
-                            </label>
-                            <label class="finance-filter-field">
-                                <span>楼栋</span>
-                                <button type="button" class="finance-select-like">全部</button>
-                            </label>
-                            <label class="finance-filter-field">
-                                <span>费用类型</span>
-                                <button type="button" class="finance-select-like">全部</button>
-                            </label>
-                            <label class="finance-filter-field">
-                                <span>缴费状态</span>
-                                <button type="button" class="finance-select-like">全部</button>
-                            </label>
-                            <label class="finance-filter-field">
-                                <span>到期时间</span>
-                                <button type="button" class="finance-select-like">选择日期</button>
-                            </label>
-                            <button type="button" class="finance-query-button" @click="goTo('/fee/list')">
-                                查询
-                            </button>
                         </div>
 
                         <div class="finance-table-wrap">
@@ -1733,7 +1794,9 @@ onBeforeUnmount(() => {
                                         </td>
                                     </tr>
                                     <tr v-if="!financeBillRows.length">
-                                        <td class="table-empty" colspan="8">暂无待处理账单</td>
+                                        <td class="table-empty" colspan="8">
+                                            {{ financeDataLoading ? '正在加载账单...' : '暂无待处理账单' }}
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1783,7 +1846,9 @@ onBeforeUnmount(() => {
                                         />
                                         <em>{{ point.label }}</em>
                                     </div>
-                                    <p v-if="!financeTrendHasData" class="finance-empty">暂无本月收支趋势</p>
+                                    <p v-if="!financeTrendHasData" class="finance-empty">
+                                        {{ financeDataLoading ? '正在加载收支趋势...' : '暂无本月收支趋势' }}
+                                    </p>
                                 </div>
                             </div>
                         </section>
@@ -1803,7 +1868,9 @@ onBeforeUnmount(() => {
                                     <em>{{ row.percent }}</em>
                                 </div>
                             </div>
-                            <p v-else class="finance-empty">暂无本月费用分类</p>
+                            <p v-else class="finance-empty">
+                                {{ financeDataLoading ? '正在加载费用分类...' : '暂无本月费用分类' }}
+                            </p>
                         </section>
                     </div>
                 </main>
@@ -1812,9 +1879,6 @@ onBeforeUnmount(() => {
                     <section class="panel finance-today-panel">
                         <div class="panel-header">
                             <h2>今日收款</h2>
-                            <button type="button" class="text-button" @click="goTo('/fee/list?status=paid')">
-                                更多
-                            </button>
                         </div>
                         <strong class="finance-today-total">{{ formatMoney(financeTodayCollectionTotal) }}</strong>
                         <ul v-if="financePaymentMethods.length" class="finance-payment-list">
@@ -1827,15 +1891,14 @@ onBeforeUnmount(() => {
                                 <em>{{ financePaymentPercent(method.amount) }}</em>
                             </li>
                         </ul>
-                        <p v-else class="finance-empty">今日暂无收款</p>
+                        <p v-else class="finance-empty">
+                            {{ financeDataLoading ? '正在加载今日收款...' : '今日暂无收款' }}
+                        </p>
                     </section>
 
                     <section class="panel finance-recent-panel">
                         <div class="panel-header">
                             <h2>近期缴费记录</h2>
-                            <button type="button" class="text-button" @click="goTo('/fee/list?status=paid')">
-                                更多
-                            </button>
                         </div>
                         <table v-if="financeRecentPayments.length" class="finance-recent-table">
                             <thead>
@@ -1857,7 +1920,9 @@ onBeforeUnmount(() => {
                                 </tr>
                             </tbody>
                         </table>
-                        <p v-else class="finance-empty">暂无缴费记录</p>
+                        <p v-else class="finance-empty">
+                            {{ financeDataLoading ? '正在加载缴费记录...' : '暂无缴费记录' }}
+                        </p>
                     </section>
                 </aside>
             </div>
@@ -2027,19 +2092,14 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div v-if="visibleRepairCalendarEvents.length" class="owner-calendar-events">
-                                <button
+                                <div
                                     v-for="item in visibleRepairCalendarEvents"
                                     :key="item.id"
-                                    type="button"
                                     class="owner-calendar-event"
-                                    @click="goTo(item.path)"
                                 >
                                     <b>{{ item.dateKey.slice(5) }}</b>
                                     <span>{{ item.title }}</span>
                                     <em>{{ item.time }}</em>
-                                </button>
-                                <div>
-                                    <button type="button" class="text-button" @click="goTo('/repair/list')">查看全部</button>
                                 </div>
                             </div>
                         </div>
@@ -2082,20 +2142,11 @@ onBeforeUnmount(() => {
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state compact">暂无今日路线</div>
-                        <button
-                            v-if="repairWorkbenchOrders.length"
-                            type="button"
-                            class="route-more"
-                            @click="goTo('/repair/list')"
-                        >
-                            查看全部路线
-                        </button>
                     </section>
 
                     <section class="panel repair-tools-panel">
                         <div class="panel-header">
                             <h2>工具与备件</h2>
-                            <button type="button" class="text-button">查看更多</button>
                         </div>
                         <ul class="repair-tools-list">
                             <li><span>水管接头</span><em>库存 18 个</em></li>
@@ -2155,9 +2206,6 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
                                 <span class="status-pill" :class="item.statusClass">{{ item.status }}</span>
-                                <button type="button" class="owner-outline-button" @click="goTo(item.path)">
-                                    {{ item.action }}
-                                </button>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state">暂无待处理事项</div>
@@ -2203,19 +2251,14 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div v-if="visibleOwnerCalendarEvents.length" class="owner-calendar-events">
-                                <button
+                                <div
                                     v-for="item in visibleOwnerCalendarEvents"
                                     :key="item.id"
-                                    type="button"
                                     class="owner-calendar-event"
-                                    @click="goTo(item.path)"
                                 >
                                     <b>{{ item.dateKey.slice(5) }}</b>
                                     <span>{{ item.title }}</span>
                                     <em>{{ item.time }}</em>
-                                </button>
-                                <div>
-                                    <button type="button" class="text-button" @click="goTo('/notice/list')">查看全部</button>
                                 </div>
                             </div>
                         </div>
@@ -2226,7 +2269,6 @@ onBeforeUnmount(() => {
                     <section class="panel">
                         <div class="panel-header">
                             <h2>公告活动</h2>
-                            <button type="button" class="text-button" @click="goTo('/notice/list')">更多</button>
                         </div>
                         <ul v-if="ownerNoticeItems.length" class="owner-side-notice-list">
                             <li v-for="item in ownerNoticeItems" :key="item.id">
@@ -2240,17 +2282,16 @@ onBeforeUnmount(() => {
                     <section class="panel">
                         <div class="panel-header">
                             <h2>服务进度</h2>
-                            <button type="button" class="text-button" @click="goTo('/repair/list')">更多</button>
                         </div>
                         <ul v-if="ownerServiceItems.length" class="owner-service-list">
                             <li v-for="item in ownerServiceItems" :key="item.id">
-                                <button type="button" @click="goTo(item.path)">
+                                <div>
                                     <span class="dot" :class="item.statusClass" />
                                     <strong>{{ item.title }}</strong>
                                     <em>{{ item.status }}</em>
                                     <small>{{ item.meta }}</small>
                                     <time>{{ item.date }}</time>
-                                </button>
+                                </div>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state compact">暂无服务进度</div>

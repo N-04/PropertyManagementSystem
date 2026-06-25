@@ -23,6 +23,7 @@ import { getVisitorList, deleteVisitor } from '@/api/visitor'
 import { enterVisitor } from '@/api/visitor'
 import { leaveVisitor } from '@/api/visitor'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // =====================================================
@@ -138,15 +139,24 @@ const handleLeave = async (row: any) => {
 /**
  * 获取访客列表
  */
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     const res = await getVisitorList(keyword.value)
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'visitors',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

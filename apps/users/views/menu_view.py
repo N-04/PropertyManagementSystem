@@ -11,6 +11,16 @@ from rest_framework.response import Response
 
 
 RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
+DEPRECATED_USER_MENU_TITLES = {
+    "联系客服",
+    "停车缴费",
+    "车位缴费",
+    "停车费缴纳",
+    "车位费缴纳",
+}
+DEPRECATED_USER_MENU_PATHS = {
+    "/contact/service",
+}
 
 
 def _can_manage_rbac(user):
@@ -43,6 +53,15 @@ def _with_parent_menu_ids(menu_ids):
     return list(all_ids)
 
 
+def _is_deprecated_user_menu(menu):
+    """过滤旧数据库残留菜单，保持后端菜单和当前前端交互口径一致。"""
+
+    title = (menu.title or "").strip()
+    path = (menu.path or "").strip()
+
+    return title in DEPRECATED_USER_MENU_TITLES or path in DEPRECATED_USER_MENU_PATHS
+
+
 def _get_user_menu_ids(user):
     """
     根据当前用户收集可访问菜单 ID。
@@ -70,11 +89,22 @@ def _get_user_menu_ids(user):
 
 
 def _build_menu_tree(menu, menu_ids):
+    if _is_deprecated_user_menu(menu):
+        return None
+
     children = Menu.objects.filter(
         parent=menu,
         id__in=menu_ids,
         hidden=False,
     ).order_by("sort", "id")
+
+    child_nodes = []
+
+    for child in children:
+        child_node = _build_menu_tree(child, menu_ids)
+
+        if child_node:
+            child_nodes.append(child_node)
 
     return {
         "id": menu.id,
@@ -86,8 +116,20 @@ def _build_menu_tree(menu, menu_ids):
         "hidden": menu.hidden,
         "menu_type": menu.menu_type,
         "parent_id": menu.parent_id,
-        "children": [_build_menu_tree(child, menu_ids) for child in children],
+        "children": child_nodes,
     }
+
+
+def _build_menu_tree_list(menus, menu_ids):
+    data = []
+
+    for menu in menus:
+        menu_node = _build_menu_tree(menu, menu_ids)
+
+        if menu_node:
+            data.append(menu_node)
+
+    return data
 
 
 class MenuCreateView(APIView):
@@ -168,7 +210,7 @@ class MenuTreeView(APIView):
 
         # ==================================
 
-        data = [_build_menu_tree(menu, menu_ids) for menu in roots]
+        data = _build_menu_tree_list(roots, menu_ids)
 
         # ==================================
 
@@ -201,6 +243,6 @@ class UserMenuTreeView(APIView):
             hidden=False,
         ).order_by("sort", "id")
 
-        data = [_build_menu_tree(menu, menu_ids) for menu in root_menus]
+        data = _build_menu_tree_list(root_menus, menu_ids)
 
         return ResponseSuccess(data=data)

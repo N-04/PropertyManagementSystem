@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
 import {
     getImmediateMessageRows,
@@ -436,16 +437,6 @@ const loadNotificationMessages = async () => {
     messageCenterRows.value = rows
 }
 
-const handleMessageFeedbackChanged = () => {
-    loadNotificationMessages()
-}
-
-const handleMessageFeedbackStorage = (event: StorageEvent) => {
-    if (MESSAGE_FEEDBACK_STORAGE_KEYS.includes(event.key || '')) {
-        loadNotificationMessages()
-    }
-}
-
 const reloadMenusForCurrentRole = () => {
     selectedFirstId.value = ''
     selectedSecondId.value = ''
@@ -497,22 +488,37 @@ const goRoleMessages = () => {
     router.push('/message/center')
 }
 
+useRealtimeRefresh(
+    async () => {
+        await loadNotificationMessages()
+    },
+    {
+        scope: 'messages',
+        intervalMs: 15000,
+        events: MESSAGE_FEEDBACK_EVENTS,
+        storageKeys: MESSAGE_FEEDBACK_STORAGE_KEYS,
+    },
+)
+
+useRealtimeRefresh(
+    async () => {
+        await loadMenus()
+    },
+    {
+        scope: 'menus',
+        immediate: false,
+        refreshWhenVisible: false,
+        refreshOnWindowFocus: false,
+    },
+)
+
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
-    window.addEventListener('storage', handleMessageFeedbackStorage)
-    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
-        window.addEventListener(eventName, handleMessageFeedbackChanged)
-    })
     loadMenus()
-    loadNotificationMessages()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
-    window.removeEventListener('storage', handleMessageFeedbackStorage)
-    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
-        window.removeEventListener(eventName, handleMessageFeedbackChanged)
-    })
 })
 
 watch(

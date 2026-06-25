@@ -17,7 +17,7 @@ class RepairSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
-    status = serializers.CharField()
+    status = serializers.CharField(required=False)
     status_text = serializers.CharField(source="get_status_display", read_only=True)
 
     phone = serializers.CharField(source="owner.phone", read_only=True)

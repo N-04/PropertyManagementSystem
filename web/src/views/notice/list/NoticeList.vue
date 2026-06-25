@@ -5,6 +5,7 @@ import { getNoticeList, deleteNotice } from '@/api/notice'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 // =====================================================
@@ -44,11 +45,14 @@ const {
     pagedData: pagedTableData,
     resetPage,
 } = useClientPagination(filteredTableData)
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     const res = await getNoticeList()
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const handleFilter = () => {
@@ -81,6 +85,12 @@ const handleDelete = async (row: any) => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'notices',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

@@ -63,6 +63,17 @@ def _parse_query_date(raw_value):
     return None
 
 
+def _parse_positive_int(raw_value, default=None):
+    """解析分页参数，非法值按默认值处理。"""
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+    return value if value > 0 else default
+
+
 def _fee_type_text(fee):
     """把账单费用类型转为面向用户的中文文案。"""
 
@@ -126,10 +137,21 @@ class FeeListView(APIView):
 
     def get(self, request):
 
-        queryset = Fee.objects.all().order_by("-id")
+        queryset = (
+            Fee.objects.select_related(
+                "owner",
+                "house",
+                "house__unit",
+                "house__unit__building",
+            )
+            .all()
+            .order_by("-id")
+        )
 
         if is_owner_user(request.user):
             queryset = queryset.filter(owner__phone=request.user.phone)
+        elif not _can_manage_fee(request.user):
+            queryset = queryset.none()
 
         keyword = request.GET.get("keyword", "").strip()
         fee_type = request.GET.get("fee_type", "").strip()
@@ -183,10 +205,29 @@ class FeeListView(APIView):
 
             queryset = queryset.filter(deadline__date__lte=date_to)
 
-        serializer = FeeSerializer(
-            queryset,
-            many=True,
-        )
+        page_size = _parse_positive_int(request.GET.get("page_size"))
+
+        if page_size:
+            page = _parse_positive_int(request.GET.get("page"), 1)
+            page_size = min(page_size, 1000)
+            total = queryset.count()
+            start = (page - 1) * page_size
+            end = start + page_size
+            serializer = FeeSerializer(
+                queryset[start:end],
+                many=True,
+            )
+
+            return ResponseSuccess(
+                data={
+                    "results": serializer.data,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                }
+            )
+
+        serializer = FeeSerializer(queryset, many=True)
 
         return ResponseSuccess(data=serializer.data)
 
@@ -260,7 +301,16 @@ class FeePayView(APIView):
 
     def put(self, request, pk):
 
-        fee = Fee.objects.filter(id=pk).first()
+        fee = (
+            Fee.objects.select_related(
+                "owner",
+                "house",
+                "house__unit",
+                "house__unit__building",
+            )
+            .filter(id=pk)
+            .first()
+        )
 
         if not fee:
             return ResponseError(msg="账单不存在")

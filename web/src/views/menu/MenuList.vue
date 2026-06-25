@@ -4,6 +4,7 @@ import { computed, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMenuTree } from '@/api/menu'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
@@ -45,7 +46,7 @@ const {
     resetPage,
 } = useClientPagination(filteredTableData)
 
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     loading.value = true
 
     try {
@@ -57,7 +58,10 @@ const getList = async () => {
         }
 
         tableData.value = res.data.data || []
-        resetPage()
+
+        if (shouldResetPage) {
+            resetPage()
+        }
     } finally {
         loading.value = false
     }
@@ -75,6 +79,12 @@ const resetFilter = () => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'menus',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

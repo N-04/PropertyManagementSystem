@@ -14,6 +14,7 @@ from PIL import ImageDraw
 
 from PIL import ImageFont
 
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from common.response.response import (
@@ -28,6 +29,8 @@ class UploadView(APIView):
     """
     文件上传
     """
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
 

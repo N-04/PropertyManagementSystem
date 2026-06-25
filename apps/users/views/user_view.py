@@ -19,8 +19,9 @@ from apps.users.serializers.user_serializer import (
     UserInfoSerializer,
     UserSerializer,
 )
-from apps.users.utils.validators import mask_id_card
-from apps.users.views.menu_view import _build_menu_tree, _get_user_menu_ids
+from apps.users.utils.role_access import is_property_manager_user
+from apps.users.utils.validators import mask_id_card, validate_phone_format
+from apps.users.views.menu_view import _build_menu_tree_list, _get_user_menu_ids
 from common.pagination.page_pagination import CustomPageNumberPagination
 from common.response.response import ResponseError, ResponseSuccess
 from common.views.base_view import BaseView
@@ -45,7 +46,12 @@ class UserCreateView(APIView):
     }
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权创建用户")
+
         # =====================================================
         # 1. 获取前端提交的数据
         # =====================================================
@@ -149,8 +155,11 @@ class UserCreateView(APIView):
 
 
 class UserDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权删除用户")
 
         try:
 
@@ -167,11 +176,14 @@ class UserDeleteView(APIView):
 
 # 用户详情接口
 class UserDetailView(APIView):
+    permission_classes = [IsAuthenticated]
 
     # =====================================================
     # 获取用户详情
     # =====================================================
     def get(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权查看用户")
 
         # 根据ID查询用户
         user = get_object_or_404(User, id=pk)
@@ -198,6 +210,9 @@ class UserDetailView(APIView):
     # 修改用户
     # =====================================================
     def put(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权修改用户")
+
         """
         pk:
 
@@ -214,31 +229,44 @@ class UserDetailView(APIView):
 
         user = get_object_or_404(User, id=pk)
 
-        # =====================================================
-        # 2. 获取前端数据
-        # =====================================================
+        update_fields = []
 
-        username = request.data.get("username")
+        if "username" in request.data:
+            username = str(request.data.get("username") or "").strip()
 
-        real_name = request.data.get("real_name")
+            if not username:
+                return ResponseError(msg="用户名不能为空")
 
-        phone = request.data.get("phone")
+            if User.objects.exclude(id=user.id).filter(username=username).exists():
+                return ResponseError(msg="用户名已存在")
 
-        # =====================================================
-        # 3. 修改数据
-        # =====================================================
+            user.username = username
+            update_fields.append("username")
 
-        user.username = username
+        if "real_name" in request.data:
+            user.real_name = request.data.get("real_name") or ""
+            update_fields.append("real_name")
 
-        user.real_name = real_name
+        if "phone" in request.data:
+            raw_phone = request.data.get("phone") or ""
 
-        user.phone = phone
+            if raw_phone:
+                try:
+                    raw_phone = validate_phone_format(raw_phone)
+                except Exception as exc:
+                    detail = getattr(exc, "detail", None)
+                    msg = str(detail[0]) if isinstance(detail, list) and detail else "手机号格式不正确"
+                    return ResponseError(msg=msg)
+
+            user.phone = raw_phone or None
+            update_fields.append("phone")
 
         # =====================================================
         # 4. 保存
         # =====================================================
 
-        user.save()
+        if update_fields:
+            user.save(update_fields=update_fields)
 
         # =====================================================
         # 5. 返回结果
@@ -295,13 +323,17 @@ class UserMenusView(BaseView):
             hidden=False,
         ).order_by("sort", "id")
 
-        data = [_build_menu_tree(menu, menu_ids) for menu in root_menus]
+        data = _build_menu_tree_list(root_menus, menu_ids)
 
         return ResponseSuccess(data=data)
 
 
 class UserListView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权查看用户列表")
 
         queryset = User.objects.all().order_by("-id")
         keyword = request.GET.get("keyword", "").strip()
@@ -332,6 +364,9 @@ class UserAuditView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权审核用户")
+
         user = get_object_or_404(User, id=pk)
         serializer = UserAuditSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)

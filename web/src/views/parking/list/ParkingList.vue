@@ -8,6 +8,7 @@ import { deleteParking } from '@/api/parking'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
 import { appendMessageFeedback } from '@/utils/messageCenterRows'
@@ -314,6 +315,12 @@ onMounted(() => {
     }
 
     loadParkingPageData()
+})
+
+useRealtimeRefresh(loadParkingPageData, {
+    scope: ['parking', 'visitors'],
+    immediate: false,
+    intervalMs: 30000,
 })
 
 watch(

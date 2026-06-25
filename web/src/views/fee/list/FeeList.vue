@@ -5,6 +5,7 @@ import { getFeeList, payFee } from '@/api/fee'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 
@@ -201,6 +202,17 @@ watch(
         syncRouteFilters()
         loadData()
     }
+)
+
+useRealtimeRefresh(
+    async () => {
+        await loadData(false)
+    },
+    {
+        scope: 'fees',
+        immediate: false,
+        intervalMs: 30000,
+    },
 )
 </script>
 

@@ -13,6 +13,7 @@ import { ref, onMounted } from 'vue'
 import { getPermissionList } from '@/api/permission'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // =====================================================
@@ -34,13 +35,16 @@ const {
 // 获取权限列表
 // =====================================================
 
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     // 调用接口
     const res = await getPermissionList()
 
     // 保存数据
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const columns = [
@@ -75,6 +79,12 @@ const resetFilter = () => {
 onMounted(() => {
     // 获取权限列表
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'permissions',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

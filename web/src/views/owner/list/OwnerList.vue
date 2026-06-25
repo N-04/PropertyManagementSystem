@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue'
 import { getOwnerList, deleteOwner } from '@/api/owner'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // =====================================================
@@ -22,11 +23,14 @@ const {
     pagedData: pagedTableData,
     resetPage,
 } = useClientPagination(tableData)
-const getList = async () => {
-    const res = await getOwnerList()
+const getList = async (shouldResetPage = true) => {
+    const res = await getOwnerList(keyword.value)
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const handleCreate = () => {
@@ -39,9 +43,7 @@ const handleDetail = (row: any) => {
 
 const keyword = ref('')
 const searchOwner = async () => {
-    const res = await getOwnerList(keyword.value)
-    tableData.value = res.data.data
-    resetPage()
+    await getList()
 }
 
 // =====================================================
@@ -68,6 +70,12 @@ const handleDelete = async (row: any) => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'owners',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

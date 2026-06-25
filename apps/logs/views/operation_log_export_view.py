@@ -8,9 +8,12 @@ from django.http import HttpResponse
 
 # DRF
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
 # 操作日志模型
 from apps.logs.models import OperationLog
+from apps.users.utils.role_access import is_property_manager_user
+from common.response.response import ResponseError
 
 
 class OperationLogExportView(APIView):
@@ -18,7 +21,11 @@ class OperationLogExportView(APIView):
     操作日志导出Excel
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权导出操作日志")
 
         # 创建工作簿
         workbook = openpyxl.Workbook()

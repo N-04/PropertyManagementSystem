@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue'
 import { getBuildingList } from '@/api/building'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
@@ -35,6 +36,12 @@ const resetFilter = () => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(getList, {
+    scope: 'community',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

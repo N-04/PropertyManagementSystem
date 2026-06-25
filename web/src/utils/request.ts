@@ -6,6 +6,7 @@ import {
     getStoredToken,
     setAuthItem,
 } from '@/utils/authState'
+import { emitDataRefresh } from '@/utils/dataRefresh'
 
 const baseURL = 'http://127.0.0.1:8000/api'
 
@@ -46,6 +47,58 @@ const isPublicOrRefreshRequest = (url = '') => {
     return publicRequestPaths.includes(normalizeRequestPath(url))
 }
 
+const mutationMethods = new Set(['post', 'put', 'patch', 'delete'])
+
+const refreshScopeRules: Array<{ pattern: string; scopes: string[] }> = [
+    { pattern: '/fee/', scopes: ['fees', 'dashboard', 'messages'] },
+    { pattern: '/repair/', scopes: ['repairs', 'dashboard', 'messages'] },
+    { pattern: '/complaint/', scopes: ['complaints', 'dashboard', 'messages'] },
+    { pattern: '/visitor/', scopes: ['visitors', 'dashboard', 'messages'] },
+    { pattern: '/notice/', scopes: ['notices', 'dashboard', 'messages'] },
+    { pattern: '/parking/', scopes: ['parking', 'dashboard', 'fees', 'messages'] },
+    { pattern: '/car/', scopes: ['cars', 'dashboard'] },
+    { pattern: '/house/', scopes: ['houses', 'dashboard'] },
+    { pattern: '/owner/', scopes: ['owners', 'dashboard'] },
+    { pattern: '/user/', scopes: ['users', 'owners', 'dashboard'] },
+    { pattern: '/role/', scopes: ['roles', 'menus', 'users', 'dashboard'] },
+    { pattern: '/permission/', scopes: ['permissions', 'roles'] },
+    { pattern: '/menu/', scopes: ['menus', 'dashboard'] },
+    { pattern: '/community/', scopes: ['community', 'dashboard'] },
+    { pattern: '/building/', scopes: ['community', 'houses', 'dashboard'] },
+    { pattern: '/unit/', scopes: ['community', 'houses', 'dashboard'] },
+    { pattern: '/upload/', scopes: ['profile', 'dashboard'] },
+    { pattern: '/chat/', scopes: ['messages', 'dashboard'] },
+    { pattern: '/log/', scopes: ['logs'] },
+]
+
+const getDataRefreshScopes = (url = '') => {
+    const path = normalizeRequestPath(url)
+    const matchedScopes = refreshScopeRules
+        .filter((rule) => path.includes(rule.pattern))
+        .flatMap((rule) => rule.scopes)
+
+    if (!matchedScopes.length) {
+        matchedScopes.push('dashboard')
+    }
+
+    // 后端会为不少写操作生成审计日志，统一补一条 logs 刷新，避免日志页刷新后滞后。
+    matchedScopes.push('logs')
+
+    return Array.from(new Set(matchedScopes))
+}
+
+const shouldBroadcastDataRefresh = (response: any) => {
+    const method = String(response.config?.method || '').toLowerCase()
+
+    if (!mutationMethods.has(method) || isPublicOrRefreshRequest(response.config?.url)) {
+        return false
+    }
+
+    const businessCode = response.data?.code
+
+    return businessCode === undefined || businessCode === 200
+}
+
 const redirectToLogin = () => {
     clearAuthState()
 
@@ -71,7 +124,7 @@ const requestNewAccessToken = async () => {
         throw new Error('刷新 token 接口未返回 access token')
     }
 
-    setAuthItem('token', token)
+    setAuthItem('token', token, true, true)
     return token
 }
 
@@ -85,22 +138,85 @@ const getFreshAccessToken = () => {
     return refreshTokenPromise
 }
 
-// axios 请求拦截器
-request.interceptors.request.use((config) => {
-    // 获取 token
-    const token = getStoredToken()
+const decodeJwtPayload = (token: string) => {
+    try {
+        const payload = token.split('.')[1]
 
-    // 如果 token 存在
+        if (!payload) {
+            return null
+        }
+
+        const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/')
+        const paddedPayload = normalizedPayload.padEnd(
+            normalizedPayload.length + ((4 - normalizedPayload.length % 4) % 4),
+            '='
+        )
+
+        return JSON.parse(window.atob(paddedPayload))
+    } catch {
+        return null
+    }
+}
+
+const isAccessTokenExpiring = (token: string, leewaySeconds = 30) => {
+    const payload = decodeJwtPayload(token)
+    const exp = Number(payload?.exp || 0)
+
+    if (!exp) {
+        return false
+    }
+
+    return exp * 1000 <= Date.now() + leewaySeconds * 1000
+}
+
+const setAuthorizationHeader = (config: InternalAxiosRequestConfig, token: string) => {
+    config.headers.Authorization = `Bearer ${token}`
+}
+
+// axios 请求拦截器
+request.interceptors.request.use(async (config) => {
+    if (isPublicOrRefreshRequest(config.url)) {
+        return config
+    }
+
+    const token = getStoredToken()
+    const refresh = getStoredRefresh()
+
+    if (token && !isAccessTokenExpiring(token)) {
+        setAuthorizationHeader(config, token)
+        return config
+    }
+
+    if (refresh) {
+        try {
+            const freshToken = await getFreshAccessToken()
+            setAuthorizationHeader(config, freshToken)
+            return config
+        } catch (refreshError) {
+            redirectToLogin()
+            return Promise.reject(refreshError)
+        }
+    }
+
     if (token) {
-        // 自动携带 token
-        config.headers.Authorization = `Bearer ${token}`
+        setAuthorizationHeader(config, token)
     }
 
     return config
 })
 
 request.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        if (shouldBroadcastDataRefresh(response)) {
+            window.setTimeout(() => {
+                getDataRefreshScopes(response.config?.url).forEach((scope) => {
+                    emitDataRefresh(scope, 'mutation')
+                })
+            }, 0)
+        }
+
+        return response
+    },
     async (error: AxiosError) => {
         const status = error.response?.status
         const originalConfig = error.config as RetriableRequestConfig | undefined

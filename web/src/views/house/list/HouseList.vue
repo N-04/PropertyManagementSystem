@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { getHouseList } from '@/api/house'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
@@ -75,6 +76,12 @@ const getStatusTagType = (status: string) => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(), {
+    scope: 'houses',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

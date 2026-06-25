@@ -56,15 +56,9 @@ def ensure_owner_login_user(owner: Owner):
     owner_role.name = "业主"
     owner_role.save(update_fields=["name"])
 
-    user = (
-        User.objects.filter(
-            phone=phone,
-            is_active=True,
-            status=1,
-        )
-        .order_by("id")
-        .first()
-    )
+    # 先复用同手机号的已注册账号，即使账号仍在待审核状态。
+    # 这样“注册 -> 房产认证/创建业主资料 -> 成为正式业主”不会拆成两个登录账号。
+    user = User.objects.filter(phone=phone).order_by("id").first()
 
     created = False
 

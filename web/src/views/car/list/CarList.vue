@@ -6,6 +6,7 @@ import { deleteCar, disableCar, enableCar } from '@/api/car'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const router = useRouter()
@@ -31,11 +32,14 @@ const {
 /**
  * 获取车辆列表
  */
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     const res = await getCarList(keyword.value)
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const handleFilter = () => {
@@ -95,6 +99,12 @@ const handleDelete = async (row: any) => {
 
 onMounted(() => {
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'cars',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

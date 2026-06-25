@@ -27,3 +27,19 @@ def is_owner_user(user):
 
 def is_repair_user(user):
     return has_any_role(user, "repair_staff", "repairer", "repair")
+
+
+def is_property_manager_user(user):
+    """判断是否为可维护小区基础资源的物业管理侧账号。"""
+
+    return has_any_role(user, "admin", "super_admin", "property_admin") or getattr(
+        user,
+        "is_superuser",
+        False,
+    )
+
+
+def is_customer_service_user(user):
+    """判断是否为客服侧账号。"""
+
+    return has_any_role(user, "customer_service", "service")

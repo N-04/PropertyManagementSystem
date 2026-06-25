@@ -5,6 +5,7 @@ import { auditUser, deleteUser } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getUserList } from '@/api/user'
 import { useRouter } from 'vue-router'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // 用户类型
@@ -114,6 +115,12 @@ const handleAudit = async (row: UserItem, auditStatus: 'approved' | 'rejected') 
 // 页面加载执行
 onMounted(() => {
     loadData()
+})
+
+useRealtimeRefresh(loadData, {
+    scope: 'users',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

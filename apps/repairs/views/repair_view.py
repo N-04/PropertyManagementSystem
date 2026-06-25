@@ -14,19 +14,34 @@ from apps.logs.services.log_service import save_operation_log
 from django.shortcuts import get_object_or_404
 
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
 from apps.repairs.models import Repair, RepairLog
 
 from apps.users.models import User
 from apps.owners.models import Owner
-from apps.users.utils.role_access import is_owner_user, is_repair_user
+from apps.users.utils.role_access import has_any_role, is_owner_user, is_repair_user
 from rest_framework.pagination import PageNumberPagination
+
+REPAIR_MANAGE_ROLES = (
+    "admin",
+    "super_admin",
+    "property_admin",
+    "customer_service",
+    "service",
+)
+
+
+def _can_manage_repair(user):
+    return has_any_role(user, *REPAIR_MANAGE_ROLES) or getattr(user, "is_superuser", False)
 
 
 class RepairCreateView(APIView):
     """
     创建报修
     """
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         data = request.data.copy()
@@ -49,6 +64,8 @@ class RepairCreateView(APIView):
                 phone=request.user.phone
             ).values_list("house_id", flat=True):
                 return ResponseError(msg="无权为该房屋提交报修")
+        elif not _can_manage_repair(request.user):
+            return ResponseError(msg="无权提交报修")
 
         serializer = RepairSerializer(data=data)
 
@@ -78,6 +95,8 @@ class RepairListView(APIView):
     报修列表
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
 
         queryset = Repair.objects.all().order_by("-id")
@@ -88,8 +107,10 @@ class RepairListView(APIView):
             # 维修员既能查看已分配给自己的工单，也能看到尚未绑定人员的待接单池。
             queryset = queryset.filter(
                 Q(repair_user=request.user)
-                | Q(status="assigned", repair_user__isnull=True)
+                | Q(status__in=["pending", "assigned"], repair_user__isnull=True)
             ).distinct()
+        elif not _can_manage_repair(request.user):
+            queryset = queryset.none()
 
         keyword = request.GET.get("keyword")
 
@@ -134,6 +155,8 @@ class RepairUpdateView(APIView):
 
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
 
         # 查询报修记录
@@ -146,12 +169,19 @@ class RepairUpdateView(APIView):
 
         data = request.data.copy()
 
+        if not (
+            is_owner_user(request.user)
+            or is_repair_user(request.user)
+            or _can_manage_repair(request.user)
+        ):
+            return ResponseError(msg="无权操作该报修")
+
         if is_owner_user(request.user) and instance.owner.phone != request.user.phone:
             return ResponseError(msg="无权操作该报修")
 
         is_repair_claim = (
             is_repair_user(request.user)
-            and instance.status == "assigned"
+            and instance.status in {"pending", "assigned"}
             and data.get("status") == "accepted"
             and not instance.repair_user.exists()
         )
@@ -203,6 +233,7 @@ class RepairUpdateView(APIView):
             data = {key: data[key] for key in allowed_fields if key in data}
 
             status_flow = {
+                "pending": {"accepted"},
                 "assigned": {"accepted"},
                 "accepted": {"processing"},
                 "processing": {"finished"},
@@ -291,6 +322,8 @@ class RepairDeleteView(APIView):
     删除报修
     """
 
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
 
         instance = Repair.objects.filter(id=pk).first()
@@ -298,7 +331,10 @@ class RepairDeleteView(APIView):
         if not instance:
             return ResponseError(msg="报修记录不存在")
 
-        if is_owner_user(request.user) and instance.owner.phone != request.user.phone:
+        if is_owner_user(request.user):
+            if instance.owner.phone != request.user.phone:
+                return ResponseError(msg="无权删除该报修")
+        elif not _can_manage_repair(request.user):
             return ResponseError(msg="无权删除该报修")
 
         instance.delete()
@@ -313,6 +349,8 @@ class RepairDetailView(APIView):
 
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk):
 
         # 查询报修记录
@@ -325,9 +363,23 @@ class RepairDetailView(APIView):
         if is_owner_user(request.user) and instance.owner.phone != request.user.phone:
             return ResponseError(msg="无权查看该报修")
 
-        if is_repair_user(request.user) and not instance.repair_user.filter(
-            id=request.user.id
-        ).exists():
+        is_unclaimed_repair = (
+            instance.status in {"pending", "assigned"}
+            and not instance.repair_user.exists()
+        )
+
+        if (
+            is_repair_user(request.user)
+            and not is_unclaimed_repair
+            and not instance.repair_user.filter(id=request.user.id).exists()
+        ):
+            return ResponseError(msg="无权查看该报修")
+
+        if not (
+            is_owner_user(request.user)
+            or is_repair_user(request.user)
+            or _can_manage_repair(request.user)
+        ):
             return ResponseError(msg="无权查看该报修")
 
         # 序列化
@@ -347,7 +399,12 @@ class RepairAssignView(APIView):
     分配维修人员
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, pk):
+
+        if not _can_manage_repair(request.user):
+            return ResponseError(msg="无权派单")
 
         repair = get_object_or_404(Repair, pk=pk)
 

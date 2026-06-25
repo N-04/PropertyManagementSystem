@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue'
 import { getOperationLogList } from '@/api/log'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
@@ -17,11 +18,14 @@ const {
     resetPage,
 } = useClientPagination(filteredTableData)
 
-const loadData = async () => {
+const loadData = async (shouldResetPage = true) => {
     const res = await getOperationLogList()
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 /**
@@ -43,6 +47,12 @@ const resetFilter = () => {
 
 onMounted(() => {
     loadData()
+})
+
+useRealtimeRefresh(() => loadData(false), {
+    scope: 'logs',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

@@ -1,12 +1,43 @@
 # 文件说明：处理 apps/cars/views/cars_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from django.db.models import Q
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.cars.serializers.cars_serializer import CarSerializer
 from apps.logs.services.log_service import save_operation_log
+from apps.owners.models import Owner
+from apps.users.utils.role_access import is_owner_user, is_property_manager_user
 from common.response.response import ResponseSuccess, ResponseError
 from apps.cars.models import Car
+
+
+def _owner_for_user(user):
+    """根据登录手机号找到对应业主档案，用于业主侧车辆数据隔离。"""
+
+    phone = getattr(user, "phone", None)
+
+    if not phone:
+        return None
+
+    return Owner.objects.filter(phone=phone).first()
+
+
+def _car_queryset_for_user(user):
+    if is_property_manager_user(user):
+        return Car.objects.all()
+
+    if is_owner_user(user):
+        owner = _owner_for_user(user)
+
+        if owner:
+            return Car.objects.filter(owner=owner)
+
+    return Car.objects.none()
+
+
+def _can_manage_cars(user):
+    return is_property_manager_user(user)
 
 
 class CarCreateView(APIView):
@@ -14,7 +45,11 @@ class CarCreateView(APIView):
     新增车辆
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
+        if not (_can_manage_cars(request.user) or is_owner_user(request.user)):
+            return ResponseError(msg="无权新增车辆")
 
         plate_no = request.data.get("plate_no")
 
@@ -23,7 +58,18 @@ class CarCreateView(APIView):
         if exists:
             return ResponseError(msg="车牌号已存在")
 
-        serializer = CarSerializer(data=request.data)
+        data = request.data.copy()
+
+        if not _can_manage_cars(request.user):
+            owner = _owner_for_user(request.user)
+
+            if not owner:
+                return ResponseError(msg="未找到当前业主档案")
+
+            # 业主端新增车辆只能绑定自己的业主档案，避免提交他人 owner_id。
+            data["owner"] = owner.id
+
+        serializer = CarSerializer(data=data)
 
         if serializer.is_valid():
 
@@ -52,10 +98,12 @@ class CarListView(APIView):
     车辆列表
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
 
         keyword = request.GET.get("keyword")
-        queryset = Car.objects.all()
+        queryset = _car_queryset_for_user(request.user)
 
         if keyword:
             queryset = queryset.filter(
@@ -75,7 +123,11 @@ class CarUpdateView(APIView):
     修改车辆
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
+        if not _can_manage_cars(request.user):
+            return ResponseError(msg="无权修改车辆")
 
         try:
             instance = Car.objects.get(pk=pk)
@@ -115,7 +167,11 @@ class CarDeleteView(APIView):
     删除车辆
     """
 
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
+        if not _can_manage_cars(request.user):
+            return ResponseError(msg="无权删除车辆")
 
         # 查询车辆
         instance = Car.objects.filter(id=pk).first()
@@ -142,12 +198,13 @@ class CarDetailView(APIView):
     车辆详情
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk):
 
-        try:
-            instance = Car.objects.get(pk=pk)
+        instance = _car_queryset_for_user(request.user).filter(pk=pk).first()
 
-        except Car.DoesNotExist:
+        if not instance:
             return ResponseError(msg="车辆不存在")
 
         serializer = CarSerializer(instance)
@@ -160,7 +217,12 @@ class CarDisableView(APIView):
     禁用车辆
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
+        if not _can_manage_cars(request.user):
+            return ResponseError(msg="无权禁用车辆")
+
         # 根据主键查询车辆
         car = Car.objects.filter(id=pk).first()
 
@@ -181,14 +243,19 @@ class CarEnableView(APIView):
     启用车辆
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
+        if not _can_manage_cars(request.user):
+            return ResponseError(msg="无权启用车辆")
+
         car = Car.objects.filter(id=pk).first()
 
         if not car:
             return ResponseError(msg="车辆不存在")
 
         # 修改车辆状态为启用
-        car.status = "enabled"
+        car.status = "normal"
         car.save()
 
         return ResponseSuccess(msg="启用成功")

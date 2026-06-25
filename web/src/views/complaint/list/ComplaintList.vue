@@ -4,6 +4,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteComplaint, getComplaintList, updateComplaint } from '@/api/complaint'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
 
@@ -33,11 +34,14 @@ const {
     resetPage,
 } = useClientPagination(tableData)
 
-const loadData = async () => {
+const loadData = async (shouldResetPage = true) => {
     const res = await getComplaintList(queryForm)
 
     tableData.value = res.data.data || []
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const resetSearch = () => {
@@ -92,6 +96,12 @@ const handleDelete = async (row: any) => {
 
 onMounted(() => {
     loadData()
+})
+
+useRealtimeRefresh(() => loadData(false), {
+    scope: 'complaints',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

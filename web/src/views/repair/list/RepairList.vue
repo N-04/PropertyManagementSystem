@@ -7,6 +7,7 @@ import { getRepairList } from '@/api/repair'
 import { updateRepair } from '@/api/repair'
 import { useRoute, useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
@@ -55,11 +56,14 @@ const {
 } = useClientPagination(tableData)
 
 // 加载数据
-const loadData = async () => {
+const loadData = async (shouldResetPage = true) => {
     const res = await getRepairList(queryForm.value)
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 // 点击搜索
 const handleSearch = () => {
@@ -230,6 +234,18 @@ watch(
         syncStatusFromRoute()
         loadData()
     }
+)
+
+useRealtimeRefresh(
+    async () => {
+        syncStatusFromRoute()
+        await loadData(false)
+    },
+    {
+        scope: 'repairs',
+        immediate: false,
+        intervalMs: 20000,
+    },
 )
 
 // 删除报修记录

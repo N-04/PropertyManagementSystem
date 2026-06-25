@@ -17,6 +17,7 @@ import { deleteRole } from '@/api/role'
 import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { ElMessage } from 'element-plus'
 
@@ -37,12 +38,15 @@ const {
 // =====================================================
 // 获取角色列表
 // =====================================================
-const getList = async () => {
+const getList = async (shouldResetPage = true) => {
     // 调用接口
     const res = await getRoleList()
 
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 const handleFilter = () => {
@@ -95,6 +99,12 @@ const handleDelete = async (row: any) => {
 onMounted(() => {
     // 获取列表
     getList()
+})
+
+useRealtimeRefresh(() => getList(false), {
+    scope: 'roles',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

@@ -11,6 +11,9 @@ from apps.logs.models import LoginLog
 
 # DRF
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from apps.users.utils.role_access import is_property_manager_user
+from common.response.response import ResponseError
 
 
 class LoginLogExportView(APIView):
@@ -18,7 +21,11 @@ class LoginLogExportView(APIView):
     登录日志导出Excel
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权导出登录日志")
 
         # 创建Excel工作簿
         workbook = openpyxl.Workbook()

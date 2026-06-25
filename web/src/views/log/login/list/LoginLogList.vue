@@ -7,6 +7,7 @@ import { onMounted, ref } from 'vue'
 import { getLoginLogList } from '@/api/log'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 // 表格数据
@@ -24,13 +25,16 @@ const {
 /**
  * 加载登录日志数据
  */
-const loadData = async () => {
+const loadData = async (shouldResetPage = true) => {
     // 调用接口
     const res = await getLoginLogList()
 
     // 赋值表格数据
     tableData.value = res.data.data
-    resetPage()
+
+    if (shouldResetPage) {
+        resetPage()
+    }
 }
 
 /**
@@ -53,6 +57,12 @@ const resetFilter = () => {
 // 页面加载完成执行
 onMounted(() => {
     loadData()
+})
+
+useRealtimeRefresh(() => loadData(false), {
+    scope: 'logs',
+    immediate: false,
+    intervalMs: 30000,
 })
 </script>
 

@@ -1,13 +1,14 @@
 # 文件说明：处理 apps/community/views/house_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from django.db.models import Q
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from apps.community.models import House
 from apps.community.serializers.house_serializer import HouseSerializer
 from apps.logs.services.log_service import save_operation_log
-from apps.users.utils.role_access import is_owner_user
+from apps.users.utils.role_access import is_owner_user, is_property_manager_user
 from common.response.response import (
     ResponseSuccess,
     ResponseError,
@@ -20,7 +21,11 @@ class HouseCreateView(APIView):
     创建房屋
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权创建房屋")
 
         serializer = HouseSerializer(data=request.data)
 
@@ -32,7 +37,9 @@ class HouseCreateView(APIView):
                 action=f"新增房屋：{house.room_no}",
             )
             save_log(
-                username="admin2", module="房屋管理", action=f"新增房屋 {house.room_no}"
+                username=request.user.username,
+                module="房屋管理",
+                action=f"新增房屋 {house.room_no}",
             )
 
             return ResponseSuccess(
@@ -51,6 +58,8 @@ class HouseListView(APIView):
     房屋列表
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         page = int(request.GET.get("page", 1))
         page_size = int(request.GET.get("page_size", 10))
@@ -61,6 +70,8 @@ class HouseListView(APIView):
 
         if is_owner_user(request.user):
             queryset = queryset.filter(owners__phone=request.user.phone).distinct()
+        elif not is_property_manager_user(request.user):
+            queryset = queryset.none()
 
         if keyword:
             queryset = queryset.filter(
@@ -96,10 +107,30 @@ class HouseListView(APIView):
 
 
 class HouseUpdateView(APIView):
-    def put(self, request):
-        serializer = HouseSerializer(data=request.data)
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权修改房屋")
+
+        instance = House.objects.filter(id=pk).first()
+
+        if not instance:
+            return ResponseError(msg="房屋信息不存在")
+
+        serializer = HouseSerializer(
+            instance,
+            data=request.data,
+            partial=True,
+        )
+
         if serializer.is_valid():
-            serializer.save()
+            house = serializer.save()
+            save_operation_log(
+                username=request.user.username,
+                module="房屋管理",
+                action=f"修改房屋：{house.room_no}",
+            )
             return ResponseSuccess(
                 data=serializer.data,
                 msg="修改成功",
@@ -111,7 +142,12 @@ class HouseUpdateView(APIView):
 
 
 class HouseDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
+        if not is_property_manager_user(request.user):
+            return ResponseError(msg="无权删除房屋")
+
         instance = House.objects.filter(id=pk).first()
 
         if not instance:
@@ -124,7 +160,7 @@ class HouseDeleteView(APIView):
         )
         instance.delete()
         save_log(
-            username="admin2",
+            username=request.user.username,
             module="房屋管理",
             action=f"删除房屋 {instance.room_no}",
         )

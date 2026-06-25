@@ -2,12 +2,40 @@
 
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.owners.models import Owner
 from apps.visitors.models.visitor import Visitor
 from common.response.response import ResponseSuccess, ResponseError
 from apps.visitors.serializers.visitor_serializer import VisitorSerializer
 from apps.logs.services.log_service import save_operation_log
+from apps.users.utils.role_access import (
+    is_customer_service_user,
+    is_owner_user,
+    is_property_manager_user,
+)
+
+
+def _can_manage_visitor(user):
+    """访客通行由物业管理侧和客服侧处理。"""
+
+    return is_property_manager_user(user) or is_customer_service_user(user)
+
+
+def _owner_for_user(user):
+    if not is_owner_user(user) or not getattr(user, "phone", ""):
+        return None
+
+    return Owner.objects.filter(phone=user.phone).first()
+
+
+def _can_access_visitor(user, visitor):
+    if _can_manage_visitor(user):
+        return True
+
+    owner = _owner_for_user(user)
+    return bool(owner and visitor.owner_id == owner.id)
 
 
 class VisitorCreateView(APIView):
@@ -15,9 +43,23 @@ class VisitorCreateView(APIView):
     创建访客
     """
 
-    def post(self, request):
+    permission_classes = [IsAuthenticated]
 
-        serializer = VisitorSerializer(data=request.data)
+    def post(self, request):
+        payload = request.data.copy()
+
+        if is_owner_user(request.user):
+            owner = _owner_for_user(request.user)
+
+            if not owner:
+                return ResponseError(msg="当前账号未绑定业主资料")
+
+            payload["owner"] = owner.id
+            payload["status"] = "waiting"
+        elif not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权创建访客")
+
+        serializer = VisitorSerializer(data=payload)
 
         if serializer.is_valid():
 
@@ -45,6 +87,8 @@ class VisitorListView(APIView):
     访客列表
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
 
         try:
@@ -55,6 +99,12 @@ class VisitorListView(APIView):
 
         keyword = (request.GET.get("keyword") or "").strip()
         queryset = Visitor.objects.select_related("owner", "approve_user").all().order_by("-id")
+
+        if is_owner_user(request.user):
+            owner = _owner_for_user(request.user)
+            queryset = queryset.filter(owner=owner) if owner else queryset.none()
+        elif not _can_manage_visitor(request.user):
+            queryset = queryset.none()
 
         if keyword:
             # 支持访客、手机号、被访业主和来访事由搜索，供前端列表筛选使用。
@@ -81,12 +131,17 @@ class VisitorUpdateView(APIView):
     修改访客
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
 
         instance = Visitor.objects.filter(id=pk).first()
 
         if not instance:
             return ResponseError(msg="访客记录不存在")
+
+        if not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权修改访客")
 
         serializer = VisitorSerializer(
             instance=instance,
@@ -119,12 +174,17 @@ class VisitorDeleteView(APIView):
     删除访客
     """
 
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, pk):
 
         instance = Visitor.objects.filter(id=pk).first()
 
         if not instance:
             return ResponseError(msg="访客记录不存在")
+
+        if not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权删除访客")
 
         save_operation_log(
             username=request.user.username,
@@ -142,12 +202,17 @@ class VisitorDetailView(APIView):
     访客详情
     """
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk):
 
         try:
             visitor = Visitor.objects.get(pk=pk)
         except Visitor.DoesNotExist:
             return ResponseError(msg="访客不存在")
+
+        if not _can_access_visitor(request.user, visitor):
+            return ResponseError(msg="无权查看访客")
 
         serializer = VisitorSerializer(visitor)
 
@@ -159,6 +224,8 @@ class VisitorApproveView(APIView):
     访客审批
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
         """
         更新访客审批结果
@@ -169,6 +236,9 @@ class VisitorApproveView(APIView):
 
         if not visitor:
             return ResponseError(msg="访客不存在")
+
+        if not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权审批访客")
 
         status = request.data.get("status")
 
@@ -200,12 +270,17 @@ class VisitorEnterView(APIView):
     访客到访登记
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
 
         visitor = Visitor.objects.filter(id=pk).first()
 
         if not visitor:
             return ResponseError(msg="访客不存在")
+
+        if not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权登记访客到访")
 
         # 必须审批通过才能登记
         if visitor.status != "approved":
@@ -224,12 +299,17 @@ class VisitorLeaveView(APIView):
     登记离开
     """
 
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, pk):
 
         visitor = Visitor.objects.filter(id=pk).first()
 
         if not visitor:
             return ResponseError(msg="访客不存在")
+
+        if not _can_manage_visitor(request.user):
+            return ResponseError(msg="无权登记访客离开")
 
         if visitor.status != "entered":
             return ResponseError(msg="访客未到访")

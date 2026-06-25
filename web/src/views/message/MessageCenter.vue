@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { ChatLineRound, Refresh, Search, View } from '@element-plus/icons-vue'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { AUTH_STATE_CHANGED_EVENT, getStoredRole, getStoredUsername } from '@/utils/authState'
 import {
@@ -113,10 +114,6 @@ const resetFilter = () => {
     resetPage()
 }
 
-const handleMessageFeedbackChanged = () => {
-    loadMessages()
-}
-
 const handleAuthStateChanged = () => {
     const nextRole = getStoredRole()
     const nextUsername = getStoredUsername()
@@ -134,27 +131,19 @@ const handleAuthStateChanged = () => {
     loadMessages()
 }
 
-const handleMessageFeedbackStorage = (event: StorageEvent) => {
-    if (MESSAGE_FEEDBACK_STORAGE_KEYS.includes(event.key || '')) {
-        loadMessages()
-    }
-}
+useRealtimeRefresh(loadMessages, {
+    scope: 'messages',
+    intervalMs: 15000,
+    events: MESSAGE_FEEDBACK_EVENTS,
+    storageKeys: MESSAGE_FEEDBACK_STORAGE_KEYS,
+})
 
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChanged)
-    window.addEventListener('storage', handleMessageFeedbackStorage)
-    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
-        window.addEventListener(eventName, handleMessageFeedbackChanged)
-    })
-    loadMessages()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChanged)
-    window.removeEventListener('storage', handleMessageFeedbackStorage)
-    MESSAGE_FEEDBACK_EVENTS.forEach((eventName) => {
-        window.removeEventListener(eventName, handleMessageFeedbackChanged)
-    })
 })
 </script>
 

@@ -7,8 +7,20 @@ from rest_framework.views import APIView
 from apps.complaints.models import Complaint
 from apps.complaints.serializers import ComplaintSerializer
 from apps.owners.models import Owner
-from apps.users.utils.role_access import is_owner_user
+from apps.users.utils.role_access import has_any_role, is_owner_user
 from common.response.response import ResponseError, ResponseSuccess
+
+COMPLAINT_MANAGE_ROLES = (
+    "admin",
+    "super_admin",
+    "property_admin",
+    "customer_service",
+    "service",
+)
+
+
+def _can_manage_complaint(user):
+    return has_any_role(user, *COMPLAINT_MANAGE_ROLES) or getattr(user, "is_superuser", False)
 
 
 def _owner_filter(user):
@@ -26,6 +38,8 @@ def _base_queryset(request):
 
     if is_owner_user(request.user):
         queryset = queryset.filter(_owner_filter(request.user))
+    elif not _can_manage_complaint(request.user):
+        queryset = queryset.none()
 
     return queryset
 
@@ -70,6 +84,8 @@ class ComplaintCreateView(APIView):
                 data["owner"] = owner.id
 
             data["phone"] = data.get("phone") or request.user.phone
+        elif not _can_manage_complaint(request.user):
+            return ResponseError(msg="无权提交投诉")
 
         serializer = ComplaintSerializer(data=data)
 
@@ -87,6 +103,9 @@ class ComplaintDetailView(APIView):
         complaint = get_object_or_404(Complaint, pk=pk)
 
         if is_owner_user(request.user) and not _can_owner_access(request.user, complaint):
+            return ResponseError(msg="无权查看该投诉")
+
+        if not is_owner_user(request.user) and not _can_manage_complaint(request.user):
             return ResponseError(msg="无权查看该投诉")
 
         return ResponseSuccess(data=ComplaintSerializer(complaint).data)
@@ -108,6 +127,9 @@ class ComplaintUpdateView(APIView):
             allowed_fields = {"title", "content", "category", "phone"}
             data = {key: request.data[key] for key in allowed_fields if key in request.data}
         else:
+            if not _can_manage_complaint(request.user):
+                return ResponseError(msg="无权处理该投诉")
+
             data = request.data.copy()
 
         serializer = ComplaintSerializer(complaint, data=data, partial=True)
@@ -131,6 +153,8 @@ class ComplaintDeleteView(APIView):
 
             if complaint.status != "pending":
                 return ResponseError(msg="已受理的投诉不能删除")
+        elif not _can_manage_complaint(request.user):
+            return ResponseError(msg="无权删除该投诉")
 
         complaint.delete()
         return ResponseSuccess(msg="删除成功")
