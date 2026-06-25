@@ -35,6 +35,8 @@
 - 维修
 <img width="1727" height="999" alt="image" src="https://github.com/user-attachments/assets/880dc38e-4b1a-47e6-8c1d-43ce66e509e9" />
 
+- 财务
+<img width="1728" height="1000" alt="image" src="https://github.com/user-attachments/assets/9a78a009-0ca8-4b73-993d-864ab751f9a3" />
 
 ## 技术栈
 
