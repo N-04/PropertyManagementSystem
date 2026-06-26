@@ -22,7 +22,7 @@ def _can_manage_rbac(user):
 
 
 def _rbac_forbidden_response():
-    return ResponseError(msg="无权访问权限管理")
+    return ResponseError(msg="无权访问权限管理", code=403)
 
 
 # =====================================================

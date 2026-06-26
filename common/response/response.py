@@ -17,7 +17,7 @@ class ResponseSuccess(Response):
 # 失败响应
 class ResponseError(Response):
 
-    def __init__(self, msg="error", code=500, status=200, data=None):
+    def __init__(self, msg="error", code=400, status=200, data=None):
 
         result = {"code": code, "msg": msg, "data": data}
 

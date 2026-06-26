@@ -1,6 +1,6 @@
 <!-- 文件说明：实现注册页面的手机号验证、图形验证码、短信验证码、密码确认和协议勾选。 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCaptchaApi, registerApi, sendSmsCodeApi } from '@/api/auth'
@@ -11,8 +11,12 @@ const captchaKey = ref('')
 const smsDebugCode = ref('')
 const smsCountdown = ref(0)
 const isSendingSms = ref(false)
+const isRegistering = ref(false)
 const agreementVisible = ref(false)
 const agreementRead = ref(false)
+const verifiedSmsPhone = ref('')
+const verifiedCaptchaKey = ref('')
+const verifiedCaptchaCode = ref('')
 let smsTimer: ReturnType<typeof setInterval> | null = null
 
 const form = reactive({
@@ -65,6 +69,8 @@ const loadCaptcha = async () => {
     captchaKey.value = res.data.data.captcha_key
     captchaImage.value = res.data.data.captcha_image
     form.captcha_code = ''
+    verifiedCaptchaKey.value = ''
+    verifiedCaptchaCode.value = ''
 }
 
 const smsButtonText = computed(() => {
@@ -72,7 +78,23 @@ const smsButtonText = computed(() => {
 })
 
 const canSubmit = computed(() => {
-    return agreementRead.value && form.agreed && !isSendingSms.value
+    return agreementRead.value && form.agreed && !isSendingSms.value && !isRegistering.value
+})
+
+const hasVerifiedSmsCaptcha = computed(() => {
+    return Boolean(
+        verifiedSmsPhone.value === form.phone &&
+            verifiedCaptchaKey.value &&
+            verifiedCaptchaCode.value
+    )
+})
+
+const effectiveCaptchaKey = computed(() => {
+    return hasVerifiedSmsCaptcha.value ? verifiedCaptchaKey.value : captchaKey.value
+})
+
+const effectiveCaptchaCode = computed(() => {
+    return hasVerifiedSmsCaptcha.value ? verifiedCaptchaCode.value : form.captcha_code
 })
 
 const validatePhone = () => {
@@ -90,18 +112,54 @@ const validatePhone = () => {
 }
 
 const validateIdentity = () => {
-    if (!form.real_name.trim()) {
+    form.real_name = form.real_name.trim()
+    form.id_card = form.id_card.trim().toUpperCase()
+
+    if (!form.real_name) {
         ElMessage.warning('真实姓名不能为空')
         return false
     }
 
-    if (form.real_name.trim().length > 50) {
+    if (form.real_name.length > 50) {
         ElMessage.warning('真实姓名长度不能超过50位')
         return false
     }
 
-    if (!/^\d{17}[\dXx]$/.test(form.id_card)) {
+    if (!/^[1-9]\d{5}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dX]$/.test(form.id_card)) {
         ElMessage.warning('请输入18位有效身份证号')
+        return false
+    }
+
+    const year = Number(form.id_card.slice(6, 10))
+    const month = Number(form.id_card.slice(10, 12))
+    const day = Number(form.id_card.slice(12, 14))
+    const birthday = new Date(year, month - 1, day)
+
+    if (
+        birthday.getFullYear() !== year ||
+        birthday.getMonth() !== month - 1 ||
+        birthday.getDate() !== day
+    ) {
+        ElMessage.warning('身份证出生日期不合法')
+        return false
+    }
+
+    const today = new Date()
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+    if (birthday > todayDate) {
+        ElMessage.warning('身份证出生日期不能晚于今天')
+        return false
+    }
+
+    const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
+    const checkMap = '10X98765432'
+    const total = weights.reduce((sum, weight, index) => {
+        return sum + Number(form.id_card[index]) * weight
+    }, 0)
+
+    if (form.id_card[17] !== checkMap[total % 11]) {
+        ElMessage.warning('身份证校验位不正确')
         return false
     }
 
@@ -137,7 +195,7 @@ const validateRegisterForm = () => {
         return false
     }
 
-    if (!form.captcha_code) {
+    if (!effectiveCaptchaCode.value) {
         ElMessage.warning('请输入图形验证码')
         return false
     }
@@ -206,6 +264,9 @@ const sendSmsCode = async () => {
             return
         }
 
+        verifiedSmsPhone.value = form.phone
+        verifiedCaptchaKey.value = captchaKey.value
+        verifiedCaptchaCode.value = form.captcha_code
         smsDebugCode.value = res.data.data.debug_code || ''
         if (smsDebugCode.value) {
             form.sms_code = smsDebugCode.value
@@ -238,6 +299,8 @@ const handleRegister = async () => {
         return
     }
 
+    isRegistering.value = true
+
     try {
         const res = await registerApi({
             phone: form.phone,
@@ -245,8 +308,8 @@ const handleRegister = async () => {
             id_card: form.id_card,
             password: form.password,
             confirm_password: form.confirm_password,
-            captcha_key: captchaKey.value,
-            captcha_code: form.captcha_code,
+            captcha_key: effectiveCaptchaKey.value,
+            captcha_code: effectiveCaptchaCode.value,
             sms_code: form.sms_code,
             agreed: form.agreed,
         })
@@ -262,8 +325,25 @@ const handleRegister = async () => {
     } catch (error: any) {
         ElMessage.error(getResponseMessage(error?.response?.data, '注册失败，请检查后端服务'))
         await loadCaptcha()
+    } finally {
+        isRegistering.value = false
     }
 }
+
+watch(
+    () => form.phone,
+    () => {
+        if (verifiedSmsPhone.value && verifiedSmsPhone.value !== form.phone) {
+            verifiedSmsPhone.value = ''
+            verifiedCaptchaKey.value = ''
+            verifiedCaptchaCode.value = ''
+            smsDebugCode.value = ''
+            form.sms_code = ''
+            smsCountdown.value = 0
+            clearSmsTimer()
+        }
+    }
+)
 
 onMounted(() => {
     loadCaptcha()
@@ -281,13 +361,13 @@ onBeforeUnmount(() => {
                 <div class="title">业主注册</div>
             </template>
 
-            <el-form :model="form" label-width="100px">
-                <el-form-item label="手机号">
-                    <el-input v-model="form.phone" maxlength="11" />
-                </el-form-item>
-
+            <el-form :model="form" class="register-form" label-width="100px">
                 <el-form-item label="真实姓名">
                     <el-input v-model="form.real_name" maxlength="50" />
+                </el-form-item>
+
+                <el-form-item label="手机号">
+                    <el-input v-model="form.phone" maxlength="11" />
                 </el-form-item>
 
                 <el-form-item label="身份证号">
@@ -326,7 +406,7 @@ onBeforeUnmount(() => {
                     </div>
                 </el-form-item>
 
-                <el-form-item>
+                <el-form-item class="form-action-item">
                     <div class="agreement-row">
                         <el-checkbox v-model="form.agreed" :disabled="!agreementRead">
                             我已阅读并同意
@@ -335,19 +415,20 @@ onBeforeUnmount(() => {
                     </div>
                 </el-form-item>
 
-                <el-form-item>
+                <el-form-item class="form-action-item">
                     <el-button
+                        class="submit-button"
                         type="primary"
-                        style="width: 100%"
                         :disabled="!canSubmit"
+                        :loading="isRegistering"
                         @click="handleRegister"
                     >
                         提交注册
                     </el-button>
                 </el-form-item>
 
-                <el-form-item>
-                    <el-button link type="primary" @click="router.push('/login')">
+                <el-form-item class="form-action-item">
+                    <el-button class="login-link" link type="primary" @click="router.push('/login')">
                         返回登录
                     </el-button>
                 </el-form-item>
@@ -371,20 +452,25 @@ onBeforeUnmount(() => {
 <style scoped>
 .register-page {
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    padding: 40px 16px;
     background: #f5f7fa;
 }
 
 .register-card {
-    width: 460px;
+    width: min(520px, 100%);
 }
 
 .title {
     text-align: center;
     font-size: 22px;
     font-weight: bold;
+}
+
+.register-form {
+    width: 100%;
 }
 
 .captcha-row {
@@ -405,7 +491,29 @@ onBeforeUnmount(() => {
 .agreement-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.form-action-item {
+    margin-bottom: 20px;
+}
+
+.form-action-item :deep(.el-form-item__content) {
+    justify-content: center;
+    margin-left: 0 !important;
+}
+
+.submit-button {
+    width: 320px;
+    max-width: 100%;
+}
+
+.login-link {
+    font-size: 16px;
+    font-weight: 600;
 }
 
 .agreement-content {

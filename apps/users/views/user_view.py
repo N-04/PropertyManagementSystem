@@ -50,7 +50,7 @@ class UserCreateView(APIView):
 
     def post(self, request):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权创建用户")
+            return ResponseError(msg="无权创建用户", code=403)
 
         # =====================================================
         # 1. 获取前端提交的数据
@@ -159,7 +159,7 @@ class UserDeleteView(APIView):
 
     def delete(self, request, pk):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权删除用户")
+            return ResponseError(msg="无权删除用户", code=403)
 
         try:
 
@@ -183,7 +183,7 @@ class UserDetailView(APIView):
     # =====================================================
     def get(self, request, pk):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权查看用户")
+            return ResponseError(msg="无权查看用户", code=403)
 
         # 根据ID查询用户
         user = get_object_or_404(User, id=pk)
@@ -211,7 +211,7 @@ class UserDetailView(APIView):
     # =====================================================
     def put(self, request, pk):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权修改用户")
+            return ResponseError(msg="无权修改用户", code=403)
 
         """
         pk:
@@ -333,7 +333,7 @@ class UserListView(APIView):
 
     def get(self, request):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权查看用户列表")
+            return ResponseError(msg="无权查看用户列表", code=403)
 
         queryset = User.objects.all().order_by("-id")
         keyword = request.GET.get("keyword", "").strip()
@@ -365,7 +365,7 @@ class UserAuditView(APIView):
 
     def put(self, request, pk):
         if not is_property_manager_user(request.user):
-            return ResponseError(msg="无权审核用户")
+            return ResponseError(msg="无权审核用户", code=403)
 
         user = get_object_or_404(User, id=pk)
         serializer = UserAuditSerializer(user, data=request.data, partial=True)
