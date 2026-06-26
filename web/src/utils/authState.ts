@@ -11,14 +11,12 @@ const rolePriority = [
     'super_admin',
     'admin',
     'property_admin',
-    'customer_service',
     'finance_staff',
     'finance',
     'repair_staff',
     'repairer',
     'repair',
     'owner',
-    'service',
 ]
 
 const safeRead = (storage: Storage, key: AuthKey) => {

@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isCustomerServiceRole } from '@/api/menu'
 import { appMenuTitle } from '@/menu/fallbackMenus'
 import {
     AUTH_STATE_CHANGED_EVENT,
@@ -33,12 +32,6 @@ const routes = [
         meta: {
             public: true,
         },
-    },
-
-    // 客服即时通讯工作台：登录后独立展示，不使用后台侧边栏。
-    {
-        path: '/service/chat',
-        component: () => import('@/views/message/CustomerServiceChat.vue'),
     },
 
     // 后台系统：登录后才显示菜单
@@ -258,8 +251,6 @@ const roleTitleMap: Record<string, string> = {
     property_admin: '物业管理员',
     finance_staff: '财务人员',
     finance: '财务人员',
-    customer_service: '客服人员',
-    service: '客服人员',
     repair_staff: '维修员',
     repairer: '维修员',
     repair: '维修员',
@@ -292,7 +283,6 @@ const routeTitleMap: Record<string, string> = {
     '/profile': '个人中心',
     '/profile/password': '修改密码',
     '/message/center': '消息中心',
-    '/service/chat': '即时通讯',
     '/upload': '文件上传',
     '/upload/test': '文件上传',
     '/log/list': '操作审计日志',
@@ -360,7 +350,6 @@ if (typeof window !== 'undefined') {
 // 路由拦截，未登录不允许进入后台。
 router.beforeEach((to) => {
     const token = getStoredToken()
-    const role = getStoredRole()
 
     const publicPaths = ['/login', '/register', '/forgot-password']
 
@@ -370,10 +359,6 @@ router.beforeEach((to) => {
 
     if (!token) {
         return '/login'
-    }
-
-    if (isCustomerServiceRole(role) && to.path !== '/service/chat') {
-        return '/service/chat'
     }
 
     return true

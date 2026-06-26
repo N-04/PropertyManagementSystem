@@ -44,14 +44,6 @@ const roleMenuMap: Record<string, RoleMenuRule> = {
         allow: ['finance'],
     },
 
-    customer_service: {
-        allow: [],
-    },
-
-    service: {
-        allow: [],
-    },
-
     repair_staff: {
         allow: ['repairer'],
     },
@@ -108,7 +100,6 @@ const hiddenMenuIds = [
 const adminRoles = ['admin', 'super_admin', 'property_admin']
 const repairRoles = ['repair_staff', 'repairer', 'repair']
 const financeRoles = ['finance_staff', 'finance']
-const customerServiceRoles = ['customer_service', 'service']
 
 const leafMenu = (id: string, title: string, path: string, children: AppMenuItem[] = []): AppMenuItem => {
     return {
@@ -191,12 +182,6 @@ const financeDisplayMenus = (): AppMenuItem[] => [
     groupMenu('finance-record', '缴费记录', [
         leafMenu('finance-paid-record', '收款记录', '/fee/list?status=paid'),
     ]),
-    groupMenu('finance-overdue', '欠费提醒', [
-        leafMenu('finance-overdue-list', '欠费列表', '/fee/list?status=unpaid'),
-    ]),
-    groupMenu('finance-report', '财务报表', [
-        leafMenu('finance-dashboard-report', '收入统计', '/dashboard'),
-    ]),
     groupMenu('finance-profile', '个人中心', [
         leafMenu('finance-profile-page', '个人资料', '/profile'),
         leafMenu('finance-profile-password', '修改密码', '/profile/password'),
@@ -237,16 +222,8 @@ const ownerDisplayMenus = (): AppMenuItem[] => [
     leafMenu('owner-notice-list', '公告活动', '/notice/list'),
 ]
 
-export function isCustomerServiceRole(role: string) {
-    return customerServiceRoles.includes(role)
-}
-
 export function buildDisplayMenusByRole(menus: AppMenuItem[], role: string): AppMenuItem[] {
     const cleanedMenus = removeHiddenMenus(menus)
-
-    if (customerServiceRoles.includes(role)) {
-        return []
-    }
 
     if (adminRoles.includes(role)) {
         return adminDisplayMenus()

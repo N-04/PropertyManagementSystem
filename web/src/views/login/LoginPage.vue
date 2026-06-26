@@ -4,7 +4,6 @@ import { refreshBrowserTitle } from '@/router'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCaptchaApi, loginApi, phoneLoginApi, sendSmsCodeApi } from '@/api/auth'
-import { isCustomerServiceRole } from '@/api/menu'
 import { saveAuthState } from '@/utils/authState'
 
 const router = useRouter()
@@ -112,7 +111,7 @@ const saveLoginDataAndEnter = async (loginData: any) => {
     const { role } = saveAuthState(loginData)
 
     try {
-        await router.push(isCustomerServiceRole(role) ? '/service/chat' : '/dashboard')
+        await router.push('/dashboard')
         refreshBrowserTitle()
         ElMessage.success('登录成功')
     } catch {

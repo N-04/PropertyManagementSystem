@@ -31,7 +31,6 @@ export const MESSAGE_FEEDBACK_EVENTS = [
 
 const adminRoles = ['admin', 'super_admin', 'property_admin']
 const repairRoles = ['repair_staff', 'repairer', 'repair']
-const customerServiceRoles = ['customer_service', 'service']
 
 const extractList = (data: any) => {
     if (Array.isArray(data)) {
@@ -65,15 +64,13 @@ const canSeeComplaint = (role: string) => {
     return [
         'owner',
         'property_admin',
-        'customer_service',
-        'service',
         'admin',
         'super_admin',
     ].includes(role)
 }
 
-const chatTargetPath = (role: string) => {
-    return ['customer_service', 'service'].includes(role) ? '/service/chat' : '/message/center'
+const chatTargetPath = () => {
+    return '/message/center'
 }
 
 const feeTypeTextMap: Record<string, string> = {
@@ -158,12 +155,10 @@ const roleMatchesTarget = (role: string, targetRole?: string) => {
     }
 
     if (!targetRole) {
-        return customerServiceRoles.includes(role)
+        return false
     }
 
     const roleAliases: Record<string, string[]> = {
-        customer_service: customerServiceRoles,
-        service: customerServiceRoles,
         finance_staff: ['finance_staff', 'finance'],
         finance: ['finance_staff', 'finance'],
         repair_staff: repairRoles,
@@ -218,7 +213,7 @@ const feedbackRows = (role: string): MessageRow[] => {
                 content: item.message || `用户已提交 ${item.score || '-'} 分服务评分`,
                 status: '已评价',
                 created_at: item.created_at || '',
-                path: customerServiceRoles.includes(role) ? '/service/chat' : '/message/center',
+                path: '/message/center',
             })
         })
 
@@ -247,7 +242,7 @@ export const loadMessageCenterRows = async (role: string) => {
                     content: item.last_message || '暂无最新消息',
                     status: item.status_text || '沟通中',
                     created_at: item.updated_at || item.created_at || '',
-                    path: chatTargetPath(role),
+                    path: chatTargetPath(),
                 }))
             } catch {
                 // 站内会话加载失败不影响账单、工单等业务消息。
@@ -312,7 +307,7 @@ export const loadMessageCenterRows = async (role: string) => {
 
                 return complaints.map((item: any) => ({
                     id: `complaint-${item.id}`,
-                    type: '客服人员 → 业主',
+                    type: '物业管理员 → 业主',
                     title: item.title || `投诉建议 #${item.id}`,
                     content: item.handle_result || item.return_visit || item.content || '',
                     status: complaintStatusText(item.status),

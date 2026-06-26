@@ -77,12 +77,6 @@ export const fallbackMenus: AppMenuItem[] = [
         item('finance-record', '缴费记录', undefined, [
             item('finance-paid-record', '收款记录', '/fee/list?status=paid'),
         ]),
-        item('finance-overdue', '欠费提醒', undefined, [
-            item('finance-overdue-list', '欠费列表', '/fee/list?status=unpaid'),
-        ]),
-        item('finance-report', '财务报表', undefined, [
-            item('finance-dashboard-report', '收入统计', '/dashboard'),
-        ]),
         item('finance-profile', '个人中心', undefined, [
             item('finance-profile-page', '个人资料', '/profile'),
             item('finance-profile-password', '修改密码', '/profile/password'),

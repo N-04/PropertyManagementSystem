@@ -166,7 +166,6 @@ MENU_TREE = [
                         children=[
                             menu_node("admin-property-owner", "业主管理", "/owner/list"),
                             menu_node("admin-property-repairer", "维修员管理", "/user/list"),
-                            menu_node("admin-property-service", "客服人员管理", "/user/list"),
                             menu_node("admin-property-finance", "财务人员管理", "/user/list"),
                             menu_node("admin-property-realname", "实名认证审核", "/user/list"),
                         ],
@@ -245,9 +244,6 @@ MENU_TREE = [
             menu_node("finance-electric", "电费管理", "/fee/list?fee_type=electric"),
             menu_node("finance-parking", "车位费管理", "/fee/list?fee_type=parking"),
             menu_node("finance-record", "缴费记录", "/fee/list?status=paid"),
-            menu_node("finance-arrears", "欠费提醒", "/fee/list?status=unpaid"),
-            menu_node("finance-report", "财务报表", "/dashboard"),
-            menu_node("finance-income", "收入统计", "/dashboard"),
         ],
     ),
     menu_node(
@@ -408,14 +404,6 @@ ROLE_DEFINITIONS = [
         "real_name": "业主",
         "phone": "13800000004",
         "roots": ["owner"],
-    },
-    {
-        "code": "customer_service",
-        "name": "客服人员",
-        "username": "customer_service_demo",
-        "real_name": "客服人员",
-        "phone": "13800000005",
-        "roots": [],
     },
 ]
 

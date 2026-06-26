@@ -64,8 +64,6 @@ const roleTitleMap: Record<string, string> = {
     property_admin: '物业管理员',
     finance_staff: '财务人员',
     finance: '财务人员',
-    customer_service: '客服人员',
-    service: '客服人员',
     repair_staff: '维修员',
     repairer: '维修员',
     repair: '维修员',
