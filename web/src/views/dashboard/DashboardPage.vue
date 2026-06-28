@@ -2177,10 +2177,20 @@ useRealtimeRefresh(refreshDashboardData, {
                         <span v-for="item in ownerHouseMeta" :key="item">{{ item }}</span>
                     </p>
                 </div>
-                <span class="owner-house-status" :class="{ pending: !ownerProfileCompleted }">
-                    <el-icon><Check /></el-icon>
-                    {{ ownerProfileCompleted ? '资料已完善' : '资料待完善' }}
-                </span>
+                <div class="owner-house-actions">
+                    <span class="owner-house-status" :class="{ pending: !ownerProfileCompleted }">
+                        <el-icon><Check /></el-icon>
+                        {{ ownerProfileCompleted ? '资料已完善' : '资料待完善' }}
+                    </span>
+                    <button
+                        v-if="!ownerProfileCompleted"
+                        type="button"
+                        class="owner-outline-button owner-profile-action"
+                        @click="goTo('/profile')"
+                    >
+                        补充资料
+                    </button>
+                </div>
             </section>
 
             <div class="owner-home-grid">
@@ -2205,7 +2215,16 @@ useRealtimeRefresh(refreshDashboardData, {
                                         <i><b :style="{ width: `${item.progress || 0}%` }" /></i>
                                     </div>
                                 </div>
+                                <div v-else class="owner-task-extra owner-task-extra-placeholder" />
                                 <span class="status-pill" :class="item.statusClass">{{ item.status }}</span>
+                                <button
+                                    v-if="item.action"
+                                    type="button"
+                                    class="owner-outline-button"
+                                    @click="goTo(item.path)"
+                                >
+                                    {{ item.action }}
+                                </button>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state">暂无待处理事项</div>
@@ -3926,6 +3945,19 @@ useRealtimeRefresh(refreshDashboardData, {
     background: #fff8eb;
 }
 
+.owner-house-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.owner-profile-action {
+    min-width: 96px;
+    height: 38px;
+    background: #fff;
+}
+
 .owner-home-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 380px;
@@ -4004,6 +4036,10 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .owner-task-extra {
     min-width: 0;
+}
+
+.owner-task-extra-placeholder {
+    min-height: 1px;
 }
 
 .owner-task-extra > strong {
@@ -4696,8 +4732,13 @@ useRealtimeRefresh(refreshDashboardData, {
         grid-template-columns: 64px minmax(0, 1fr);
     }
 
-    .owner-house-status {
+    .owner-house-actions {
         grid-column: 1 / -1;
+        justify-self: start;
+        justify-content: flex-start;
+    }
+
+    .owner-house-status {
         justify-self: start;
     }
 
