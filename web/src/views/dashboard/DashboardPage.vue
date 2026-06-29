@@ -3,6 +3,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+    ArrowLeft,
+    ArrowRight,
     Bell,
     Calendar,
     ChatDotRound,
@@ -2082,9 +2084,21 @@ useRealtimeRefresh(refreshDashboardData, {
                                 <h2>维修日历</h2>
                             </div>
                             <div class="owner-calendar-month">
-                                <button type="button" @click="shiftRepairCalendarMonth(-1)">&lt;</button>
+                                <button
+                                    type="button"
+                                    aria-label="上个月"
+                                    @click="shiftRepairCalendarMonth(-1)"
+                                >
+                                    <el-icon><ArrowLeft /></el-icon>
+                                </button>
                                 <strong>{{ formatMonthLabel(repairCalendarCursor) }}</strong>
-                                <button type="button" @click="shiftRepairCalendarMonth(1)">&gt;</button>
+                                <button
+                                    type="button"
+                                    aria-label="下个月"
+                                    @click="shiftRepairCalendarMonth(1)"
+                                >
+                                    <el-icon><ArrowRight /></el-icon>
+                                </button>
                             </div>
                         </div>
 
@@ -2262,9 +2276,21 @@ useRealtimeRefresh(refreshDashboardData, {
                                 <h2>社区日历</h2>
                             </div>
                             <div class="owner-calendar-month">
-                                <button type="button" @click="shiftOwnerCalendarMonth(-1)">&lt;</button>
+                                <button
+                                    type="button"
+                                    aria-label="上个月"
+                                    @click="shiftOwnerCalendarMonth(-1)"
+                                >
+                                    <el-icon><ArrowLeft /></el-icon>
+                                </button>
                                 <strong>{{ formatMonthLabel(ownerCalendarCursor) }}</strong>
-                                <button type="button" @click="shiftOwnerCalendarMonth(1)">&gt;</button>
+                                <button
+                                    type="button"
+                                    aria-label="下个月"
+                                    @click="shiftOwnerCalendarMonth(1)"
+                                >
+                                    <el-icon><ArrowRight /></el-icon>
+                                </button>
                             </div>
                         </div>
 
@@ -4186,8 +4212,10 @@ button.owner-house-status {
     top: 50%;
     left: 50%;
     display: grid;
-    grid-template-columns: 32px 124px 32px;
+    grid-template-columns: 32px 136px 32px;
+    align-items: center;
     min-width: 208px;
+    height: 32px;
     transform: translate(-50%, -50%);
 }
 
@@ -4205,26 +4233,40 @@ button.owner-house-status {
 }
 
 .owner-calendar-month strong {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     color: var(--text-primary);
     font-size: 15px;
     font-weight: 600;
-    line-height: 22px;
+    line-height: 32px;
 }
 
 .owner-calendar-month button {
     display: inline-flex;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     align-items: center;
     justify-content: center;
     border: 0;
     border-radius: 6px;
     color: var(--text-subtle);
     background: transparent;
-    font-size: 20px;
-    line-height: 1;
+    font-size: 18px;
+    line-height: 32px;
     cursor: pointer;
+}
+
+.owner-calendar-month button .el-icon {
+    display: flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
 }
 
 .owner-calendar-body {

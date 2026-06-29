@@ -155,9 +155,43 @@ const selectedProfileHouse = computed(() => {
 
     return houseOptions.value.find((house) => toNumberId(house.id) === selectedHouseId.value) || null
 })
-const primaryProfileHouse = computed(() => {
-    return selectedProfileHouse.value || ownerHouses.value[0] || ownerProfileHouse.value
+const savedProfileHouse = computed(() => ownerHouses.value[0] || ownerProfileHouse.value)
+const savedHouseId = computed(() => {
+    const house = savedProfileHouse.value
+
+    return toNumberId(house?.id || primaryOwnerProfile.value?.house)
 })
+const isSelectedHouseSaved = computed(() => {
+    return Boolean(selectedHouseId.value && savedHouseId.value === selectedHouseId.value)
+})
+const houseBindTag = computed(() => {
+    if (isSelectedHouseSaved.value) {
+        return {
+            type: 'success',
+            text: '已绑定',
+        }
+    }
+
+    if (selectedHouseId.value) {
+        return {
+            type: 'warning',
+            text: '待保存',
+        }
+    }
+
+    return {
+        type: 'warning',
+        text: '待绑定',
+    }
+})
+const primaryProfileHouse = computed(() => {
+    return selectedProfileHouse.value || savedProfileHouse.value
+})
+const isHouseOptionDisabled = (house: any) => {
+    const houseId = toNumberId(house.id)
+
+    return house.status !== 'vacant' && houseId !== savedHouseId.value
+}
 const ownerRelationshipText = computed(() => {
     const relationship = selectedRelationship.value || primaryOwnerProfile.value?.relationship
 
@@ -389,8 +423,7 @@ onMounted(() => {
             <section v-if="isOwnerProfile" class="profile-house-panel">
                 <div class="profile-house-header">
                     <h3>房屋信息</h3>
-                    <el-tag v-if="primaryProfileHouse" type="success">已绑定</el-tag>
-                    <el-tag v-else type="warning">待绑定</el-tag>
+                    <el-tag :type="houseBindTag.type">{{ houseBindTag.text }}</el-tag>
                 </div>
 
                 <div class="profile-house-selector">
@@ -408,6 +441,7 @@ onMounted(() => {
                                         :key="house.id"
                                         :label="houseOptionLabel(house)"
                                         :value="toNumberId(house.id)"
+                                        :disabled="isHouseOptionDisabled(house)"
                                     />
                                 </el-select>
                             </el-form-item>

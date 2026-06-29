@@ -167,15 +167,13 @@ class CurrentUserProfileSerializer(serializers.Serializer):
 
         if is_owner_user(user):
             owner_queryset = Owner.objects.filter(house=house)
+            is_current_user_house = owner_queryset.filter(phone=user.phone).exists()
 
-            if (
-                owner_queryset.exists()
-                and not owner_queryset.filter(phone=user.phone).exists()
-            ):
-                raise serializers.ValidationError("该房屋已绑定其他业主")
+            if is_current_user_house:
+                return value
 
-            if not owner_queryset.exists() and house.status != "vacant":
-                raise serializers.ValidationError("只能绑定未入住的空置房屋")
+            if house.status != "vacant" or owner_queryset.exists():
+                raise serializers.ValidationError("只能选择未绑定的闲置房屋")
 
         return value
 
@@ -198,11 +196,11 @@ class CurrentUserProfileSerializer(serializers.Serializer):
 
             owner_queryset = Owner.objects.filter(phone=user.phone)
 
-            if (
-                not owner_queryset.exists()
-                and Owner.objects.filter(id_card=user.id_card).exists()
-            ):
-                raise serializers.ValidationError("该身份证已绑定其他业主资料")
+            if not owner_queryset.exists():
+                same_id_card_owner = Owner.objects.filter(id_card=user.id_card).first()
+
+                if same_id_card_owner and same_id_card_owner.house_id != house_id:
+                    raise serializers.ValidationError("该身份证已绑定其他房屋")
 
         return attrs
 
@@ -240,13 +238,35 @@ class CurrentUserProfileSerializer(serializers.Serializer):
             if owner_queryset.exists():
                 owner_queryset.update(**owner_updates)
             elif house_id:
-                Owner.objects.create(
+                matched_owner = Owner.objects.filter(
                     house_id=house_id,
-                    name=instance.real_name or instance.username,
-                    phone=instance.phone,
-                    avatar=instance.avatar,
-                    relationship=relationship or "self",
                     id_card=instance.id_card,
+                ).first()
+
+                if matched_owner:
+                    for field, value in owner_updates.items():
+                        setattr(matched_owner, field, value)
+
+                    matched_owner.status = "approved"
+                    matched_owner.save()
+                else:
+                    Owner.objects.create(
+                        house_id=house_id,
+                        name=instance.real_name or instance.username,
+                        phone=instance.phone,
+                        avatar=instance.avatar,
+                        relationship=relationship or "self",
+                        id_card=instance.id_card,
+                        is_primary=True,
+                        status="approved",
+                    )
+
+            if house_id:
+                owner_count = Owner.objects.filter(house_id=house_id).count()
+                House.objects.filter(id=house_id).update(
+                    status="occupied",
+                    owner_count=owner_count,
+                    resident_count=owner_count,
                 )
 
         return instance

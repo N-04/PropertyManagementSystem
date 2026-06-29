@@ -70,12 +70,13 @@ class HouseListView(APIView):
         queryset = House.objects.select_related("unit__building__community").all().order_by("-id")
 
         if is_owner_user(request.user):
-            owner_filter = Q(owners__phone=request.user.phone)
-
             if profile_select:
-                owner_filter |= Q(owners__isnull=True, status="vacant")
-
-            queryset = queryset.filter(owner_filter).distinct()
+                queryset = queryset.filter(
+                    Q(status="vacant", owners__isnull=True)
+                    | Q(owners__phone=request.user.phone)
+                ).distinct()
+            else:
+                queryset = queryset.filter(owners__phone=request.user.phone).distinct()
         elif not is_property_manager_user(request.user):
             queryset = queryset.none()
 

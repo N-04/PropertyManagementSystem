@@ -28,6 +28,20 @@ const PARKING_FEEDBACK_STORAGE_KEY = 'parkingPurchaseFeedback'
 const visitorParkingRows = ref<any[]>([])
 const availableParkingRows = ref<any[]>([])
 
+const parkingZoneText = (zone: string) => {
+    const zoneMap: Record<string, string> = {
+        PT: '普通区',
+        SM: '售卖区',
+    }
+
+    return zoneMap[`${zone || ''}`.toUpperCase()] || zone || '其他'
+}
+
+const isSaleParking = (item: any) => {
+    return `${item.zone || ''}`.toUpperCase() === 'SM'
+        || `${item.parking_no || ''}`.toUpperCase().startsWith('SM-')
+}
+
 const matchesParkingKeyword = (item: any) => {
     const keywordValue = keyword.value.trim().toLowerCase()
 
@@ -38,6 +52,7 @@ const matchesParkingKeyword = (item: any) => {
     return [
         item.parking_no,
         item.zone,
+        parkingZoneText(item.zone),
         item.owner_name,
         item.room_no,
         item.status_text,
@@ -168,7 +183,7 @@ const getOwnerParkingList = async () => {
 
     tableData.value = mineRes.data.data || []
     availableParkingRows.value = (candidateRes.data.data || []).filter((item: any) => {
-        return item.status === 'idle' && !item.owner
+        return item.status === 'idle' && !item.owner && isSaleParking(item)
     })
     resetPage()
 }
@@ -391,12 +406,7 @@ watch(
                 <strong>{{ parkingSummary.idle }}</strong>
                 <small>业主可选择空闲车位</small>
             </div>
-            <div v-if="isOwner" class="parking-summary-card">
-                <span>使用中</span>
-                <strong>{{ parkingSummary.used }}</strong>
-                <small>当前用户正在使用的车位</small>
-            </div>
-            <div class="parking-summary-card">
+            <div v-if="!isOwner" class="parking-summary-card">
                 <span>车位总数</span>
                 <strong>{{ parkingSummary.total }}</strong>
                 <small>{{ isOwner ? '仅统计当前用户车位' : '不含访客临停记录' }}</small>
@@ -413,7 +423,7 @@ watch(
                 @clear="handleFilter"
             />
             <el-select
-                v-if="parkingView === 'owner'"
+                v-if="parkingView === 'owner' && (!isOwner || ownerParkingMode !== 'available')"
                 v-model="statusFilter"
                 clearable
                 placeholder="车位状态"
@@ -434,7 +444,7 @@ watch(
             <div class="zone-grid">
                 <section v-for="zone in zoneList" :key="zone.zone" class="zone-card">
                     <div class="zone-title">
-                        <span>{{ zone.zone }}区</span>
+                        <span>{{ parkingZoneText(zone.zone) }}</span>
                         <small>空闲 {{ zone.idleCount }} / 使用 {{ zone.usedCount }}</small>
                     </div>
 
@@ -449,7 +459,9 @@ watch(
                             @click="handleBind(item)"
                         >
                             <span>{{ item.parking_no }}</span>
-                            <small>{{ statusLabel(item.status) }}</small>
+                            <small>
+                                {{ ownerParkingMode === 'available' && item.status === 'idle' ? '点击购买' : statusLabel(item.status) }}
+                            </small>
                         </button>
                     </div>
                 </section>
@@ -463,12 +475,20 @@ watch(
             </div>
         </div>
 
-        <el-table v-if="parkingView === 'owner'" :data="pagedTableData" border>
+        <el-table
+            v-if="parkingView === 'owner' && (!isOwner || ownerParkingMode !== 'available')"
+            :data="pagedTableData"
+            border
+        >
             <el-table-column prop="id" label="ID" />
 
             <el-table-column prop="parking_no" label="车位号" />
 
-            <el-table-column prop="zone" label="分区" />
+            <el-table-column label="分区">
+                <template #default="scope">
+                    {{ parkingZoneText(scope.row.zone) }}
+                </template>
+            </el-table-column>
 
             <el-table-column prop="owner_name" label="业主" />
 
@@ -481,19 +501,6 @@ watch(
                     <el-tag :type="scope.row.status === 'idle' ? 'success' : 'info'">
                         {{ ownerParkingStatusText(scope.row) }}
                     </el-tag>
-                </template>
-            </el-table-column>
-
-            <el-table-column v-if="isOwner && ownerParkingMode === 'available'" label="操作" width="120">
-                <template #default="scope">
-                    <el-button
-                        v-if="scope.row.status === 'idle'"
-                        type="primary"
-                        size="small"
-                        @click="handleBind(scope.row)"
-                    >
-                        购买
-                    </el-button>
                 </template>
             </el-table-column>
 
@@ -510,7 +517,7 @@ watch(
             </el-table-column>
         </el-table>
 
-        <el-table v-else :data="pagedTableData" border>
+        <el-table v-else-if="parkingView === 'visitor'" :data="pagedTableData" border>
             <el-table-column prop="parking_no" label="临停车位" />
             <el-table-column prop="visitor_name" label="访客" />
             <el-table-column prop="phone" label="访客手机号" />
@@ -528,6 +535,7 @@ watch(
         </el-table>
 
         <DataPagination
+            v-if="!(isOwner && parkingView === 'owner' && ownerParkingMode === 'available')"
             v-model:current-page="page"
             v-model:page-size="pageSize"
             :page-sizes="[5, 10, 20, 50]"
@@ -547,7 +555,7 @@ watch(
 }
 
 .parking-dashboard.owner-dashboard {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .parking-summary-card {

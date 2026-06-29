@@ -23,6 +23,7 @@ PARKING_MANAGE_ROLES = (
     "super_admin",
     "property_admin",
 )
+SALE_PARKING_PREFIX = "SM-"
 
 
 def _can_manage_parking(user):
@@ -54,6 +55,12 @@ def _property_admin_queryset():
         is_active=True,
         status=1,
     ).distinct()
+
+
+def _is_sale_parking(parking):
+    """售卖区车位才允许业主购买；普通区车位保留给访客临停。"""
+
+    return (parking.parking_no or "").upper().startswith(SALE_PARKING_PREFIX)
 
 
 def _notify_property_admins_for_parking(parking, owner, sender):
@@ -143,8 +150,12 @@ class ParkingListView(APIView):
             owner_filter = Q(owner__phone=request.user.phone)
 
             if include_idle:
-                # 业主选车位时只额外开放未绑定的空闲车位，不暴露其他业主车位。
-                owner_filter |= Q(owner__isnull=True, status="idle")
+                # 业主选车位时只额外开放售卖区空闲车位，普通区保留给访客临停。
+                owner_filter |= Q(
+                    owner__isnull=True,
+                    status="idle",
+                    parking_no__istartswith=SALE_PARKING_PREFIX,
+                )
 
             queryset = queryset.filter(owner_filter)
         elif not _can_manage_parking(request.user):
@@ -176,6 +187,9 @@ class ParkingBindView(APIView):
 
         if parking.status != "idle" or parking.owner_id:
             return ResponseError(msg="该车位已被绑定")
+
+        if not _is_sale_parking(parking):
+            return ResponseError(msg="普通区车位仅供访客临停，不支持购买")
 
         owner = None
 
