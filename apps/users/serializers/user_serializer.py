@@ -3,6 +3,7 @@
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from rest_framework import serializers
 
+from apps.community.models import House
 from apps.users.models.user import User
 from apps.users.serializers.role_serializer import RoleSerializer
 from apps.users.utils.validators import mask_id_card, validate_password_strength, validate_phone_format
@@ -113,6 +114,11 @@ class CurrentUserProfileSerializer(serializers.Serializer):
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=50)
     phone = serializers.CharField(required=False, allow_blank=True)
     avatar = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    house_id = serializers.IntegerField(required=False, allow_null=True)
+    relationship = serializers.ChoiceField(
+        required=False,
+        choices=["self", "spouse", "child", "parent", "other"],
+    )
 
     def validate_username(self, value):
         username = value.strip()
@@ -148,7 +154,61 @@ class CurrentUserProfileSerializer(serializers.Serializer):
 
         return phone
 
+    def validate_house_id(self, value):
+        if value is None:
+            return value
+
+        house = House.objects.filter(id=value).first()
+
+        if not house:
+            raise serializers.ValidationError("选择的房屋不存在")
+
+        user = self.context["request"].user
+
+        if is_owner_user(user):
+            owner_queryset = Owner.objects.filter(house=house)
+
+            if (
+                owner_queryset.exists()
+                and not owner_queryset.filter(phone=user.phone).exists()
+            ):
+                raise serializers.ValidationError("该房屋已绑定其他业主")
+
+            if not owner_queryset.exists() and house.status != "vacant":
+                raise serializers.ValidationError("只能绑定未入住的空置房屋")
+
+        return value
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        house_id = attrs.get("house_id")
+
+        if house_id and is_owner_user(user):
+            real_name = attrs.get("real_name") or user.real_name
+            phone = attrs.get("phone") or user.phone
+
+            if not real_name:
+                raise serializers.ValidationError("绑定房屋前请先填写真实姓名")
+
+            if not phone:
+                raise serializers.ValidationError("绑定房屋前请先填写手机号")
+
+            if not user.id_card:
+                raise serializers.ValidationError("绑定房屋前请先完善身份证信息")
+
+            owner_queryset = Owner.objects.filter(phone=user.phone)
+
+            if (
+                not owner_queryset.exists()
+                and Owner.objects.filter(id_card=user.id_card).exists()
+            ):
+                raise serializers.ValidationError("该身份证已绑定其他业主资料")
+
+        return attrs
+
     def update(self, instance, validated_data):
+        house_id = validated_data.pop("house_id", None)
+        relationship = validated_data.pop("relationship", None)
         old_phone = instance.phone
         owner_updates = {}
 
@@ -165,11 +225,29 @@ class CurrentUserProfileSerializer(serializers.Serializer):
         if "avatar" in validated_data:
             owner_updates["avatar"] = validated_data["avatar"]
 
+        if house_id and is_owner_user(instance):
+            owner_updates["house_id"] = house_id
+
+        if relationship and is_owner_user(instance):
+            owner_updates["relationship"] = relationship
+
         if validated_data:
             instance.save(update_fields=list(validated_data.keys()))
 
         if owner_updates and is_owner_user(instance):
-            Owner.objects.filter(phone=old_phone).update(**owner_updates)
+            owner_queryset = Owner.objects.filter(phone=old_phone)
+
+            if owner_queryset.exists():
+                owner_queryset.update(**owner_updates)
+            elif house_id:
+                Owner.objects.create(
+                    house_id=house_id,
+                    name=instance.real_name or instance.username,
+                    phone=instance.phone,
+                    avatar=instance.avatar,
+                    relationship=relationship or "self",
+                    id_card=instance.id_card,
+                )
 
         return instance
 

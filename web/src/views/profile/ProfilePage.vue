@@ -8,6 +8,8 @@ import {
     updateCurrentUserPassword,
     updateCurrentUserProfile,
 } from '@/api/user'
+import { getHouseList } from '@/api/house'
+import { getOwnerList } from '@/api/owner'
 import { uploadFile } from '@/api/upload'
 import { clearAuthState, setAuthItem } from '@/utils/authState'
 
@@ -15,6 +17,11 @@ const router = useRouter()
 const route = useRoute()
 const profileLoading = ref(false)
 const passwordLoading = ref(false)
+const ownerHouses = ref<any[]>([])
+const ownerProfiles = ref<any[]>([])
+const availableHouses = ref<any[]>([])
+const selectedHouseId = ref<number | null>(null)
+const selectedRelationship = ref('self')
 
 const profileForm = reactive({
     username: '',
@@ -23,6 +30,7 @@ const profileForm = reactive({
     avatar: '',
     id_card_masked: '',
     roles: [] as string[],
+    role_codes: [] as string[],
 })
 
 const passwordForm = reactive({
@@ -30,6 +38,38 @@ const passwordForm = reactive({
     password: '',
     confirm_password: '',
 })
+
+const houseStatusLabels: Record<string, string> = {
+    vacant: '空置',
+    occupied: '已入住',
+    renting: '出租',
+    repairing: '装修中',
+}
+
+const relationshipLabels: Record<string, string> = {
+    self: '本人',
+    spouse: '配偶',
+    child: '子女',
+    parent: '父母',
+    other: '其他',
+}
+
+const extractList = (payload: any) => {
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.results)) return payload.results
+    if (Array.isArray(payload?.data)) return payload.data
+    if (Array.isArray(payload?.data?.results)) return payload.data.results
+
+    return []
+}
+
+const toNumberId = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return null
+
+    const numberValue = Number(value)
+
+    return Number.isFinite(numberValue) ? numberValue : null
+}
 
 const getErrorMessage = (error: any, fallback: string) => {
     return error?.response?.data?.msg || error?.response?.data?.detail || fallback
@@ -50,11 +90,109 @@ const avatarUrl = computed(() => {
 const avatarActionText = computed(() => avatarUrl.value ? '更改头像' : '上传头像')
 const profileTitle = computed(() => route.path === '/profile/password' ? '修改密码' : '个人中心')
 const isPasswordPage = computed(() => route.path === '/profile/password')
+const isOwnerProfile = computed(() => {
+    return profileForm.role_codes.includes('owner')
+        || profileForm.roles.includes('业主')
+        || profileForm.roles.includes('owner')
+})
+const primaryOwnerProfile = computed(() => {
+    return ownerProfiles.value.find((item) => item.is_primary) || ownerProfiles.value[0] || null
+})
+const ownerProfileHouse = computed(() => {
+    const profile = primaryOwnerProfile.value
+
+    if (!profile) return null
+
+    if (profile.house && typeof profile.house === 'object') {
+        return profile.house
+    }
+
+    if (profile.room_no || profile.unit_name || profile.building_name || profile.community_name) {
+        return {
+            id: toNumberId(profile.house),
+            room_no: profile.room_no,
+            unit_name: profile.unit_name,
+            building_name: profile.building_name,
+            community_name: profile.community_name,
+        }
+    }
+
+    return null
+})
+const houseOptionLabel = (house: any) => {
+    const address = [house.community_name, house.building_name, house.unit_name, house.room_no]
+        .filter(Boolean)
+        .join(' ')
+
+    return address || `房屋 ${house.id}`
+}
+const houseOptions = computed(() => {
+    const houseMap = new Map<number, any>()
+
+    availableHouses.value.forEach((house) => {
+        const id = toNumberId(house.id)
+
+        if (id) houseMap.set(id, house)
+    })
+
+    ownerHouses.value.forEach((house) => {
+        const id = toNumberId(house.id)
+
+        if (id) houseMap.set(id, house)
+    })
+
+    const profileHouse = ownerProfileHouse.value
+    const profileHouseId = toNumberId(profileHouse?.id)
+
+    if (profileHouse && profileHouseId) {
+        houseMap.set(profileHouseId, profileHouse)
+    }
+
+    return Array.from(houseMap.values())
+})
+const selectedProfileHouse = computed(() => {
+    if (!selectedHouseId.value) return null
+
+    return houseOptions.value.find((house) => toNumberId(house.id) === selectedHouseId.value) || null
+})
+const primaryProfileHouse = computed(() => {
+    return selectedProfileHouse.value || ownerHouses.value[0] || ownerProfileHouse.value
+})
+const ownerRelationshipText = computed(() => {
+    const relationship = selectedRelationship.value || primaryOwnerProfile.value?.relationship
+
+    return relationship ? relationshipLabels[relationship] || relationship : ''
+})
+const houseInfoItems = computed(() => {
+    const house = primaryProfileHouse.value
+
+    if (!house) return []
+
+    return [
+        { label: '所属小区', value: house.community_name },
+        { label: '所属楼栋', value: house.building_name },
+        { label: '所属单元', value: house.unit_name },
+        { label: '房号', value: house.room_no },
+        { label: '建筑面积', value: house.area ? `${house.area}㎡` : '' },
+        { label: '户型', value: house.house_type },
+        { label: '房屋状态', value: houseStatusLabels[house.status] || house.status },
+        { label: '家庭关系', value: ownerRelationshipText.value },
+    ].filter((item) => item.value)
+})
 
 const loadProfile = async () => {
     try {
-        const res = await getUserInfo()
-        const data = res.data.data || {}
+        const [userResult, houseResult, ownerResult] = await Promise.allSettled([
+            getUserInfo(),
+            getHouseList({ page_size: 100 }),
+            getOwnerList(''),
+        ])
+
+        if (userResult.status !== 'fulfilled') {
+            throw userResult.reason
+        }
+
+        const data = userResult.value.data.data || {}
 
         profileForm.username = data.username || ''
         profileForm.real_name = data.real_name || ''
@@ -62,6 +200,34 @@ const loadProfile = async () => {
         profileForm.avatar = data.avatar || ''
         profileForm.id_card_masked = data.id_card_masked || ''
         profileForm.roles = data.roles || []
+        profileForm.role_codes = data.role_codes || []
+        ownerHouses.value = houseResult.status === 'fulfilled'
+            ? extractList(houseResult.value?.data?.data)
+            : []
+        ownerProfiles.value = ownerResult.status === 'fulfilled'
+            ? extractList(ownerResult.value?.data?.data)
+            : []
+
+        if (isOwnerProfile.value) {
+            try {
+                const availableHouseResult = await getHouseList({
+                    page_size: 100,
+                    profile_select: 1,
+                })
+
+                availableHouses.value = extractList(availableHouseResult.data?.data)
+            } catch {
+                availableHouses.value = [...ownerHouses.value]
+            }
+        } else {
+            availableHouses.value = []
+        }
+
+        const currentProfile = primaryOwnerProfile.value
+        const currentHouse = ownerHouses.value[0] || ownerProfileHouse.value
+
+        selectedHouseId.value = toNumberId(currentHouse?.id || currentProfile?.house)
+        selectedRelationship.value = currentProfile?.relationship || 'self'
     } catch (error) {
         ElMessage.error(getErrorMessage(error, '个人资料加载失败'))
     }
@@ -76,6 +242,8 @@ const saveProfile = async () => {
             real_name: profileForm.real_name,
             phone: profileForm.phone,
             avatar: profileForm.avatar,
+            house_id: isOwnerProfile.value ? selectedHouseId.value : undefined,
+            relationship: isOwnerProfile.value ? selectedRelationship.value : undefined,
         })
 
         if (res.data.code !== 200) {
@@ -214,14 +382,62 @@ onMounted(() => {
                                 {{ item }}
                             </el-tag>
                         </el-form-item>
-
-                        <el-form-item class="profile-actions">
-                            <el-button type="primary" :loading="profileLoading" @click="saveProfile">
-                                保存资料
-                            </el-button>
-                        </el-form-item>
                     </div>
                 </el-form>
+            </div>
+
+            <section v-if="isOwnerProfile" class="profile-house-panel">
+                <div class="profile-house-header">
+                    <h3>房屋信息</h3>
+                    <el-tag v-if="primaryProfileHouse" type="success">已绑定</el-tag>
+                    <el-tag v-else type="warning">待绑定</el-tag>
+                </div>
+
+                <div class="profile-house-selector">
+                    <el-form class="profile-form" label-width="100px">
+                        <div class="profile-house-select-grid">
+                            <el-form-item label="选择房屋">
+                                <el-select
+                                    v-model="selectedHouseId"
+                                    clearable
+                                    filterable
+                                    placeholder="请选择小区/楼栋/单元/房号"
+                                >
+                                    <el-option
+                                        v-for="house in houseOptions"
+                                        :key="house.id"
+                                        :label="houseOptionLabel(house)"
+                                        :value="toNumberId(house.id)"
+                                    />
+                                </el-select>
+                            </el-form-item>
+
+                            <el-form-item label="家庭关系">
+                                <el-select v-model="selectedRelationship" placeholder="请选择关系">
+                                    <el-option label="本人" value="self" />
+                                    <el-option label="配偶" value="spouse" />
+                                    <el-option label="子女" value="child" />
+                                    <el-option label="父母" value="parent" />
+                                    <el-option label="其他" value="other" />
+                                </el-select>
+                            </el-form-item>
+                        </div>
+                    </el-form>
+                </div>
+
+                <div v-if="primaryProfileHouse" class="profile-house-grid">
+                    <div v-for="item in houseInfoItems" :key="item.label" class="profile-house-item">
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value }}</strong>
+                    </div>
+                </div>
+                <div v-else class="profile-house-empty">暂无绑定房屋信息</div>
+            </section>
+
+            <div class="profile-save-footer">
+                <el-button type="primary" :loading="profileLoading" @click="saveProfile">
+                    保存资料
+                </el-button>
             </div>
         </div>
 
@@ -280,7 +496,7 @@ onMounted(() => {
 }
 
 .profile-card :deep(.el-card__body) {
-    padding: 40px 56px;
+    padding: 36px 48px 48px;
 }
 
 .profile-section {
@@ -289,10 +505,12 @@ onMounted(() => {
 
 .profile-editor {
     display: grid;
-    grid-template-columns: 240px minmax(0, 880px);
-    column-gap: 56px;
+    grid-template-columns: 260px minmax(0, 1fr);
+    column-gap: 44px;
+    row-gap: 24px;
     align-items: start;
-    max-width: 1220px;
+    max-width: 1320px;
+    margin: 0 auto;
 }
 
 .avatar-panel {
@@ -330,6 +548,7 @@ onMounted(() => {
     display: grid;
     grid-template-columns: repeat(2, minmax(280px, 1fr));
     column-gap: 36px;
+    row-gap: 2px;
     align-items: start;
 }
 
@@ -362,6 +581,10 @@ onMounted(() => {
     height: 44px;
     font-size: 14px;
     line-height: 44px;
+}
+
+.profile-form :deep(.el-select) {
+    width: 100%;
 }
 
 .avatar-uploader {
@@ -434,8 +657,104 @@ onMounted(() => {
     margin-right: 8px;
 }
 
-.profile-actions {
+.profile-house-panel {
     grid-column: 1 / -1;
+    padding: 20px 24px;
+    border: 1px solid #dfe5ef;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.profile-house-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.profile-house-header h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 24px;
+}
+
+.profile-house-selector {
+    margin-bottom: 18px;
+    padding-bottom: 2px;
+}
+
+.profile-house-select-grid {
+    display: grid;
+    grid-template-columns: minmax(360px, 1fr) minmax(260px, 0.6fr);
+    column-gap: 32px;
+    align-items: start;
+}
+
+.profile-house-selector :deep(.el-form-item) {
+    margin-bottom: 0;
+}
+
+.profile-house-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px 18px;
+}
+
+.profile-house-item {
+    min-height: 72px;
+    padding: 14px 16px;
+    border: 1px solid #e6ebf2;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.profile-house-item span {
+    display: block;
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+}
+
+.profile-house-item strong {
+    display: block;
+    overflow: hidden;
+    color: #334155;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.profile-house-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 96px;
+    color: #64748b;
+    border: 1px dashed #d7e0eb;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.profile-save-footer {
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: center;
+    padding-top: 4px;
+}
+
+.profile-save-footer :deep(.el-button) {
+    min-width: 132px;
+    height: 44px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
 }
 
 @media (max-width: 768px) {
@@ -445,13 +764,23 @@ onMounted(() => {
 
     .profile-editor,
     .profile-fields-grid,
-    .avatar-field-row {
+    .avatar-field-row,
+    .profile-house-select-grid {
         display: block;
     }
 
     .avatar-label {
         justify-content: flex-start;
         margin-bottom: 8px;
+    }
+
+    .profile-house-panel {
+        margin-top: 24px;
+        padding: 16px;
+    }
+
+    .profile-house-grid {
+        grid-template-columns: 1fr;
     }
 }
 </style>

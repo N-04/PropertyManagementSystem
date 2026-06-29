@@ -21,6 +21,8 @@ const phoneForm = ref({
 })
 const captchaImage = ref('')
 const captchaKey = ref('')
+const captchaLoading = ref(false)
+const captchaError = ref('')
 const smsCountdown = ref(0)
 const isSendingSms = ref(false)
 let smsTimer: ReturnType<typeof setInterval> | null = null
@@ -91,12 +93,30 @@ const startSmsCountdown = (seconds = 60) => {
 }
 
 const loadCaptcha = async () => {
-    const res = await getCaptchaApi()
+    captchaLoading.value = true
+    captchaError.value = ''
 
-    captchaKey.value = res.data.data.captcha_key
-    captchaImage.value = res.data.data.captcha_image
-    passwordForm.value.captcha_code = ''
-    phoneForm.value.captcha_code = ''
+    try {
+        const res = await getCaptchaApi()
+        const data = res.data?.data || res.data || {}
+        const nextKey = data.captcha_key || data.key || ''
+        const nextImage = data.captcha_image || data.image || data.url || ''
+
+        if (!nextKey || !nextImage) {
+            throw new Error('图形验证码返回数据不完整')
+        }
+
+        captchaKey.value = nextKey
+        captchaImage.value = nextImage
+        passwordForm.value.captcha_code = ''
+        phoneForm.value.captcha_code = ''
+    } catch (error: any) {
+        captchaKey.value = ''
+        captchaImage.value = ''
+        captchaError.value = getErrorMessage(error) || '验证码加载失败'
+    } finally {
+        captchaLoading.value = false
+    }
 }
 
 const saveLoginDataAndEnter = async (loginData: any) => {
@@ -132,6 +152,11 @@ const handlePasswordLogin = async () => {
 
     if (!passwordForm.value.captcha_code) {
         ElMessage.warning('请输入图形验证码')
+        return
+    }
+
+    if (!captchaKey.value) {
+        ElMessage.warning('图形验证码未加载，请点击刷新')
         return
     }
 
@@ -177,6 +202,11 @@ const sendLoginSmsCode = async () => {
 
     if (!phoneForm.value.captcha_code) {
         ElMessage.warning('请输入图形验证码')
+        return
+    }
+
+    if (!captchaKey.value) {
+        ElMessage.warning('图形验证码未加载，请点击刷新')
         return
     }
 
@@ -345,14 +375,23 @@ onBeforeUnmount(() => {
                             clearable
                         />
 
-                        <img
-                            v-if="captchaImage"
-                            class="captcha-img"
-                            :src="captchaImage"
+                        <button
+                            type="button"
+                            class="captcha-box"
+                            :class="{ loading: captchaLoading, error: captchaError }"
                             title="点击刷新验证码"
                             @click="loadCaptcha"
-                        />
+                        >
+                            <img
+                                v-if="captchaImage"
+                                class="captcha-img"
+                                :src="captchaImage"
+                                alt="图形验证码"
+                            >
+                            <span v-else>{{ captchaLoading ? '加载中' : '点击刷新' }}</span>
+                        </button>
                     </div>
+                    <p v-if="captchaError" class="captcha-error">{{ captchaError }}</p>
                 </el-form-item>
 
                 <el-form-item v-if="loginMode === 'phone'">
@@ -462,7 +501,15 @@ onBeforeUnmount(() => {
     align-items: center;
 }
 
-.captcha-img {
+.captcha-row :deep(.el-input) {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.captcha-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 120px;
     height: 42px;
     flex: 0 0 120px;
@@ -470,6 +517,46 @@ onBeforeUnmount(() => {
     border-radius: 4px;
     cursor: pointer;
     background: #f5f7fa;
+    color: #409eff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    overflow: hidden;
+    padding: 0;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.captcha-box:hover,
+.captcha-box:focus-visible {
+    border-color: #409eff;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.12);
+    outline: none;
+}
+
+.captcha-box.loading {
+    color: #909399;
+    cursor: wait;
+}
+
+.captcha-box.error {
+    color: #f56c6c;
+    border-color: #fbc4c4;
+    background: #fef0f0;
+}
+
+.captcha-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.captcha-error {
+    margin: 6px 0 0;
+    color: #f56c6c;
+    font-size: 12px;
+    line-height: 18px;
 }
 
 .login-links {

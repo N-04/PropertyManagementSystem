@@ -64,12 +64,18 @@ class HouseListView(APIView):
         page = int(request.GET.get("page", 1))
         page_size = int(request.GET.get("page_size", 10))
         keyword = request.GET.get("keyword", "").strip()
+        profile_select = request.GET.get("profile_select") in {"1", "true", "True"}
         page = max(page, 1)
         page_size = min(max(page_size, 1), 100)
         queryset = House.objects.select_related("unit__building__community").all().order_by("-id")
 
         if is_owner_user(request.user):
-            queryset = queryset.filter(owners__phone=request.user.phone).distinct()
+            owner_filter = Q(owners__phone=request.user.phone)
+
+            if profile_select:
+                owner_filter |= Q(owners__isnull=True, status="vacant")
+
+            queryset = queryset.filter(owner_filter).distinct()
         elif not is_property_manager_user(request.user):
             queryset = queryset.none()
 

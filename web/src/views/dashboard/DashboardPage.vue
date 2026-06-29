@@ -28,6 +28,7 @@ import { getHouseList } from '@/api/house'
 import { getNoticeList } from '@/api/notice'
 import { getOwnerList } from '@/api/owner'
 import { getRepairList, updateRepair } from '@/api/repair'
+import { getUserInfo } from '@/api/user'
 import { getVisitorStatistics } from '@/api/visitor'
 import { ElMessage } from 'element-plus'
 import FeeChart from '@/components/charts/FeeChart.vue'
@@ -175,6 +176,7 @@ type ConveniencePhone = {
 const router = useRouter()
 const username = ref(getStoredUsername() || '用户')
 const role = ref(getStoredRole())
+const ownerUserInfo = ref<any>({})
 const ownerHouses = ref<any[]>([])
 const ownerProfiles = ref<any[]>([])
 const ownerFees = ref<any[]>([])
@@ -1071,6 +1073,17 @@ const primaryOwnerHouse = computed(() => {
     return ownerHouses.value[0] || primaryOwnerProfile.value?.house || null
 })
 
+const ownerHasBoundHouse = computed(() => {
+    const profile = primaryOwnerProfile.value || {}
+
+    return Boolean(
+        primaryOwnerHouse.value
+        || profile.room_no
+        || profile.unit_name
+        || profile.building_name
+    )
+})
+
 const ownerDisplayName = computed(() => {
     return primaryOwnerProfile.value?.name || username.value || '业主'
 })
@@ -1100,8 +1113,12 @@ const ownerHouseMeta = computed(() => {
 
 const ownerProfileCompleted = computed(() => {
     const profile = primaryOwnerProfile.value
+    const userInfo = ownerUserInfo.value || {}
+    const name = profile?.name || userInfo.real_name || userInfo.username
+    const phone = profile?.phone || userInfo.phone
+    const idCardMask = profile?.id_card_mask || profile?.id_card_masked || userInfo.id_card_masked
 
-    return Boolean(profile?.phone && profile?.id_card_mask && primaryOwnerHouse.value)
+    return Boolean(name && phone && idCardMask && ownerHasBoundHouse.value)
 })
 
 const unpaidOwnerFees = computed(() => ownerFees.value.filter(isUnpaidFee))
@@ -1388,6 +1405,7 @@ const loadOwnerHomeData = async () => {
         repairResult,
         complaintResult,
         noticeResult,
+        userResult,
     ] = await Promise.allSettled([
         getHouseList(),
         getOwnerList(''),
@@ -1395,6 +1413,7 @@ const loadOwnerHomeData = async () => {
         getRepairList({ page_size: 1000 }),
         getComplaintList({ page_size: 1000 }),
         getNoticeList(),
+        getUserInfo(),
     ])
 
     ownerHouses.value = readSettledList(houseResult)
@@ -1403,6 +1422,10 @@ const loadOwnerHomeData = async () => {
     ownerRepairsData.value = readSettledList(repairResult)
     ownerComplaints.value = readSettledList(complaintResult)
     ownerNotices.value = readSettledList(noticeResult)
+
+    if (userResult.status === 'fulfilled') {
+        ownerUserInfo.value = userResult.value?.data?.data || {}
+    }
 }
 
 const loadAdminHomeData = async () => {
@@ -2178,18 +2201,19 @@ useRealtimeRefresh(refreshDashboardData, {
                     </p>
                 </div>
                 <div class="owner-house-actions">
-                    <span class="owner-house-status" :class="{ pending: !ownerProfileCompleted }">
-                        <el-icon><Check /></el-icon>
-                        {{ ownerProfileCompleted ? '资料已完善' : '资料待完善' }}
-                    </span>
                     <button
                         v-if="!ownerProfileCompleted"
                         type="button"
-                        class="owner-outline-button owner-profile-action"
+                        class="owner-house-status pending clickable"
                         @click="goTo('/profile')"
                     >
-                        补充资料
+                        <el-icon><Check /></el-icon>
+                        资料待完善
                     </button>
+                    <span v-else class="owner-house-status">
+                        <el-icon><Check /></el-icon>
+                        资料已完善
+                    </span>
                 </div>
             </section>
 
@@ -2216,15 +2240,16 @@ useRealtimeRefresh(refreshDashboardData, {
                                     </div>
                                 </div>
                                 <div v-else class="owner-task-extra owner-task-extra-placeholder" />
-                                <span class="status-pill" :class="item.statusClass">{{ item.status }}</span>
                                 <button
-                                    v-if="item.action"
+                                    v-if="item.id === 'profile'"
                                     type="button"
-                                    class="owner-outline-button"
+                                    class="status-pill status-action"
+                                    :class="item.statusClass"
                                     @click="goTo(item.path)"
                                 >
-                                    {{ item.action }}
+                                    {{ item.status }}
                                 </button>
+                                <span v-else class="status-pill" :class="item.statusClass">{{ item.status }}</span>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state">暂无待处理事项</div>
@@ -2728,6 +2753,20 @@ useRealtimeRefresh(refreshDashboardData, {
 .status-pill.info {
     color: #1677ff;
     background: #e8f1ff;
+}
+
+.status-action {
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.status-action:hover,
+.status-action:focus-visible {
+    filter: brightness(0.97);
+    outline: none;
+    transform: translateY(-1px);
 }
 
 .text-button {
@@ -3939,10 +3978,27 @@ useRealtimeRefresh(refreshDashboardData, {
     white-space: nowrap;
 }
 
+button.owner-house-status {
+    font-family: inherit;
+}
+
 .owner-house-status.pending {
     color: #d97706;
     border-color: #ffe0a3;
     background: #fff8eb;
+}
+
+.owner-house-status.clickable {
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.owner-house-status.clickable:hover,
+.owner-house-status.clickable:focus-visible {
+    border-color: #f59f00;
+    background: #fff2d9;
+    box-shadow: 0 6px 14px rgba(217, 119, 6, 0.12);
+    outline: none;
 }
 
 .owner-house-actions {
@@ -3950,12 +4006,6 @@ useRealtimeRefresh(refreshDashboardData, {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 10px;
-}
-
-.owner-profile-action {
-    min-width: 96px;
-    height: 38px;
-    background: #fff;
 }
 
 .owner-home-grid {
