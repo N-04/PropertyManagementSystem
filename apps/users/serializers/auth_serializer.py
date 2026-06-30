@@ -16,8 +16,8 @@ class PasswordLoginSerializer(serializers.Serializer):
     """
     密码登录参数校验。
 
-    支持用户名登录，也支持手机号登录；图形验证码为可选字段，
-    前端需要时传 captcha_key/captcha_code 即可启用校验。
+    支持用户名登录，也支持手机号登录；密码登录必须校验图形验证码，
+    防止绕过验证码直接撞库。
     """
 
     username = serializers.CharField(required=False, allow_blank=True)
@@ -42,10 +42,11 @@ class PasswordLoginSerializer(serializers.Serializer):
         captcha_key = attrs.get("captcha_key")
         captcha_code = attrs.get("captcha_code")
 
-        # 只要前端传了验证码相关字段，就必须校验成功。
-        if captcha_key or captcha_code:
-            if not validate_captcha(captcha_key, captcha_code):
-                raise serializers.ValidationError("图形验证码错误或已过期")
+        if not captcha_key or not captcha_code:
+            raise serializers.ValidationError("图形验证码不能为空")
+
+        if not validate_captcha(captcha_key, captcha_code):
+            raise serializers.ValidationError("图形验证码错误或已过期")
 
         return attrs
 

@@ -3,15 +3,63 @@
 from rest_framework.views import APIView
 
 from apps.community.models import House
+from apps.finance.models import Fee
 from apps.owners.models import Owner
 from apps.parking.models import Parking
 from apps.repairs.models import Repair
-from apps.finance.models import Fee
-from django.db.models import Count
+from apps.users.utils.role_access import get_user_role_codes
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.visitors.models import Visitor
 from common.response.response import ResponseSuccess
+
+
+MANAGER_ROLE_CODES = {
+    "admin",
+    "super_admin",
+    "property_admin",
+    "finance_staff",
+}
+
+
+def _money_total(queryset):
+    """汇总金额字段，空结果统一返回 0，避免前端出现 null。"""
+
+    return queryset.aggregate(total=Sum("amount"))["total"] or 0
+
+
+def _owner_queryset_for_user(user):
+    """按当前登录账号手机号定位业主资料，作为业主端数据隔离边界。"""
+
+    phones = {item for item in [getattr(user, "phone", None), user.username] if item}
+    return Owner.objects.filter(phone__in=phones)
+
+
+def _build_dashboard_data(house_qs, owner_qs, parking_qs, repair_qs, fee_qs):
+    """按传入查询集组装首页统计，确保所有统计都继承同一权限范围。"""
+
+    paid_fee_qs = fee_qs.filter(status="paid")
+    unpaid_fee_qs = fee_qs.filter(status__in=["unpaid", "overdue"])
+
+    return {
+        "house_count": house_qs.distinct().count(),
+        "owner_count": owner_qs.distinct().count(),
+        "parking_count": parking_qs.distinct().count(),
+        "repair_count": repair_qs.distinct().count(),
+        "fee_total": _money_total(fee_qs),
+        "fee_paid": _money_total(paid_fee_qs),
+        "fee_unpaid": _money_total(unpaid_fee_qs),
+        "repair_pending": repair_qs.filter(status="pending").distinct().count(),
+        "repair_processing": repair_qs.filter(
+            status__in=["assigned", "accepted", "processing"]
+        )
+        .distinct()
+        .count(),
+        "repair_finished": repair_qs.filter(status="finished").distinct().count(),
+        "paid_count": paid_fee_qs.distinct().count(),
+        "unpaid_count": unpaid_fee_qs.distinct().count(),
+    }
 
 
 class DashboardView(APIView):
@@ -24,102 +72,49 @@ class DashboardView(APIView):
         获取首页统计数据
         """
 
-        # =========================
-        # 房屋总数
-        # =========================
-        house_count = House.objects.count()
+        role_codes = get_user_role_codes(request.user)
 
-        # =========================
-        # 业主总数
-        # =========================
-        owner_count = Owner.objects.count()
-
-        # =========================
-        # 车位总数
-        # =========================
-        parking_count = Parking.objects.count()
-
-        # =========================
-        # 报修总数
-        # =========================
-        repair_count = Repair.objects.count()
-
-        # =========================
-        # 物业费总额
-        # =========================
-        fee_total = sum(
-            Fee.objects.values_list(
-                "amount",
-                flat=True,
+        if role_codes & MANAGER_ROLE_CODES:
+            # 管理端和财务端保留全局经营视角。
+            data = _build_dashboard_data(
+                House.objects.all(),
+                Owner.objects.all(),
+                Parking.objects.all(),
+                Repair.objects.all(),
+                Fee.objects.all(),
             )
-        )
-
-        # =========================
-        # 已缴费金额
-        # =========================
-        fee_paid = sum(
-            Fee.objects.filter(status="paid").values_list(
-                "amount",
-                flat=True,
+        elif "owner" in role_codes:
+            # 业主端只能看到自己手机号绑定的业务数据。
+            owner_qs = _owner_queryset_for_user(request.user)
+            house_qs = House.objects.filter(owners__in=owner_qs)
+            data = _build_dashboard_data(
+                house_qs,
+                owner_qs,
+                Parking.objects.filter(owner__in=owner_qs),
+                Repair.objects.filter(owner__in=owner_qs),
+                Fee.objects.filter(owner__in=owner_qs),
             )
-        )
-
-        # =========================
-        # 未缴费金额
-        # =========================
-        fee_unpaid = sum(
-            Fee.objects.filter(status="unpaid").values_list(
-                "amount",
-                flat=True,
+        elif role_codes & {"repair_staff", "repairer", "repair"}:
+            # 维修员只统计分配给自己的工单，不暴露全局房产和费用指标。
+            repair_qs = Repair.objects.filter(repair_user=request.user)
+            data = _build_dashboard_data(
+                House.objects.none(),
+                Owner.objects.none(),
+                Parking.objects.none(),
+                repair_qs,
+                Fee.objects.none(),
             )
-        )
+        else:
+            # 其他角色没有首页汇总授权时返回空统计，保持响应结构稳定。
+            data = _build_dashboard_data(
+                House.objects.none(),
+                Owner.objects.none(),
+                Parking.objects.none(),
+                Repair.objects.none(),
+                Fee.objects.none(),
+            )
 
-        # =========================
-        # 待派单报修
-        # =========================
-        repair_pending = Repair.objects.filter(status="pending").count()
-
-        # =========================
-        # 进行中报修：包含待接单、已接单和维修中
-        # =========================
-        repair_processing = Repair.objects.filter(
-            status__in=["assigned", "accepted", "processing"]
-        ).count()
-
-        # =========================
-        # 已完成报修
-        # =========================
-        repair_finished = Repair.objects.filter(status="finished").count()
-
-        # 已缴费账单数
-        paid_count = Fee.objects.filter(status="paid").count()
-
-        # 未缴费账单数
-        unpaid_count = Fee.objects.filter(status="unpaid").count()
-
-        # =========================
-        # 返回统计结果
-        # =========================
-        return ResponseSuccess(
-            data={
-                # 基础统计:房屋数量,业主数量,车位数量,报修数量
-                "house_count": house_count,
-                "owner_count": owner_count,
-                "parking_count": parking_count,
-                "repair_count": repair_count,
-                # 费用统计:物业费总额,已缴费金额,未缴费金额
-                "fee_total": fee_total,
-                "fee_paid": fee_paid,
-                "fee_unpaid": fee_unpaid,
-                # 报修统计:
-                "repair_pending": repair_pending,
-                "repair_processing": repair_processing,
-                "repair_finished": repair_finished,
-                # 账单统计:已缴费账单数,未缴费账单数
-                "paid_count": paid_count,
-                "unpaid_count": unpaid_count,
-            }
-        )
+        return ResponseSuccess(data=data)
 
 
 class VisitorStatisticsView(APIView):

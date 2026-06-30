@@ -12,24 +12,52 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
-import os
+
+from django.core.management.utils import get_random_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
+def env_bool(name, default=False):
+    """把环境变量里的布尔字符串转换为 Python bool。"""
+
+    value = os.environ.get(name)
+
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name, default=None):
+    """读取逗号分隔的环境变量列表，避免把域名和 CORS 来源写死在代码中。"""
+
+    value = os.environ.get(name)
+
+    if not value:
+        return default or []
+
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+# Quick-start development settings - unsuitable for production unless env is set
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-k_#&(o2q@*f$*4_)srd&8$6+lomgmnaleqm=mn!bg*1_wyh7em"
+# SECRET_KEY 必须从环境变量提供；本地未配置时生成临时密钥，避免提交固定密钥。
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG 默认关闭，开发环境可显式设置 DJANGO_DEBUG=true。
+DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = []
+# 允许的主机由环境变量控制，默认只放开本机和测试客户端。
+ALLOWED_HOSTS = env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    default=["127.0.0.1", "localhost", "testserver"],
+)
 
 # 上传文件根目录
 
@@ -81,7 +109,16 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS 默认不再放开所有来源；开发调试时可设置 DJANGO_CORS_ALLOW_ALL_ORIGINS=true。
+CORS_ALLOW_ALL_ORIGINS = env_bool("DJANGO_CORS_ALLOW_ALL_ORIGINS", default=False)
+CORS_ALLOWED_ORIGINS = env_list(
+    "DJANGO_CORS_ALLOWED_ORIGINS",
+    default=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+)
 
 REST_FRAMEWORK = {
     # JWT 认证
@@ -126,11 +163,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "property_management",
-        "USER": "root",
-        "PASSWORD": "bll001122",
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
+        "NAME": os.environ.get("MYSQL_DATABASE", "property_management"),
+        "USER": os.environ.get("MYSQL_USER", "root"),
+        "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
+        "HOST": os.environ.get("MYSQL_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("MYSQL_PORT", "3306"),
     }
 }
 
@@ -186,3 +223,41 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# 生产环境安全开关。开发环境如需 HTTP 本地访问，可显式关闭对应环境变量。
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=not DEBUG)
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", 31536000 if not DEBUG else 0))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=not DEBUG,
+)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=not DEBUG)
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+X_FRAME_OPTIONS = "DENY"
+
+# 认证与上传安全阈值。
+LOGIN_FAIL_LIMIT = int(os.environ.get("LOGIN_FAIL_LIMIT", 5))
+LOGIN_FAIL_WINDOW_SECONDS = int(os.environ.get("LOGIN_FAIL_WINDOW_SECONDS", 600))
+LOGIN_LOCK_SECONDS = int(os.environ.get("LOGIN_LOCK_SECONDS", 900))
+AUTH_RETURN_DEBUG_SMS_CODE = env_bool("AUTH_RETURN_DEBUG_SMS_CODE", default=False)
+UPLOAD_MAX_SIZE = int(os.environ.get("UPLOAD_MAX_SIZE", 10 * 1024 * 1024))
+UPLOAD_ALLOWED_FILE_EXTS = env_list(
+    "UPLOAD_ALLOWED_FILE_EXTS",
+    default=[
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".webp",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".txt",
+        ".csv",
+        ".zip",
+    ],
+)

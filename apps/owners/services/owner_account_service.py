@@ -1,6 +1,8 @@
 # 文件说明：维护业主资料与系统登录账号之间的对应关系。
 
 import re
+import string
+from secrets import choice
 
 from django.contrib.auth import get_user_model
 
@@ -8,7 +10,7 @@ from apps.owners.models import Owner
 from apps.users.models.role import Role
 
 
-DEFAULT_OWNER_INITIAL_PASSWORD = "Wy@Owner2026"
+PASSWORD_SPECIAL_CHARS = "@#$%&*?"
 
 
 def _username_from_owner(owner: Owner) -> str:
@@ -35,12 +37,29 @@ def _unique_username(base_username: str) -> str:
     return f"{base_username}_{index}"
 
 
+def _generate_owner_initial_password(length=16) -> str:
+    """生成一次性强密码，避免所有业主账号共用固定初始密码。"""
+
+    alphabet = string.ascii_letters + string.digits + PASSWORD_SPECIAL_CHARS
+    required_chars = [
+        choice(string.ascii_lowercase),
+        choice(string.ascii_uppercase),
+        choice(string.digits),
+        choice(PASSWORD_SPECIAL_CHARS),
+    ]
+    remaining_chars = [choice(alphabet) for _ in range(max(length - len(required_chars), 0))]
+    password_chars = required_chars + remaining_chars
+
+    # 用 secrets.choice 简单洗牌，避免固定字符类型顺序暴露密码结构。
+    return "".join(password_chars.pop(choice(range(len(password_chars)))) for _ in range(len(password_chars)))
+
+
 def ensure_owner_login_user(owner: Owner):
     """
     确保业主资料有对应的 owner 登录账号。
 
     已有账号只补齐 owner 角色和基础资料，不会重置密码；没有账号时创建一个
-    可登录账号，默认初始密码用于演示数据和管理员后续交付。
+    可登录账号，初始密码每次随机生成，后续由管理员重置或通知业主。
     """
 
     phone = (owner.phone or "").strip()
@@ -71,7 +90,7 @@ def ensure_owner_login_user(owner: Owner):
             status=1,
             role=owner_role,
         )
-        user.set_password(DEFAULT_OWNER_INITIAL_PASSWORD)
+        user.set_password(_generate_owner_initial_password())
         user.save()
         created = True
 

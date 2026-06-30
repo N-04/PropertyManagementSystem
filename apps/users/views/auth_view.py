@@ -1,7 +1,10 @@
 # 文件说明：处理 apps/users/views/auth_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
+from hashlib import sha256
+
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.core.cache import cache
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -65,6 +68,59 @@ def _ensure_user_can_login(user):
     return None
 
 
+def _get_client_ip(request):
+    """优先取代理透传 IP，取不到时回退到 REMOTE_ADDR。"""
+
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _login_cache_key(prefix, request, identifier):
+    """把账号和 IP 哈希成缓存 key，避免明文账号进入缓存键。"""
+
+    raw_key = f"{identifier}:{_get_client_ip(request)}".lower().encode("utf-8")
+    return f"auth:login:{prefix}:{sha256(raw_key).hexdigest()}"
+
+
+def _is_login_locked(request, identifier):
+    """判断当前账号和 IP 组合是否还在登录锁定窗口。"""
+
+    if not identifier:
+        return False
+
+    return bool(cache.get(_login_cache_key("lock", request, identifier)))
+
+
+def _mark_login_failure(request, identifier):
+    """记录登录失败次数，超过阈值后短期锁定。"""
+
+    if not identifier:
+        return
+
+    attempts_key = _login_cache_key("attempts", request, identifier)
+    lock_key = _login_cache_key("lock", request, identifier)
+    attempts = int(cache.get(attempts_key) or 0) + 1
+
+    cache.set(attempts_key, attempts, settings.LOGIN_FAIL_WINDOW_SECONDS)
+
+    if attempts >= settings.LOGIN_FAIL_LIMIT:
+        cache.set(lock_key, True, settings.LOGIN_LOCK_SECONDS)
+
+
+def _clear_login_failures(request, identifier):
+    """登录成功后清理失败计数和锁定标记。"""
+
+    if not identifier:
+        return
+
+    cache.delete(_login_cache_key("attempts", request, identifier))
+    cache.delete(_login_cache_key("lock", request, identifier))
+
+
 class CaptchaView(APIView):
     """
     图形验证码接口。
@@ -109,8 +165,8 @@ class SmsCodeView(APIView):
             "cooldown_seconds": SMS_COOLDOWN,
         }
 
-        if settings.DEBUG:
-            # 开发环境没有真实短信通道，返回 debug_code 方便本地联调。
+        if settings.DEBUG and settings.AUTH_RETURN_DEBUG_SMS_CODE:
+            # 只有显式开启时才返回 debug_code，避免调试配置误带到外部环境。
             data["debug_code"] = code
 
         return ResponseSuccess(data=data, msg="短信验证码已发送")
@@ -127,11 +183,19 @@ class LoginView(APIView):
     permission_classes = []
 
     def post(self, request):
+        raw_identifier = request.data.get("phone") or request.data.get("username") or ""
+
+        if _is_login_locked(request, raw_identifier):
+            return ResponseError(msg="登录失败次数过多，请稍后再试", code=429)
+
         serializer = PasswordLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         identifier = serializer.validated_data["identifier"]
         password = serializer.validated_data["password"]
+
+        if _is_login_locked(request, identifier):
+            return ResponseError(msg="登录失败次数过多，请稍后再试", code=429)
 
         # identifier 可能是手机号，也可能是用户名；先按手机号查，查不到再按用户名查。
         user = User.objects.filter(phone=identifier).first()
@@ -142,13 +206,17 @@ class LoginView(APIView):
         login_error = _ensure_user_can_login(user)
 
         if login_error:
+            _mark_login_failure(request, identifier)
             return ResponseError(msg=login_error)
 
         # Django 的 authenticate 仍然用 username 字段验证密码。
         auth_user = authenticate(username=user.username, password=password)
 
         if not auth_user:
+            _mark_login_failure(request, identifier)
             return ResponseError(msg="账号不存在或密码错误")
+
+        _clear_login_failures(request, identifier)
 
         # 密码验证成功后再记录登录日志，避免失败密码也被记成成功登录。
         LoginLog.objects.create(

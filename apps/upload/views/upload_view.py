@@ -43,14 +43,35 @@ class UploadView(APIView):
         if not file:
             return ResponseError(msg="请选择文件")
 
-        ext = os.path.splitext(file.name)[1]
+        ext = os.path.splitext(file.name)[1].lower()
         image_types = {"avatar", "id_card", "repair_image", "image"}
         image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+        allowed_file_exts = set(settings.UPLOAD_ALLOWED_FILE_EXTS)
+        allowed_file_content_types = {
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/zip",
+            "text/csv",
+            "text/plain",
+        }
+
+        if file.size > settings.UPLOAD_MAX_SIZE:
+            return ResponseError(msg="文件大小不能超过10MB")
 
         if upload_type in image_types:
             # 图片业务需要同时校验扩展名和 content_type，降低伪装文件风险。
-            if ext.lower() not in image_exts or not file.content_type.startswith("image/"):
+            if ext not in image_exts or not file.content_type.startswith("image/"):
                 return ResponseError(msg="只能上传 jpg、png、gif、webp 图片")
+        else:
+            # 普通文件也必须命中文件白名单，避免脚本、可执行文件等被上传。
+            if ext not in allowed_file_exts:
+                return ResponseError(msg="不支持的文件类型")
+
+            if file.content_type and file.content_type not in allowed_file_content_types:
+                return ResponseError(msg="文件类型校验失败")
 
         # 使用 UUID 文件名避免暴露原始文件名，也降低重名覆盖风险。
         filename = f"{uuid.uuid4().hex}{ext}"
@@ -68,6 +89,15 @@ class UploadView(APIView):
 
             for chunk in file.chunks():
                 f.write(chunk)
+
+        if upload_type in image_types:
+            try:
+                # verify 会解析图片头和基础结构，过滤扩展名伪装的非图片文件。
+                with Image.open(save_path) as image:
+                    image.verify()
+            except Exception:
+                os.remove(save_path)
+                return ResponseError(msg="图片内容校验失败")
 
         if upload_type == "id_card":
 
