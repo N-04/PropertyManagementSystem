@@ -12,10 +12,12 @@ from apps.parking.views.parking_view import (
 )
 
 urlpatterns = [
+    # 管理端维护车位基础信息。
     path(
         "create/",
         ParkingCreateView.as_view(),
     ),
+    # 车位列表按角色返回我的车位、可购买车位或管理端全量数据。
     path(
         "list/",
         ParkingListView.as_view(),
@@ -32,6 +34,7 @@ urlpatterns = [
         "detail/<int:pk>/",
         ParkingDetailView.as_view(),
     ),
+    # 绑定接口用于业主购买/绑定车位后的归属更新。
     path(
         "bind/<int:pk>/",
         ParkingBindView.as_view(),

@@ -1,3 +1,4 @@
+// 文件说明：配置前端路由、登录拦截和浏览器标签标题刷新逻辑。
 import { createRouter, createWebHistory } from 'vue-router'
 import { appMenuTitle } from '@/menu/fallbackMenus'
 import {
@@ -6,6 +7,7 @@ import {
     getStoredToken,
 } from '@/utils/authState'
 
+// 页面路由分块：公共入口独立声明，后台页面统一挂在 Layout 下。
 const routes = [
     // 登录页：系统入口，不显示后台菜单
     {
@@ -240,11 +242,13 @@ const routes = [
     },
 ]
 
+// 路由实例：使用 HTML5 history，保持地址栏路径和菜单路径一致。
 const router = createRouter({
     history: createWebHistory(),
     routes,
 })
 
+// 角色标题映射：用于浏览器标签，避免多角色多标签时认不清当前身份。
 const roleTitleMap: Record<string, string> = {
     admin: '管理员',
     super_admin: '超级管理员',
@@ -257,6 +261,7 @@ const roleTitleMap: Record<string, string> = {
     owner: '业主',
 }
 
+// 固定路由标题映射：只维护业务入口标题，动态详情页由后续规则兜底。
 const routeTitleMap: Record<string, string> = {
     '/dashboard': '首页',
     '/user/list': '用户列表',
@@ -289,6 +294,7 @@ const routeTitleMap: Record<string, string> = {
     '/log/login/list': '登录日志',
 }
 
+// 公共页面标题映射：登录、注册、找回密码不依赖角色。
 const publicTitleMap: Record<string, string> = {
     '/login': '登录',
     '/register': '注册',
@@ -296,12 +302,14 @@ const publicTitleMap: Record<string, string> = {
 }
 
 const normalizePath = (path: string) => {
+    // 把 /edit/1、/detail/2 这类路径标准化，便于统一匹配动态页标题。
     return path.replace(/\/\d+(?=\/|$)/g, '/:id')
 }
 
 const getModuleTitle = (path: string) => {
     const normalizedPath = normalizePath(path)
 
+    // 先精确匹配菜单入口，减少动态规则误判。
     if (routeTitleMap[path]) {
         return routeTitleMap[path]
     }
@@ -344,6 +352,7 @@ export const refreshBrowserTitle = () => {
 }
 
 if (typeof window !== 'undefined') {
+    // 多标签切换账号时同步刷新标题，避免保留上一个角色的标签名。
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshBrowserTitle)
 }
 

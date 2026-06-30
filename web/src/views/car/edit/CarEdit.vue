@@ -26,8 +26,15 @@ const form = reactive({
     plate_no: '',
     brand: '',
     color: '',
+    car_type: 'monthly',
     parking: '',
 })
+
+// 车辆类型选项与后端 Car.TYPE_CHOICES 保持一致。
+const carTypeOptions = [
+    { label: '月租车', value: 'monthly' },
+    { label: '临时车', value: 'temporary' },
+]
 
 /**
  * 业主列表
@@ -103,6 +110,17 @@ onMounted(() => {
 
             <el-form-item label="颜色">
                 <el-input v-model="form.color" />
+            </el-form-item>
+
+            <el-form-item label="车辆类型">
+                <el-select v-model="form.car_type" placeholder="请选择车辆类型">
+                    <el-option
+                        v-for="item in carTypeOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                    />
+                </el-select>
             </el-form-item>
 
             <el-form-item label="所属车位">

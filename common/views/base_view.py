@@ -5,5 +5,6 @@ from rest_framework.permissions import IsAuthenticated
 
 
 class BaseView(APIView):
+    """统一给继承视图加登录认证，具体业务权限仍由子类自行收窄。"""
 
     permission_classes = [IsAuthenticated]

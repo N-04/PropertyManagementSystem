@@ -137,6 +137,7 @@ class FeeListView(APIView):
 
     def get(self, request):
 
+        # 基础查询带上业主、房屋、楼栋等关系，避免列表序列化时反复查库。
         queryset = (
             Fee.objects.select_related(
                 "owner",
@@ -148,6 +149,7 @@ class FeeListView(APIView):
             .order_by("-id")
         )
 
+        # 业主只能查看自己的账单；财务和管理员可以查看待处理账单池。
         if is_owner_user(request.user):
             queryset = queryset.filter(owner__phone=request.user.phone)
         elif not _can_manage_fee(request.user):
@@ -163,6 +165,7 @@ class FeeListView(APIView):
             request.GET.get("date_to") or request.GET.get("end_date") or ""
         ).strip()
 
+        # 搜索覆盖业主、手机号、房号和备注，匹配前端统一搜索框。
         if keyword:
             queryset = queryset.filter(
                 Q(owner__name__icontains=keyword)
@@ -174,6 +177,7 @@ class FeeListView(APIView):
             )
 
         if fee_type:
+            # 费用类型必须落在模型枚举内，防止随意传参造成无意义筛选。
             valid_fee_types = {choice[0] for choice in Fee.TYPE_CHOICES}
 
             if fee_type not in valid_fee_types:
@@ -182,6 +186,7 @@ class FeeListView(APIView):
             queryset = queryset.filter(fee_type=fee_type)
 
         if status:
+            # 缴费记录页通过 status=paid 获取已缴费订单，未缴费页不混入已支付数据。
             valid_statuses = {choice[0] for choice in Fee.STATUS_CHOICES}
 
             if status not in valid_statuses:
@@ -195,6 +200,7 @@ class FeeListView(APIView):
             if not date_from:
                 return ResponseError(msg="开始日期格式不正确")
 
+            # 日期筛选基于账单截止日，符合财务“到期账单”查询语义。
             queryset = queryset.filter(deadline__date__gte=date_from)
 
         if date_to_raw:
@@ -203,11 +209,13 @@ class FeeListView(APIView):
             if not date_to:
                 return ResponseError(msg="结束日期格式不正确")
 
+            # 结束日期按自然日包含当天，避免前端日期控件选择当天却查不到数据。
             queryset = queryset.filter(deadline__date__lte=date_to)
 
         page_size = _parse_positive_int(request.GET.get("page_size"))
 
         if page_size:
+            # 前端大屏和普通列表共用接口，有 page_size 时返回分页元信息。
             page = _parse_positive_int(request.GET.get("page"), 1)
             page_size = min(page_size, 1000)
             total = queryset.count()
@@ -301,6 +309,7 @@ class FeePayView(APIView):
 
     def put(self, request, pk):
 
+        # 支付动作只允许账单所属业主执行，管理员和财务不能代替业主付款。
         fee = (
             Fee.objects.select_related(
                 "owner",
@@ -330,6 +339,7 @@ class FeePayView(APIView):
         if payment_method not in valid_methods:
             return ResponseError(msg="请选择正确的支付方式")
 
+        # 支付成功后立即落库，业主缴费中心和财务工作台会通过实时刷新同步变化。
         fee.status = "paid"
         fee.pay_time = timezone.now()
         fee.payment_method = payment_method
@@ -354,6 +364,7 @@ class FeeReminderView(APIView):
 
     def post(self, request, pk):
 
+        # 提醒会写入角色消息中心，而不是跳转到欠费列表。
         if not _can_manage_fee(request.user):
             return ResponseError(msg="无权发送缴费提醒")
 
@@ -379,6 +390,7 @@ class FeeReminderView(APIView):
         if not owner_user:
             return ResponseError(msg="未找到该业主对应登录账号")
 
+        # 将账单信息组装成面向业主的站内信内容。
         fee_type = _fee_type_text(fee)
         room_parts = [
             fee.house.unit.building.name if fee.house and fee.house.unit else "",
@@ -403,6 +415,7 @@ class FeeReminderView(APIView):
             .first()
         )
 
+        # 同一账单提醒复用会话，避免财务人员多次点击后生成一堆重复会话。
         if not conversation:
             conversation = ChatConversation.objects.create(
                 title=title,
@@ -411,6 +424,7 @@ class FeeReminderView(APIView):
             )
             conversation.participants.set([request.user, owner_user])
         else:
+            # 结束过的会话被再次提醒时重新激活，让业主仍从同一消息线程看到最新提醒。
             conversation.status = "active"
             conversation.end_reason = None
             conversation.ended_at = None

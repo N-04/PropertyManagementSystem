@@ -31,9 +31,17 @@ class ParkingSerializer(serializers.ModelSerializer):
         return obj.owner.house.room_no if obj.owner_id and obj.owner.house_id else ""
 
     def get_zone(self, obj):
-        # 车位号通常以 A-001、B001 等格式录入，前缀用于前端分区展示。
+        # 车位号前缀承担业务含义：SM 为售卖车位，PT/P 为普通访客临停车位。
         parking_no = obj.parking_no or ""
-        if "-" in parking_no:
-            return parking_no.split("-", 1)[0].upper()
+        normalized_no = parking_no.strip().upper()
 
-        return (parking_no[:1] or "其他").upper()
+        if normalized_no.startswith("SM"):
+            return "SM"
+
+        if normalized_no.startswith("PT") or normalized_no.startswith("P"):
+            return "PT"
+
+        if "-" in normalized_no:
+            return normalized_no.split("-", 1)[0]
+
+        return (normalized_no[:1] or "其他")

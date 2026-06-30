@@ -33,6 +33,8 @@ REPAIR_MANAGE_ROLES = (
 
 
 def _can_manage_repair(user):
+    """物业管理员和客服类角色可以派单、查看和维护报修工单。"""
+
     return has_any_role(user, *REPAIR_MANAGE_ROLES) or getattr(user, "is_superuser", False)
 
 
@@ -47,6 +49,7 @@ class RepairCreateView(APIView):
         data = request.data.copy()
 
         if is_owner_user(request.user):
+            # 业主提交报修时，房屋必须属于当前账号绑定的业主资料。
             owner = Owner.objects.filter(phone=request.user.phone).first()
 
             if not owner:
@@ -101,6 +104,7 @@ class RepairListView(APIView):
 
         queryset = Repair.objects.all().order_by("-id")
 
+        # 列表按角色裁剪：业主看自己的，维修员看已分配或可接单池，管理员看全部。
         if is_owner_user(request.user):
             queryset = queryset.filter(owner__phone=request.user.phone)
         elif is_repair_user(request.user):
@@ -122,6 +126,7 @@ class RepairListView(APIView):
 
         if keyword:
 
+            # 搜索只覆盖标题和报修业主，和前端“标题/业主”提示保持一致。
             queryset = queryset.filter(
                 Q(title__icontains=keyword) | Q(owner__name__icontains=keyword)
             )
@@ -149,11 +154,7 @@ class MyPage(PageNumberPagination):
 
 
 class RepairUpdateView(APIView):
-    """
-
-    修改报修
-
-    """
+    """修改报修，统一处理业主编辑、维修员接单流转和业主评价。"""
 
     permission_classes = [IsAuthenticated]
 
@@ -186,6 +187,7 @@ class RepairUpdateView(APIView):
             and not instance.repair_user.exists()
         )
 
+        # 维修员接无人认领工单时自动绑定自己；非认领场景只能操作已分配给自己的工单。
         if (
             is_repair_user(request.user)
             and not is_repair_claim
@@ -198,6 +200,7 @@ class RepairUpdateView(APIView):
             is_evaluation = any(field in data for field in evaluation_fields)
 
             if is_evaluation:
+                # 评分只允许已完成工单，且每个工单只能评价一次。
                 if instance.status != "finished":
                     return ResponseError(msg="只能评价已完成工单")
 
@@ -232,6 +235,7 @@ class RepairUpdateView(APIView):
             allowed_fields = {"status", "repair_result", "result_images"}
             data = {key: data[key] for key in allowed_fields if key in data}
 
+            # 维修员状态机：接单 -> 维修中 -> 完成，禁止跳过中间状态。
             status_flow = {
                 "pending": {"accepted"},
                 "assigned": {"accepted"},
@@ -258,9 +262,10 @@ class RepairUpdateView(APIView):
         if mark_finished and not (
             data.get("repair_result") or instance.repair_result or data.get("result_images")
         ):
+            # 完成工单必须带维修结果，避免右侧抽屉空提交。
             return ResponseError(msg="请填写维修结果")
 
-        # 序列化校验
+        # 前面已按角色收窄可写字段，这里再交给序列化器做模型级校验。
         serializer = RepairSerializer(
             instance=instance,
             data=data,
@@ -274,11 +279,10 @@ class RepairUpdateView(APIView):
                 data=serializer.errors,
             )
 
-        # 保存
-
         saved = serializer.save()
 
         if is_repair_claim and not saved.repair_user.filter(id=request.user.id).exists():
+            # 无人认领工单被接单后，把当前维修员写入维修人员关系。
             saved.repair_user.add(request.user)
 
         if mark_finished:
@@ -287,6 +291,7 @@ class RepairUpdateView(APIView):
 
         action = "修改报修"
 
+        # 操作日志动作按业务事件归类，方便管理员审计工单流转。
         if data.get("status") == "accepted":
             action = "维修员接单"
         elif data.get("status") == "processing":
@@ -302,8 +307,6 @@ class RepairUpdateView(APIView):
                 operator=request.user,
                 action=action,
             )
-
-        # 操作日志
 
         save_operation_log(
             username=request.user.username,
@@ -331,6 +334,7 @@ class RepairDeleteView(APIView):
         if not instance:
             return ResponseError(msg="报修记录不存在")
 
+        # 删除权限跟查看权限保持一致：业主只删自己的，管理员才能处理全部。
         if is_owner_user(request.user):
             if instance.owner.phone != request.user.phone:
                 return ResponseError(msg="无权删除该报修")
@@ -343,18 +347,11 @@ class RepairDeleteView(APIView):
 
 
 class RepairDetailView(APIView):
-    """
-
-    报修详情
-
-    """
+    """报修详情，按当前角色校验可见范围。"""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-
-        # 查询报修记录
-
         instance = get_object_or_404(
             Repair,
             pk=pk,
@@ -368,6 +365,7 @@ class RepairDetailView(APIView):
             and not instance.repair_user.exists()
         )
 
+        # 维修员可以查看待接单池；已有人接单后只能由对应维修员查看。
         if (
             is_repair_user(request.user)
             and not is_unclaimed_repair
@@ -382,11 +380,7 @@ class RepairDetailView(APIView):
         ):
             return ResponseError(msg="无权查看该报修")
 
-        # 序列化
-
         serializer = RepairSerializer(instance)
-
-        # 返回数据
 
         return ResponseSuccess(
             data=serializer.data,
@@ -416,11 +410,8 @@ class RepairAssignView(APIView):
         if not repair_users:
             return ResponseError(msg="请选择维修人员")
 
-        # 清空旧人员
-
+        # 重新派单前先清空旧人员，避免同一工单残留多个无效维修员。
         repair.repair_user.clear()
-
-        # 添加维修人员
 
         users = User.objects.filter(id__in=repair_users)
 
@@ -429,8 +420,7 @@ class RepairAssignView(APIView):
 
         repair.repair_user.add(*users)
 
-        # 修改状态
-
+        # 派单后进入待接单状态，维修员随后在工作台接单。
         repair.status = "assigned"
 
         repair.save()

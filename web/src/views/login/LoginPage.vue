@@ -1,3 +1,4 @@
+<!-- 文件说明：实现用户登录页，支持密码登录、手机号登录、图形验证码和短信验证码。 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { refreshBrowserTitle } from '@/router'
@@ -8,6 +9,7 @@ import { saveAuthState } from '@/utils/authState'
 
 const router = useRouter()
 
+// 表单状态分块：两种登录方式共用同一张验证码，表单值分开维护。
 const loginMode = ref<'password' | 'phone'>('password')
 const passwordForm = ref({
     username: '',
@@ -29,10 +31,12 @@ let smsTimer: ReturnType<typeof setInterval> | null = null
 
 const loading = ref(false)
 
+// 短信按钮文案跟随倒计时变化，避免用户重复请求验证码。
 const smsButtonText = computed(() => {
     return smsCountdown.value > 0 ? `${smsCountdown.value}s后重试` : '获取验证码'
 })
 
+// 后端错误结构不完全统一，统一抽出可读提示后再交给页面弹窗。
 const getResponseMessage = (data: any, fallback: string) => {
     if (!data) {
         return fallback
@@ -72,6 +76,7 @@ const getErrorMessage = (error: any) => {
 }
 
 const clearSmsTimer = () => {
+    // 组件卸载和重新倒计时时都先清理旧定时器，避免多个倒计时同时运行。
     if (smsTimer) {
         clearInterval(smsTimer)
         smsTimer = null
@@ -93,6 +98,7 @@ const startSmsCountdown = (seconds = 60) => {
 }
 
 const loadCaptcha = async () => {
+    // 图形验证码每次刷新都会清空输入，避免旧验证码继续提交。
     captchaLoading.value = true
     captchaError.value = ''
 
@@ -128,9 +134,10 @@ const saveLoginDataAndEnter = async (loginData: any) => {
     }
 
     // 登录态写入当前标签页，避免复制标签后切换角色造成菜单和角色互相覆盖。
-    const { role } = saveAuthState(loginData)
+    saveAuthState(loginData)
 
     try {
+        // 登录成功与进入后台分开提示，避免接口成功后路由异常又误报“登录失败”。
         await router.push('/dashboard')
         refreshBrowserTitle()
         ElMessage.success('登录成功')
@@ -140,6 +147,7 @@ const saveLoginDataAndEnter = async (loginData: any) => {
 }
 
 const handlePasswordLogin = async () => {
+    // 密码登录必须先完成本地必填校验，减少无效接口请求。
     if (!passwordForm.value.username) {
         ElMessage.warning('请输入用户名')
         return
@@ -191,6 +199,7 @@ const handlePasswordLogin = async () => {
 }
 
 const sendLoginSmsCode = async () => {
+    // 倒计时期间直接拦截，避免用户连点导致短信接口被限流。
     if (smsCountdown.value > 0 || isSendingSms.value) {
         return
     }
@@ -244,6 +253,7 @@ const sendLoginSmsCode = async () => {
 }
 
 const handlePhoneLogin = async () => {
+    // 手机号登录在短信已校验的基础上提交，不再重复要求图形验证码。
     if (!phoneForm.value.phone) {
         ElMessage.warning('请输入手机号')
         return
@@ -281,6 +291,7 @@ const handlePhoneLogin = async () => {
 }
 
 const handleLogin = () => {
+    // 入口按钮根据当前登录方式分发，模板里只需要绑定一个方法。
     if (loginMode.value === 'phone') {
         handlePhoneLogin()
         return

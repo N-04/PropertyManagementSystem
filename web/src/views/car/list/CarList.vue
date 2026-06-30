@@ -54,6 +54,16 @@ const resetSearch = () => {
     getList()
 }
 
+// 列表兼容后端展示字段和原始枚举值，避免车辆类型列为空。
+const getCarTypeText = (row: any) => {
+    const carTypeMap: Record<string, string> = {
+        monthly: '月租车',
+        temporary: '临时车',
+    }
+
+    return row.car_type_text || carTypeMap[row.car_type] || '-'
+}
+
 const handleDetail = (row: any) => {
     router.push('/car/detail/' + row.id)
 }
@@ -141,7 +151,11 @@ useRealtimeRefresh(() => getList(false), {
 
             <el-table-column prop="owner_name" label="所属业主" />
 
-            <el-table-column prop="TYPE_CHOICES" label="车辆类型" />
+            <el-table-column label="车辆类型">
+                <template #default="scope">
+                    {{ getCarTypeText(scope.row) }}
+                </template>
+            </el-table-column>
 
             <el-table-column prop="brand" label="品牌" />
 

@@ -7,6 +7,7 @@ export const AUTH_STATE_CHANGED_EVENT = 'property-management-auth-state-changed'
 const authKeys: AuthKey[] = ['token', 'refresh', 'username', 'role', 'roles', 'permissions', 'userInfo']
 const authVersionKey = 'authVersion'
 
+// 多角色账号按优先级确定当前主角色，保证菜单和首页工作台选择稳定。
 const rolePriority = [
     'super_admin',
     'admin',
@@ -83,6 +84,7 @@ const copyLocalAuthToSession = () => {
         const localValue = safeRead(localStorage, key)
         const sessionValue = safeRead(sessionStorage, key)
 
+        // 只同步实际变更的字段，避免无意义触发当前标签页刷新。
         if (localValue === sessionValue) {
             return
         }
@@ -205,6 +207,7 @@ export const getStoredUsername = () => getAuthItem('username')
 export const getStoredRole = () => getAuthItem('role')
 
 export const resolveLoginRole = (loginData: any) => {
+    // 登录接口可能返回 role、roles 或 user.role_codes，统一抽取成角色编码。
     const explicitRole = collectRoleCodes(loginData?.role || loginData?.user?.role)[0]
 
     if (explicitRole) {
@@ -228,6 +231,7 @@ export const saveAuthState = (loginData: any) => {
     const username = loginData.username || loginData.user?.username || ''
     const version = createAuthVersion()
 
+    // 登录成功同时写入 sessionStorage 和 localStorage，让当前标签即时可用且新标签可初始化。
     setAuthItem('token', token, true)
     setAuthItem('refresh', loginData.refresh || '', true)
     setAuthItem('username', username, true)

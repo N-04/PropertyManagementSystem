@@ -12,7 +12,9 @@ from apps.finance.views.fee_view import (
 )
 
 urlpatterns = [
+    # 财务人员创建账单，业主端仅消费列表和支付接口。
     path("create/", FeeCreateView.as_view()),
+    # 账单列表同时服务财务筛选、业主在线缴费和缴费记录。
     path("list/", FeeListView.as_view()),
     path(
         "update/<int:pk>/",
@@ -26,6 +28,7 @@ urlpatterns = [
         "pay/<int:pk>/",
         FeePayView.as_view(),
     ),
+    # 欠费提醒只发送消息通知，不跳转欠费列表。
     path(
         "remind/<int:pk>/",
         FeeReminderView.as_view(),

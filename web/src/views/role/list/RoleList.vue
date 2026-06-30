@@ -59,6 +59,28 @@ const resetFilter = () => {
     resetPage()
 }
 
+// 时间展示兜底：兼容后端 ISO 字符串和已经格式化过的时间。
+const formatDateTime = (value?: string) => {
+    if (!value) return '-'
+
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value)) {
+        return value.length === 16 ? `${value}:00` : value
+    }
+
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+
+    const pad = (number: number) => String(number).padStart(2, '0')
+
+    return [
+        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+        `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
+    ].join(' ')
+}
+
 // 路由对象
 const router = useRouter()
 
@@ -149,7 +171,11 @@ useRealtimeRefresh(() => getList(false), {
                 <el-table-column prop="code" label="角色编码" />
 
                 <!-- 创建时间 -->
-                <el-table-column prop="created_at" label="创建时间" />
+                <el-table-column label="创建时间" width="180">
+                    <template #default="scope">
+                        {{ formatDateTime(scope.row.created_at) }}
+                    </template>
+                </el-table-column>
                 <!-- 操作 -->
                 <el-table-column label="操作" width="220">
                     <template #default="scope">

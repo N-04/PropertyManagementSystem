@@ -26,6 +26,7 @@ def menu_node(code, title, path=None, children=None, hidden=False):
     }
 
 
+# 菜单大纲分块：按系统结构图维护全量菜单，再由角色根节点裁剪出可见菜单。
 MENU_TREE = [
     menu_node(
         "auth",
@@ -205,7 +206,6 @@ MENU_TREE = [
                         "工单管理",
                         children=[
                             menu_node("admin-property-repair-order", "报修工单", "/repair/list"),
-                            menu_node("admin-property-dispatch", "派单管理", "/repair/list"),
                             menu_node("admin-property-order-status", "工单状态", "/repair/list"),
                             menu_node("admin-property-order-rate", "工单评价", "/repair/list"),
                             menu_node("admin-property-order-stat", "工单统计", "/dashboard"),
@@ -369,6 +369,7 @@ MENU_TREE = [
 ]
 
 
+# 角色账号分块：每个演示角色绑定一个根菜单集合，密码由命令运行时生成。
 ROLE_DEFINITIONS = [
     {
         "code": "property_admin",
@@ -420,6 +421,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        # 先同步菜单和权限，后续角色授权只引用稳定的 permission_map。
         menu_map = {}
         permission_map = {}
 
@@ -430,6 +432,7 @@ class Command(BaseCommand):
         User = get_user_model()
 
         for role_data in ROLE_DEFINITIONS:
+            # 角色记录可重复执行更新名称，避免演示数据脚本产生重复角色。
             role, _ = Role.objects.get_or_create(
                 code=role_data["code"],
                 defaults={
@@ -443,11 +446,13 @@ class Command(BaseCommand):
             permissions = []
 
             for root_code in role_data["roots"]:
+                # 角色只拿自己根菜单下的权限，隐藏菜单也保留为后端能力入口。
                 permissions.extend(self._collect_permissions(root_code, permission_map))
 
             role.permissions.set(permissions)
 
             password = f"Wy@{get_random_string(8)}2026"
+            # 演示账号按用户名幂等创建，手机号唯一性在下面单独校验。
             user, created = User.objects.get_or_create(
                 username=role_data["username"],
                 defaults={
@@ -459,6 +464,7 @@ class Command(BaseCommand):
             )
 
             if user.is_superuser:
+                # 命令永远不改超级管理员，避免覆盖用户手动维护的超管账号。
                 raise CommandError(f"{user.username} 是超级管理员，命令已停止，未修改该账号。")
 
             phone_owner = User.objects.filter(phone=role_data["phone"]).exclude(id=user.id).first()
@@ -477,6 +483,7 @@ class Command(BaseCommand):
             user.roles.set([role])
 
             if created or not options["keep_password"]:
+                # 默认重置密码并输出，方便黑盒烟测拿到可登录账号。
                 user.set_password(password)
             else:
                 password = "未重置，沿用原密码"
@@ -484,6 +491,7 @@ class Command(BaseCommand):
             user.save()
 
             if role_data["code"] == "owner":
+                # 业主账号需要业主资料支撑车位、缴费和房屋绑定流程。
                 self._ensure_owner_profile(user)
 
             result.append(
@@ -522,6 +530,7 @@ class Command(BaseCommand):
         id_card_index = 1
         id_card = f"110101199001{id_card_index:06d}"
 
+        # 身份证在业主表中唯一，演示账号自动递增尾号避免冲突。
         while Owner.objects.filter(id_card=id_card).exists():
             id_card_index += 1
             id_card = f"110101199001{id_card_index:06d}"
@@ -547,6 +556,7 @@ class Command(BaseCommand):
         menu_map,
         permission_map,
     ):
+        # 五级及以下按功能权限处理，前端只把菜单类型节点渲染为导航。
         menu_type = 2 if level >= 5 else 1
         menu, _ = Menu.objects.get_or_create(
             title=node["title"],
@@ -581,6 +591,7 @@ class Command(BaseCommand):
         menu_map[node["code"]] = menu
         permission_map[node["code"]] = permission
 
+        # 子菜单递归同步，sort 使用同级顺序保持侧边栏稳定。
         for child_index, child in enumerate(node.get("children", []), start=1):
             self._sync_menu_node(
                 child,
@@ -592,6 +603,7 @@ class Command(BaseCommand):
             )
 
     def _collect_permissions(self, root_code, permission_map):
+        # 根节点权限和所有子节点权限一起授权给角色。
         prefix = f"{root_code}-"
 
         return [

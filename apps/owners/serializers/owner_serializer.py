@@ -6,17 +6,22 @@ from apps.owners.models import Owner
 
 
 class OwnerSerializer(serializers.ModelSerializer):
+    """业主资料序列化器，补充身份证脱敏和房屋层级展示字段。"""
 
     id_card_mask = serializers.SerializerMethodField()
 
     def get_id_card_mask(self, obj):
+        """身份证仅展示前 6 后 4 位，避免前端暴露完整敏感信息。"""
 
         return obj.id_card[:6] + "********" + obj.id_card[-4:]
 
+    # 头像只读，实际上传由文件上传接口返回 URL 后再写入业务资料。
     avatar = serializers.ImageField(read_only=True)
 
+    # 兼容旧前端字段名，保持头像字段在历史表单中的读取方式不变。
     type = avatar
 
+    # 房屋层级字段仅用于展示，写入绑定关系时仍使用 house 主键。
     room_no = serializers.CharField(
         source="house.room_no",
         read_only=True,
@@ -44,4 +49,5 @@ class OwnerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Owner
+        # 业主资料字段随注册/认证流程变化较多，保持模型字段全量输出。
         fields = "__all__"

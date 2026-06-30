@@ -15,6 +15,7 @@ const item = (
     children: AppMenuItem[] = [],
     hidden = false
 ): AppMenuItem => {
+    // 本地菜单节点保持和后端菜单相同字段，布局层可以无差别渲染。
     return {
         id,
         title,
@@ -27,6 +28,7 @@ const item = (
 
 export const appMenuTitle = '社区物业管理系统'
 
+// 兜底菜单分块：后端菜单接口失败时，仍按角色展示最小可用业务入口。
 export const fallbackMenus: AppMenuItem[] = [
     item('admin', '管理员', undefined, [
         item('admin-dashboard', '运营工作台', '/dashboard'),
@@ -52,7 +54,6 @@ export const fallbackMenus: AppMenuItem[] = [
         ]),
         item('admin-repair', '工单中心', undefined, [
             item('admin-repair-list', '报修工单', '/repair/list'),
-            item('admin-repair-dispatch', '派单处理', '/repair/list?status=assigned'),
             item('admin-repair-finished', '完成验收', '/repair/list?status=finished'),
         ]),
         item('admin-fee', '收费管理', undefined, [

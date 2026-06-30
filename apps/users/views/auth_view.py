@@ -257,8 +257,10 @@ class LogoutView(APIView):
                 # token_blacklist 未安装时 blacklist 方法不可用，所以这里兼容处理。
                 RefreshToken(refresh_token).blacklist()
             except AttributeError:
+                # 当前环境未启用黑名单应用时，退出登录仍交给前端清理本地凭证。
                 pass
             except Exception:
+                # 黑名单写入失败不阻塞退出流程，避免用户被困在已失效会话里。
                 pass
 
         return ResponseSuccess(msg="退出登录成功")

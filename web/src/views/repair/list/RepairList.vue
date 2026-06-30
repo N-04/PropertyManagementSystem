@@ -21,6 +21,7 @@ const isRepairer = ['repair_staff', 'repairer', 'repair'].includes(role)
 const REPAIR_EVALUATION_FEEDBACK_EVENT = 'property-management-repair-evaluation-feedback'
 const REPAIR_EVALUATION_FEEDBACK_STORAGE_KEY = 'repairEvaluationFeedback'
 
+// 日期筛选拆成两个选择器，开始日期选择后自动聚焦结束日期。
 const startRef = ref()
 const endRef = ref()
 
@@ -29,7 +30,7 @@ const handleStartChange = () => {
         endRef.value?.focus()
     })
 }
-// 定义维修数据类型
+// 定义维修数据类型，保证列表、评价弹窗和上传结果抽屉共用同一份字段约定。
 interface RepairItem {
     id: number
     title: string
@@ -55,8 +56,8 @@ const {
     resetPage,
 } = useClientPagination(tableData)
 
-// 加载数据
 const loadData = async (shouldResetPage = true) => {
+    // 列表数据由后端按角色过滤；前端只负责保留当前筛选条件和分页状态。
     const res = await getRepairList(queryForm.value)
 
     tableData.value = res.data.data
@@ -101,6 +102,7 @@ const handleAssign = (row: any) => {
 }
 
 const updateRepairStatus = async (row: RepairItem, status: RepairItem['status'], message: string) => {
+    // 维修员的接单、开始维修等轻量状态流转直接走更新接口。
     await updateRepair(row.id, {
         status,
     })
@@ -115,6 +117,7 @@ const finishDrawerVisible = ref(false)
 const finishRow = ref<any>(null)
 
 const handleFinish = (row: any) => {
+    // 只记录当前工单，拍照上传和提交说明由抽屉组件独立管理。
     finishRow.value = row
     finishDrawerVisible.value = true
 }
@@ -130,6 +133,7 @@ const evaluateForm = reactive({
 })
 
 const handleEvaluate = (row: RepairItem) => {
+    // 已评价的工单禁止再次打开弹窗，防止重复提交评分。
     if (row.evaluation_score || evaluationCompletedIds.has(row.id)) {
         ElMessage.info('该工单已评价，不能重复提交')
         return
@@ -142,6 +146,7 @@ const handleEvaluate = (row: RepairItem) => {
 }
 
 const emitEvaluationFeedback = (repair: RepairItem, score: number) => {
+    // 评价成功后写入消息中心本地反馈，并通知其他页面刷新铃铛统计。
     const feedback = {
         id: Date.now(),
         repair_id: repair.id,
@@ -156,6 +161,7 @@ const emitEvaluationFeedback = (repair: RepairItem, score: number) => {
 }
 
 const submitEvaluation = async () => {
+    // 提交期间加锁，避免用户连续点击造成重复评分请求。
     if (!evaluateRow.value || evaluationSubmitting.value) {
         return
     }
@@ -204,6 +210,7 @@ const submitEvaluation = async () => {
 const dateRange = ref([])
 
 const handleDateChange = (val: any) => {
+    // 历史页面可能仍使用日期范围组件，这里保留兼容入口。
     if (val) {
         queryForm.value.start_time = val[0]
         queryForm.value.end_time = val[1]
@@ -223,6 +230,7 @@ const queryForm = ref({
 const availableStatuses = ['pending', 'assigned', 'accepted', 'processing', 'finished']
 
 const syncStatusFromRoute = () => {
+    // 左侧菜单通过 status query 切换工单池，页面只接收白名单状态。
     const routeStatus = String(route.query.status || '')
 
     queryForm.value.status = availableStatuses.includes(routeStatus) ? routeStatus : ''
@@ -238,6 +246,7 @@ watch(
 
 useRealtimeRefresh(
     async () => {
+        // 工单状态变化较频繁，列表保持轻量轮询刷新但不强制回到第一页。
         syncStatusFromRoute()
         await loadData(false)
     },

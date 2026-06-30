@@ -24,6 +24,8 @@ const tableData = ref<MessageRow[]>(getImmediateMessageRows(role.value))
 const keyword = ref('')
 const typeFilter = ref('')
 let messageRequestId = 0
+
+// 消息中心状态分块：基础消息先用本地反馈兜底，再由后端会话数据覆盖。
 const keywordFilteredData = useKeywordFilter(tableData, keyword, ['type', 'title', 'content', 'status'])
 const filteredTableData = computed(() => {
     if (!typeFilter.value) {
@@ -42,18 +44,21 @@ const {
 } = useClientPagination(filteredTableData)
 
 const messageTypeOptions = computed(() => {
+    // 角色关系选项从当前消息行派生，避免把“维修员 -> 业主”等关系写死在页面里。
     return Array.from(new Set(tableData.value.map((item) => item.type).filter(Boolean)))
 })
 
 const latestMessageTime = computed(() => tableData.value[0]?.created_at || '-')
 
 const pendingCount = computed(() => {
+    // 顶部统计只把未完结消息计入待处理，已评价和已关闭类消息不再提醒。
     return tableData.value.filter((item) => !['已解决', '已完成', '已关闭', '已评价'].includes(item.status)).length
 })
 
 const relationCount = computed(() => messageTypeOptions.value.length)
 
 const statusTone = (status: string) => {
+    // 状态标签只负责展示色，不改变消息的实际业务状态。
     if (['已解决', '已完成', '已关闭', '已评价'].includes(status)) {
         return 'success'
     }
@@ -66,6 +71,7 @@ const statusTone = (status: string) => {
 }
 
 const loadMessages = async () => {
+    // 数据加载分块：requestId 防止切换账号或复制标签后旧请求覆盖新角色数据。
     const requestId = ++messageRequestId
     const requestRole = role.value
     const requestUsername = username.value
@@ -100,6 +106,7 @@ const loadMessages = async () => {
 }
 
 const openMessage = (row: MessageRow) => {
+    // 每条消息保存业务入口路径，点击后回到对应账单、工单或投诉页面处理。
     router.push(row.path)
 }
 
@@ -132,6 +139,7 @@ const handleAuthStateChanged = () => {
 }
 
 useRealtimeRefresh(loadMessages, {
+    // 监听跨页面反馈事件，保持铃铛角标和消息中心列表同步。
     scope: 'messages',
     intervalMs: 15000,
     events: MESSAGE_FEEDBACK_EVENTS,

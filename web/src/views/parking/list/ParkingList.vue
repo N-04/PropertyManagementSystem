@@ -25,21 +25,44 @@ const route = useRoute()
 const PARKING_FEEDBACK_EVENT = 'property-management-parking-feedback'
 const PARKING_FEEDBACK_STORAGE_KEY = 'parkingPurchaseFeedback'
 
+// 车位页数据分块：业主车位、可售车位和访客临停分开缓存，避免列表互相污染。
 const visitorParkingRows = ref<any[]>([])
 const availableParkingRows = ref<any[]>([])
 
 const parkingZoneText = (zone: string) => {
     const zoneMap: Record<string, string> = {
-        PT: '普通区',
-        SM: '售卖区',
+        P: '普通临停区',
+        PT: '普通临停区',
+        SM: '售卖车位区',
     }
 
     return zoneMap[`${zone || ''}`.toUpperCase()] || zone || '其他'
 }
 
+const parkingNoText = (parkingNo: string) => {
+    // 数据库存原始编号，页面展示时把业务前缀换成中文，避免用户看到 SM/PT。
+    const rawNo = `${parkingNo || ''}`.trim()
+    const normalizedNo = rawNo.toUpperCase()
+
+    if (normalizedNo.startsWith('SM-')) {
+        return rawNo.replace(/^SM-/i, '售卖车位-')
+    }
+
+    if (normalizedNo.startsWith('PT-')) {
+        return rawNo.replace(/^PT-/i, '普通临停-')
+    }
+
+    if (normalizedNo.startsWith('P-')) {
+        return rawNo.replace(/^P-/i, '普通临停-')
+    }
+
+    return rawNo || '-'
+}
+
 const isSaleParking = (item: any) => {
+    // 购买区只认售卖车位，普通区车位留给访客临停使用。
     return `${item.zone || ''}`.toUpperCase() === 'SM'
-        || `${item.parking_no || ''}`.toUpperCase().startsWith('SM-')
+        || `${item.parking_no || ''}`.trim().toUpperCase().startsWith('SM')
 }
 
 const matchesParkingKeyword = (item: any) => {
@@ -51,6 +74,7 @@ const matchesParkingKeyword = (item: any) => {
 
     return [
         item.parking_no,
+        parkingNoText(item.parking_no),
         item.zone,
         parkingZoneText(item.zone),
         item.owner_name,
@@ -97,10 +121,12 @@ const {
 const zoneList = computed(() => {
     const zoneMap = new Map<string, any[]>()
 
-    ownerParkingRows.value.forEach((item) => {
-        const zone = item.zone || '其他'
-        zoneMap.set(zone, [...(zoneMap.get(zone) || []), item])
-    })
+    ownerParkingRows.value
+        .filter((item) => ownerParkingMode.value !== 'available' || isSaleParking(item))
+        .forEach((item) => {
+            const zone = item.zone || '其他'
+            zoneMap.set(zone, [...(zoneMap.get(zone) || []), item])
+        })
 
     return Array.from(zoneMap.entries()).map(([zone, items]) => ({
         zone,
@@ -399,12 +425,12 @@ watch(
             >
                 <span>可购买车位</span>
                 <strong>{{ parkingSummary.available }}</strong>
-                <small>未绑定空闲车位</small>
+                <small>售卖区空闲车位</small>
             </button>
             <div v-else class="parking-summary-card">
-                <span>可购买车位</span>
+                <span>空闲车位</span>
                 <strong>{{ parkingSummary.idle }}</strong>
-                <small>业主可选择空闲车位</small>
+                <small>含售卖区和普通临停区</small>
             </div>
             <div v-if="!isOwner" class="parking-summary-card">
                 <span>车位总数</span>
@@ -417,7 +443,7 @@ watch(
             <el-input
                 v-model="keyword"
                 clearable
-                :placeholder="parkingView === 'visitor' ? '临停车位/访客/手机号/业主/房屋' : '车位号/分区/房屋'"
+                :placeholder="parkingView === 'visitor' ? '临停车位/访客/手机号/业主/房屋' : ownerParkingMode === 'available' ? '售卖车位号/分区' : '车位号/分区/房屋'"
                 style="width: 280px"
                 @keyup.enter="handleFilter"
                 @clear="handleFilter"
@@ -438,7 +464,7 @@ watch(
 
         <div v-if="parkingView === 'owner'" class="parking-visual">
             <div class="visual-header">
-                <span>{{ isOwner && ownerParkingMode === 'available' ? '可购买车位分区' : isOwner ? '我的车位分区' : '业主车位分区' }}</span>
+                <span>{{ isOwner && ownerParkingMode === 'available' ? '售卖车位分区' : isOwner ? '我的车位分区' : '业主车位分区' }}</span>
             </div>
 
             <div class="zone-grid">
@@ -458,7 +484,7 @@ watch(
                             :disabled="!isOwner || ownerParkingMode !== 'available' || item.status !== 'idle'"
                             @click="handleBind(item)"
                         >
-                            <span>{{ item.parking_no }}</span>
+                            <span>{{ parkingNoText(item.parking_no) }}</span>
                             <small>
                                 {{ ownerParkingMode === 'available' && item.status === 'idle' ? '点击购买' : statusLabel(item.status) }}
                             </small>
@@ -482,7 +508,11 @@ watch(
         >
             <el-table-column prop="id" label="ID" />
 
-            <el-table-column prop="parking_no" label="车位号" />
+            <el-table-column label="车位号">
+                <template #default="scope">
+                    {{ parkingNoText(scope.row.parking_no) }}
+                </template>
+            </el-table-column>
 
             <el-table-column label="分区">
                 <template #default="scope">

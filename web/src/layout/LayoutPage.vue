@@ -45,6 +45,7 @@ defineOptions({
 })
 
 const router = useRouter()
+// 布局状态分块：当前用户、菜单选中态和消息角标都随标签页登录态独立刷新。
 const username = ref(getStoredUsername())
 const role = ref(getStoredRole())
 const menuItems = ref<AppMenuItem[]>([])
@@ -58,6 +59,7 @@ const messageCenterRows = ref<MessageRow[]>(getImmediateMessageRows(role.value))
 let menuLoadRequestId = 0
 let messageLoadRequestId = 0
 
+// 角色展示映射：兼容后端历史角色编码，顶部身份胶囊始终显示中文。
 const roleTitleMap: Record<string, string> = {
     admin: '物业管理员',
     super_admin: '超级管理员',
@@ -74,6 +76,7 @@ const roleTitle = computed(() => roleTitleMap[role.value] || '用户')
 const usernameInitial = computed(() => (username.value || '用').slice(0, 1).toUpperCase())
 const notificationCount = computed(() => messageCenterRows.value.length)
 
+// 顶部搜索提示按角色切换，避免不同工作台看到无关的业务关键词。
 const searchPlaceholder = computed(() => {
     if (['repair_staff', 'repairer', 'repair'].includes(role.value)) {
         return '搜索工单号、业主、房号、报修类型等'
@@ -91,6 +94,7 @@ const searchPlaceholder = computed(() => {
 })
 
 const resolveMenuIcon = (menu: AppMenuItem): Component => {
+    // 后端未配置图标时，通过标题语义兜底出统一的菜单图标。
     const title = menu.title || ''
 
     if (title.includes('工作台') || title.includes('首页')) return HomeFilled
@@ -113,6 +117,7 @@ const resolveMenuIcon = (menu: AppMenuItem): Component => {
 const menuKey = (menu: AppMenuItem) => String(menu.id)
 
 const visibleMenus = (menus: AppMenuItem[] = []): AppMenuItem[] => {
+    // 隐藏菜单不参与导航和高亮，但保留可见子节点的层级结构。
     return menus
         .filter((item) => !item.hidden)
         .map((item) => ({
@@ -122,10 +127,12 @@ const visibleMenus = (menus: AppMenuItem[] = []): AppMenuItem[] => {
 }
 
 const buildFallbackMenusForRole = (targetRole = role.value) => {
+    // 本地兜底菜单仍按角色过滤，避免菜单接口异常时暴露其他角色入口。
     return buildDisplayMenusByRole(visibleMenus(fallbackMenus), targetRole)
 }
 
 const applyImmediateMenus = (targetRole = role.value) => {
+    // 首屏先使用本地菜单，后端菜单回来后再无感替换。
     menuItems.value = buildFallbackMenusForRole(targetRole)
     menuLoaded.value = true
     syncSelectionByCurrentRoute()
@@ -147,6 +154,7 @@ const findMenuById = (menus: AppMenuItem[], id: string): AppMenuItem | undefined
     return undefined
 }
 
+// 路由匹配分块：优先完整匹配 query，防止同路径不同 query 的菜单互相串位。
 const findMenuPathByRoute = (
     menus: AppMenuItem[],
     routePath: string,
@@ -160,6 +168,7 @@ const findMenuPathByRoute = (
         const menuPath = menu.path || ''
         const menuRoutePath = menuPath.split('?')[0]
 
+        // 带 query 的菜单必须完整匹配；无 query 的基础页才允许路径兜底。
         if (
             menuPath === routeFullPath
             || (allowBaseMatch && !menuPath.includes('?') && menuRoutePath === routePath)
@@ -189,6 +198,7 @@ const menuTargetPath = (menu?: AppMenuItem) => {
     return menu.path
 }
 
+// 菜单层级分块：一级侧栏、二级折叠、三级顶部栏和功能下拉分别派生。
 const firstMenus = computed(() => {
     return menuItems.value.filter((item) => item.menu_type !== 2)
 })
@@ -214,6 +224,7 @@ const activeThirdMenu = computed(() => {
 })
 
 const firstReachableMenu = (menu?: AppMenuItem): AppMenuItem | undefined => {
+    // 分组菜单本身没有 path 时，落到它的第一个可访问子页面。
     if (!menu) {
         return undefined
     }
@@ -262,6 +273,7 @@ const resetSecondSelection = () => {
 }
 
 const syncSelectionByCurrentRoute = () => {
+    // 刷新页面或复制标签进入时，根据当前 URL 还原菜单焦点。
     const exactMatchedPath = findMenuPathByRoute(
         menuItems.value,
         router.currentRoute.value.path,
@@ -304,6 +316,7 @@ const syncSelectionByCurrentRoute = () => {
 const navigateMenu = (menu?: AppMenuItem) => {
     const targetPath = menuTargetPath(menu)
 
+    // 重复点击当前菜单不重复 push，避免浏览器历史记录堆叠。
     if (targetPath && router.currentRoute.value.fullPath !== targetPath) {
         router.push(targetPath)
     }
@@ -316,6 +329,7 @@ const handleFirstSelect = (item: AppMenuItem) => {
     selectedFunctionTitle.value = ''
 
     if (childrenOf(item).length) {
+        // 一级菜单有子项时只折叠/展开，并跳到当前分组下第一个可达页面。
         if (wasCurrentFirstMenu) {
             toggleFirstMenu(id)
         } else {
@@ -341,6 +355,7 @@ const handleSecondSelect = (parent: AppMenuItem, item: AppMenuItem) => {
 }
 
 const handleThirdSelect = (item: AppMenuItem) => {
+    // 三级菜单可能只是功能组，实际路径由它自己或第一个子功能提供。
     const id = menuKey(item)
     selectedThirdId.value = id
     selectedFunctionTitle.value = ''
@@ -359,11 +374,13 @@ const handleFunctionSelect = (id: string) => {
 }
 
 const loadMenus = async () => {
+    // 菜单加载分块：通过请求序号防止切换账号后旧请求覆盖新角色菜单。
     const requestId = ++menuLoadRequestId
     const requestRole = role.value
     const requestUsername = username.value
 
     const acceptCurrentMenuRequest = () => {
+        // 角色和用户名都一致才接收结果，解决复制标签切换账号后的菜单错乱。
         return (
             requestId === menuLoadRequestId
             && requestRole === role.value
@@ -414,6 +431,7 @@ const loadMenus = async () => {
 }
 
 const loadNotificationMessages = async () => {
+    // 顶部消息角标复用消息中心数据，保证入口数字和列表来源一致。
     const requestId = ++messageLoadRequestId
     const requestRole = role.value
     const requestUsername = username.value
@@ -429,6 +447,7 @@ const loadNotificationMessages = async () => {
         || requestRole !== role.value
         || requestUsername !== username.value
     ) {
+        // 旧消息请求返回时直接丢弃，避免显示上一个账号的未读数。
         return
     }
 
@@ -436,6 +455,7 @@ const loadNotificationMessages = async () => {
 }
 
 const reloadMenusForCurrentRole = () => {
+    // 角色切换后清空旧选中态，再重新加载当前角色菜单。
     selectedFirstId.value = ''
     selectedSecondId.value = ''
     selectedThirdId.value = ''
@@ -446,6 +466,7 @@ const reloadMenusForCurrentRole = () => {
 }
 
 const refreshLayoutAuthState = () => {
+    // 登录态刷新分块：监听全局登录事件，实时同步顶部用户名和菜单权限。
     const nextUsername = getStoredUsername()
     const nextRole = getStoredRole()
     const roleChanged = nextRole !== role.value
@@ -463,8 +484,8 @@ const refreshLayoutAuthState = () => {
     }
 }
 
-// 退出登录清除role权限
 const handleLogout = async () => {
+    // 退出登录分块：后端退出失败也清理本地状态，保证能回到登录页。
     const refresh = getStoredRefresh()
 
     try {
@@ -483,6 +504,7 @@ const handleUserCommand = (command: string) => {
 }
 
 const goRoleMessages = () => {
+    // 铃铛是角色消息唯一入口，避免侧边栏再放重复菜单。
     router.push('/message/center')
 }
 

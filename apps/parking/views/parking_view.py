@@ -1,10 +1,16 @@
 # 文件说明：处理 apps/parking/views/parking_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
+from datetime import datetime
+from decimal import Decimal
+
+from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.chat.models import ChatConversation, ChatMessage
+from apps.finance.models import Fee
 from apps.parking.models import Parking
 from apps.parking.serializers.parking_serializer import ParkingSerializer
 from apps.owners.models import Owner
@@ -23,7 +29,10 @@ PARKING_MANAGE_ROLES = (
     "super_admin",
     "property_admin",
 )
-SALE_PARKING_PREFIX = "SM-"
+SALE_PARKING_ZONE = "SM"
+PARKING_FEE_UNIT_PRICE = Decimal("22.80")
+PARKING_FEE_DEFAULT_AMOUNT = Decimal("285.00")
+PARKING_FEE_REMARK_PREFIX = "车位费："
 
 
 def _can_manage_parking(user):
@@ -42,7 +51,7 @@ def _can_access_parking(user, parking):
         if parking.owner_id and parking.owner.phone == user.phone:
             return True
 
-        return parking.status == "idle" and not parking.owner_id
+        return parking.status == "idle" and not parking.owner_id and _is_sale_parking(parking)
 
     return False
 
@@ -60,7 +69,61 @@ def _property_admin_queryset():
 def _is_sale_parking(parking):
     """售卖区车位才允许业主购买；普通区车位保留给访客临停。"""
 
-    return (parking.parking_no or "").upper().startswith(SALE_PARKING_PREFIX)
+    return (parking.parking_no or "").strip().upper().startswith(SALE_PARKING_ZONE)
+
+
+def _parking_fee_amount(parking):
+    """根据车位面积生成月度车位费，面积缺失时使用系统默认金额。"""
+
+    if parking.area:
+        return (Decimal(parking.area) * PARKING_FEE_UNIT_PRICE).quantize(Decimal("0.01"))
+
+    return PARKING_FEE_DEFAULT_AMOUNT
+
+
+def _parking_fee_deadline():
+    """购买当月 25 日前缴当月费，否则生成下月 25 日截止的车位费。"""
+
+    current = timezone.localtime(timezone.now())
+    month_offset = 1 if current.day > 25 else 0
+    month_number = current.month - 1 + month_offset
+    year = current.year + month_number // 12
+    month = month_number % 12 + 1
+    naive_deadline = datetime(year, month, 25, 23, 59, 59)
+
+    return timezone.make_aware(naive_deadline, timezone.get_current_timezone())
+
+
+def _ensure_parking_fee(parking, owner):
+    """购置车位后补齐车位费账单，缴费中心才能立即看到待缴费用。"""
+
+    if not owner.house_id:
+        return None
+
+    remark = f"{PARKING_FEE_REMARK_PREFIX}{parking.parking_no}"
+    existing_fee = (
+        Fee.objects.filter(
+            owner=owner,
+            fee_type="parking",
+            remark=remark,
+            status__in=("unpaid", "overdue"),
+        )
+        .order_by("-id")
+        .first()
+    )
+
+    if existing_fee:
+        return existing_fee
+
+    return Fee.objects.create(
+        owner=owner,
+        house=owner.house,
+        fee_type="parking",
+        amount=_parking_fee_amount(parking),
+        deadline=_parking_fee_deadline(),
+        status="unpaid",
+        remark=remark,
+    )
 
 
 def _notify_property_admins_for_parking(parking, owner, sender):
@@ -154,7 +217,7 @@ class ParkingListView(APIView):
                 owner_filter |= Q(
                     owner__isnull=True,
                     status="idle",
-                    parking_no__istartswith=SALE_PARKING_PREFIX,
+                    parking_no__istartswith=SALE_PARKING_ZONE,
                 )
 
             queryset = queryset.filter(owner_filter)
@@ -178,6 +241,7 @@ class ParkingBindView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def put(self, request, pk):
 
         parking = Parking.objects.filter(id=pk).first()
@@ -212,9 +276,14 @@ class ParkingBindView(APIView):
         if not owner:
             return ResponseError(msg="未找到可绑定的业主信息")
 
+        if not owner.house_id:
+            return ResponseError(msg="请先绑定房屋后再购买车位")
+
+        # 车位绑定、账单生成和管理员反馈必须同事务完成，避免出现“有车位但无账单”的半成功状态。
         parking.owner = owner
         parking.status = "used"
         parking.save(update_fields=["owner", "status"])
+        parking_fee = _ensure_parking_fee(parking, owner)
         owner_room = owner.house.room_no if owner.house_id else "未绑定房屋"
         feedback_conversation = _notify_property_admins_for_parking(
             parking,
@@ -228,8 +297,11 @@ class ParkingBindView(APIView):
             action=f"业主购买/绑定车位 {parking.parking_no}（业主：{owner.name}，房号：{owner_room}）",
         )
 
+        response_data = ParkingSerializer(parking).data
+        response_data["parking_fee_id"] = parking_fee.id if parking_fee else None
+
         return ResponseSuccess(
-            data=ParkingSerializer(parking).data,
+            data=response_data,
             msg="车位购买/绑定成功，已反馈管理员" if feedback_conversation else "车位购买/绑定成功",
         )
 
@@ -295,6 +367,7 @@ class ParkingDeleteView(APIView):
 
 
 class ParkingDetailView(APIView):
+    """车位详情接口，按角色限制业主只能查看自己或可购买的售卖车位。"""
 
     permission_classes = [IsAuthenticated]
 

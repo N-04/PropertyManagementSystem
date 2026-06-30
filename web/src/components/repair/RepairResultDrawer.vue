@@ -16,6 +16,7 @@ const emit = defineEmits<{
     submitted: []
 }>()
 
+// 抽屉状态分块：提交状态、结果说明和现场照片在组件内独立维护。
 const submitting = ref(false)
 const form = reactive({
     repair_result: '',
@@ -23,16 +24,19 @@ const form = reactive({
 })
 
 const visible = computed({
+    // 使用 v-model 透传抽屉开关，让工作台和列表都能复用同一上传结果组件。
     get: () => props.modelValue,
     set: (value: boolean) => emit('update:modelValue', value),
 })
 
 const repairCode = computed(() => {
+    // 兼容不同接口字段，缺少工单号时用 id 生成稳定展示编号。
     const id = props.repair?.id
     return props.repair?.order_no || props.repair?.code || (id ? `WD${String(id).padStart(12, '0')}` : '未选择工单')
 })
 
 const repairRoom = computed(() => {
+    // 房屋位置优先由楼栋、单元、房号拼接，旧数据没有明细时回退 room 字段。
     const parts = [
         props.repair?.building_name,
         props.repair?.unit_name,
@@ -47,6 +51,7 @@ const imageList = computed(() => form.resultImages.map((image) => getFileUrl(ima
 watch(
     () => [visible.value, props.repair?.id],
     () => {
+        // 每次打开新工单时重置表单，防止上一个工单的照片或说明残留。
         if (!visible.value) {
             return
         }
@@ -57,6 +62,7 @@ watch(
 )
 
 const getFileUrl = (url: string) => {
+    // 上传接口可能只返回相对路径，预览时补齐本地后端地址。
     if (!url) {
         return ''
     }
@@ -73,6 +79,7 @@ const removeResultImage = (index: number) => {
 }
 
 const submitResult = async () => {
+    // 提交结果必须同时有工单和维修说明，避免把空结果标记为已完成。
     if (!props.repair?.id) {
         ElMessage.warning('请先选择需要上传结果的工单')
         return

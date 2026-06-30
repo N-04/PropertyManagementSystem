@@ -7,6 +7,7 @@ from apps.upload.views.upload_view import (
 )
 
 urlpatterns = [
+    # 通用文件上传入口，按 type 区分头像、身份证、报修图片等业务场景。
     path(
         "upload/",
         UploadView.as_view(),

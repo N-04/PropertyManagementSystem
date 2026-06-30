@@ -18,6 +18,7 @@ const paymentDialogVisible = ref(false)
 const payingId = ref<number | null>(null)
 const paymentMethod = ref('alipay')
 
+// 费用列表状态分块：筛选条件来自表单和菜单 query，支付弹窗只保存当前待支付账单。
 const filterForm = ref({
     keyword: '',
     fee_type: '',
@@ -36,12 +37,14 @@ const feeTypeOptions = [
 ]
 
 const feeTypeTextMap = feeTypeOptions.reduce<Record<string, string>>((map, item) => {
+    // 后端返回枚举值时，表格统一转成中文费用类型。
     map[item.value] = item.label
     return map
 }, {})
 
 const feeTypeText = (row: any) => feeTypeTextMap[row.fee_type] || row.fee_type_text || row.fee_type || '-'
 const normalizeFeeStatus = (status: string) => {
+    // 状态文案兜底处理，兼容接口返回英文枚举或中文状态。
     const statusMap: Record<string, string> = {
         unpaid: '未缴费',
         paid: '已缴费',
@@ -57,6 +60,7 @@ const validFeeTypes = feeTypeOptions.map((item) => item.value)
 const validStatuses = ['unpaid', 'paid', 'overdue']
 const isPaidRecordPage = computed(() => filterForm.value.status === 'paid')
 
+// 在线支付只模拟支付渠道选择，实际支付成功由后端 payFee 接口落库。
 const paymentOptions = [
     { label: '支付宝', value: 'alipay' },
     { label: '微信', value: 'wechat' },
@@ -75,6 +79,7 @@ const {
 } = useClientPagination(tableData)
 
 const buildQueryParams = () => {
+    // 空筛选项不传给后端，避免覆盖菜单传入的费用类型或状态。
     return {
         keyword: filterForm.value.keyword || undefined,
         fee_type: filterForm.value.fee_type || undefined,
@@ -123,6 +128,7 @@ const isEndDateDisabled = (date: Date) => {
 }
 
 const loadData = async (shouldResetPage = true) => {
+    // 拉取账单时以 URL query 为准；缴费记录页额外兜底过滤未缴费订单。
     const res = await getFeeList(buildQueryParams())
     const rows = res.data.data || []
     const rawRows = Array.isArray(rows) ? rows : rows.results || []

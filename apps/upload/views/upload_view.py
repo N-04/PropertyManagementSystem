@@ -33,6 +33,7 @@ class UploadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        """保存上传文件，并按业务类型执行基础安全校验和后处理。"""
 
         upload_type = request.data.get("type", "file")
         # 获取上传文件
@@ -47,9 +48,11 @@ class UploadView(APIView):
         image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
         if upload_type in image_types:
+            # 图片业务需要同时校验扩展名和 content_type，降低伪装文件风险。
             if ext.lower() not in image_exts or not file.content_type.startswith("image/"):
                 return ResponseError(msg="只能上传 jpg、png、gif、webp 图片")
 
+        # 使用 UUID 文件名避免暴露原始文件名，也降低重名覆盖风险。
         filename = f"{uuid.uuid4().hex}{ext}"
 
         save_dir = os.path.join(
@@ -69,6 +72,7 @@ class UploadView(APIView):
         if upload_type == "id_card":
 
             try:
+                # 身份证图片加水印，降低敏感图片被二次传播的风险。
                 image = Image.open(save_path)
 
                 if image.mode != "RGBA":

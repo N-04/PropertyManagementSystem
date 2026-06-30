@@ -4,6 +4,9 @@ from django.db import models
 
 
 class ChatConversation(models.Model):
+    """角色之间的站内会话，用于业主、维修、财务和物业管理员之间流转消息。"""
+
+    # 会话状态只描述沟通生命周期；具体业务状态仍保存在费用、工单、投诉等业务表。
     STATUS_CHOICES = (
         ("active", "沟通中"),
         ("resolved", "已解决"),
@@ -84,6 +87,8 @@ class ChatConversation(models.Model):
 
 
 class ChatMessage(models.Model):
+    """会话内单条消息，支持人工文本和系统自动生成的业务提醒。"""
+
     MESSAGE_TYPE_CHOICES = (
         ("text", "文本"),
         ("system", "系统"),

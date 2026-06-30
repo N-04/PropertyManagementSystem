@@ -6,7 +6,9 @@ from apps.finance.models import Fee
 
 
 class FeeSerializer(serializers.ModelSerializer):
+    """费用账单序列化器，统一输出账单基础信息和关联房屋展示字段。"""
 
+    # 关联字段均为列表展示字段，写入时仍以 owner/house 主键为准。
     owner_name = serializers.CharField(
         source="owner.name",
         read_only=True,
@@ -58,4 +60,5 @@ class FeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Fee
+        # 费用模块字段较稳定，直接透出模型字段并补充上方展示字段。
         fields = "__all__"

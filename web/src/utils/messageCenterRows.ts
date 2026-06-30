@@ -33,6 +33,7 @@ const adminRoles = ['admin', 'super_admin', 'property_admin']
 const repairRoles = ['repair_staff', 'repairer', 'repair']
 
 const extractList = (data: any) => {
+    // 接口返回既可能是数组，也可能是分页 results；消息中心统一收敛成列表。
     if (Array.isArray(data)) {
         return data
     }
@@ -44,6 +45,7 @@ const extractList = (data: any) => {
     return []
 }
 
+// 角色可见性分块：消息中心只聚合当前角色能处理或应接收的业务消息。
 const canSeeFee = (role: string) => {
     return ['owner', 'finance', 'finance_staff', 'admin', 'super_admin'].includes(role)
 }
@@ -70,6 +72,7 @@ const canSeeComplaint = (role: string) => {
 }
 
 const chatTargetPath = () => {
+    // 所有站内会话统一回到消息中心，避免从铃铛入口进入旧客服页面。
     return '/message/center'
 }
 
@@ -150,6 +153,7 @@ export const appendMessageFeedback = (storageKey: string, feedback: any) => {
 }
 
 const roleMatchesTarget = (role: string, targetRole?: string) => {
+    // 管理员能看到全部本地反馈；普通角色只看目标角色与自身别名匹配的反馈。
     if (adminRoles.includes(role)) {
         return true
     }
@@ -173,6 +177,7 @@ const roleMatchesTarget = (role: string, targetRole?: string) => {
 }
 
 const feedbackRows = (role: string): MessageRow[] => {
+    // 本地反馈分块：跨标签即时消息先落 localStorage，再在消息中心合并展示。
     const rows: MessageRow[] = []
 
     if (adminRoles.includes(role)) {
@@ -229,6 +234,7 @@ export const getImmediateMessageRows = (role: string) => {
 }
 
 export const loadMessageCenterRows = async (role: string) => {
+    // 接口消息分块：站内会话始终加载，其余账单/工单/投诉按角色权限追加。
     const tasks: Promise<MessageRow[]>[] = [
         (async () => {
             try {
@@ -258,6 +264,7 @@ export const loadMessageCenterRows = async (role: string) => {
                 const fees = extractList(res.data.data)
 
                 return fees
+                    // 消息中心只提示待处理账单，已缴费订单留在缴费记录里展示。
                     .filter((item: any) => item.status === 'unpaid' || item.status === 'overdue')
                     .map((item: any) => ({
                         id: `fee-${item.id}`,
@@ -282,6 +289,7 @@ export const loadMessageCenterRows = async (role: string) => {
                 const repairs = extractList(res.data.data)
 
                 return repairs
+                    // 完成工单不再占用消息提醒，避免用户把历史记录误认为待办。
                     .filter((item: any) => item.status !== 'finished')
                     .map((item: any) => ({
                         id: `repair-${item.id}`,

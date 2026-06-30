@@ -176,6 +176,8 @@ type ConveniencePhone = {
 }
 
 const router = useRouter()
+
+// 页面状态分块：按角色拆分数据源，避免不同工作台互相污染。
 const username = ref(getStoredUsername() || '用户')
 const role = ref(getStoredRole())
 const ownerUserInfo = ref<any>({})
@@ -203,6 +205,7 @@ const remindingFeeId = ref<number | null>(null)
 let repairResponseTimer: ReturnType<typeof window.setInterval> | null = null
 let financeHomeRequestId = 0
 
+// 后端总览数据：管理员和图表共用，角色专属数据在各自列表里单独维护。
 const data = ref<DashboardData>({
     house_count: 0,
     owner_count: 0,
@@ -218,6 +221,7 @@ const data = ref<DashboardData>({
     unpaid_count: 0,
 })
 
+// 角色识别分块：兼容历史角色编码，保证旧账号和新账号都能进入正确工作台。
 const adminRoles = ['admin', 'super_admin', 'property_admin']
 const financeRoles = ['finance_staff', 'finance']
 const repairRoles = ['repair_staff', 'repairer', 'repair']
@@ -239,9 +243,11 @@ const feeTotal = computed(() => numberValue(data.value.fee_total))
 const feePaid = computed(() => numberValue(data.value.fee_paid))
 const feeUnpaid = computed(() => numberValue(data.value.fee_unpaid))
 const feeRate = computed(() => {
+    // 缴费率按真实金额计算，没有应收金额时显示 0，避免 NaN 进入界面。
     return feeTotal.value ? `${((feePaid.value / feeTotal.value) * 100).toFixed(1)}%` : '0.0%'
 })
 
+// 管理员工作台卡片：所有指标优先使用实时业务列表，统计接口作为兜底。
 const adminMetrics = computed<MetricCard[]>(() => [
     {
         label: '待处理工单',
@@ -277,6 +283,7 @@ const adminMetrics = computed<MetricCard[]>(() => [
     },
 ])
 
+// 维修员工作台卡片：从当前维修员可见工单派生，避免写死演示数字。
 const repairMetrics = computed<MetricCard[]>(() => [
     {
         label: '待接单',
@@ -404,6 +411,7 @@ const complaintStatusLabels: Record<string, string> = {
     closed: '已关闭',
 }
 
+// 通用数据工具分块：接口返回结构不完全一致，统一在这里归一化。
 const extractList = (payload: any) => {
     if (Array.isArray(payload)) return payload
     if (Array.isArray(payload?.results)) return payload.results
@@ -416,6 +424,7 @@ const extractList = (payload: any) => {
 const parseDateFromValue = (value?: string | null) => {
     if (!value) return null
 
+    // 只取年月日时分，避免 Safari 对非标准日期字符串解析不一致。
     const match = String(value).match(
         /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/,
     )
@@ -521,6 +530,7 @@ const formatFinanceTime = (value?: string | null) => {
     return formatDateTimeShort(value) || '-'
 }
 
+// 财务工作台分块：待处理账单、今日收款、分类和趋势都从同一批费用数据派生。
 const getFinanceBillNo = (item: any) => {
     return item.bill_no || item.order_no || (item.id ? `BILL${String(item.id).padStart(12, '0')}` : '未生成')
 }
@@ -535,6 +545,7 @@ const mergeFinanceFeeRows = (...groups: any[][]) => {
 
         const key = String(item.id || item.bill_no || item.order_no || JSON.stringify(item))
 
+        // 快速请求和完整请求可能命中同一账单，按稳定 key 合并避免重复展示。
         if (!rowMap.has(key)) {
             rowMap.set(key, item)
         }
@@ -581,6 +592,7 @@ const financeCurrentMonthKey = computed(() => {
 
 const financeBillRows = computed<FinanceBillRow[]>(() => {
     return financeFees.value
+        // 工作台“待处理账单”只展示未缴/逾期，已缴记录放到近期缴费区域。
         .filter((item) => !isPaidFee(item))
         .slice(0, 6)
         .map((item) => ({
@@ -600,6 +612,7 @@ const financePaidFees = computed(() => {
     return financeFees.value
         .filter(isPaidFee)
         .sort((a, b) => {
+            // 近期缴费按实际支付时间优先排序，缺失时再回退更新时间或创建时间。
             const timeA = parseDateFromValue(a.pay_time || a.updated_at || a.created_at)?.getTime() || 0
             const timeB = parseDateFromValue(b.pay_time || b.updated_at || b.created_at)?.getTime() || 0
 
@@ -619,6 +632,7 @@ const financePaymentMethods = computed<FinancePaymentMethod[]>(() => {
     const grouped = financeTodayPaidFees.value.reduce<Record<string, number>>((map, item) => {
         const key = getFinancePaymentMethodKey(item)
 
+        // 同一支付方式先汇总金额，再统一计算占比和颜色。
         map[key] = (map[key] || 0) + Number(item.amount || 0)
 
         return map
@@ -694,6 +708,7 @@ const financeTrendPoints = computed<FinanceTrendPoint[]>(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate()
     const dayMap = new Map<number, { paid: number; due: number }>()
 
+    // 同时统计应收日期和实收日期，图表才能对比“应收 vs 实收”。
     financeFees.value.forEach((item) => {
         const amount = Number(item.amount || 0)
         const deadline = parseDateFromValue(item.deadline || item.created_at)
@@ -739,6 +754,7 @@ const financeMonthPaidTotal = computed(() => {
     return sumFeeAmount(financePaidFees.value.filter((item) => dateKeyFromValue(item.pay_time).startsWith(financeCurrentMonthKey.value)))
 })
 
+// 维修工作台分块：把后端报修数据整理成路线、工单池和日历共用的行模型。
 const getRepairCode = (item: any) => {
     if (item.order_no || item.code) {
         return item.order_no || item.code
@@ -953,6 +969,7 @@ const repairCalendarDays = computed<CalendarDay[]>(() => {
     const todayKey = toDateKey(new Date())
     const cells: CalendarDay[] = []
 
+    // 日历固定从周一开始，月初前的空格用空单元补齐。
     for (let index = 0; index < dayOffset; index += 1) {
         cells.push({
             key: `repair-empty-${index}`,
@@ -1045,6 +1062,7 @@ const isUnpaidFee = (item: any) => ['unpaid', 'overdue'].includes(item.status)
 const isActiveRepair = (item: any) => item.status !== 'finished'
 const isActiveComplaint = (item: any) => !['done', 'closed'].includes(item.status)
 
+// 状态派生分块：管理员和维修员统计都从当前接口列表实时计算。
 const adminActiveRepairs = computed(() => adminRepairsData.value.filter(isActiveRepair))
 const adminActiveComplaints = computed(() => adminComplaints.value.filter(isActiveComplaint))
 
@@ -1067,6 +1085,7 @@ const repairerOverdueCount = computed(() => {
     }).length
 })
 
+// 业主首页分块：房屋、待办、服务进度和日历都围绕当前登录业主派生。
 const primaryOwnerProfile = computed(() => {
     return ownerProfiles.value.find((item) => item.is_primary) || ownerProfiles.value[0] || null
 })
@@ -1135,6 +1154,7 @@ const activeOwnerComplaints = computed(() => ownerComplaints.value.filter(isActi
 const ownerRecentTasks = computed<OwnerTaskItem[]>(() => {
     const tasks: OwnerTaskItem[] = []
 
+    // 待办顺序按使用频率排列：缴费、维修确认、资料完善、投诉反馈。
     if (unpaidOwnerFees.value.length) {
         const feeNames = Array.from(new Set(unpaidOwnerFees.value.map(feeTypeText))).join('、')
 
@@ -1242,6 +1262,7 @@ const ownerServiceItems = computed<OwnerServiceItem[]>(() => {
 const ownerCalendarEvents = computed<OwnerCalendarEvent[]>(() => {
     const events: OwnerCalendarEvent[] = []
 
+    // 业主日历聚合费用、报修、投诉和公告，日期有事件时才高亮。
     ownerFees.value.forEach((item) => {
         const dateKey = dateKeyFromValue(item.deadline)
         if (!dateKey) return
@@ -1399,6 +1420,7 @@ const readSettledList = (result: PromiseSettledResult<any>) => {
     return extractList(result.value?.data?.data)
 }
 
+// 数据加载分块：各角色只请求自己工作台需要的接口，减少无关 401 和慢请求。
 const loadOwnerHomeData = async () => {
     const [
         houseResult,
@@ -1456,6 +1478,7 @@ const loadFinanceHomeData = async () => {
     const requestId = ++financeHomeRequestId
     financeDataLoading.value = true
 
+    // 首屏加载分块：先拉少量待处理账单快速填充表格，再用完整账单刷新统计和趋势。
     const isCurrentRequest = () => requestId === financeHomeRequestId
     const fastBillRequest = Promise.allSettled([
         getFeeList({ status: 'unpaid', page_size: 6 }),
@@ -1468,12 +1491,14 @@ const loadFinanceHomeData = async () => {
         const rows = results.flatMap(readSettledList)
 
         if (rows.length) {
+            // 快速结果只补充首屏，不清空已有完整数据，避免刷新瞬间列表闪烁。
             financeFees.value = mergeFinanceFeeRows(financeFees.value, rows)
         }
     })
 
     const fullFeeRequest = getFeeList({ page_size: 1000 }).then((res) => {
         if (isCurrentRequest()) {
+            // 完整结果作为最终权威数据，覆盖快照并驱动图表、今日收款和近期缴费。
             financeFees.value = extractList(res.data?.data)
         }
     })
@@ -1539,6 +1564,7 @@ const loadData = async () => {
 
     const tasks: Promise<void>[] = [loadDashboardSummary()]
 
+    // 角色分流请求互不阻塞，某个业务接口失败也不拖垮整张工作台。
     if (isAdminRole.value) {
         tasks.push(loadAdminHomeData())
     }
@@ -1559,6 +1585,7 @@ const loadData = async () => {
 }
 
 const syncDashboardAuthState = () => {
+    // 多标签切换账号时，工作台必须立刻换成当前标签页的角色和用户名。
     username.value = getStoredUsername() || '用户'
     role.value = getStoredRole()
 
@@ -1583,6 +1610,7 @@ const startRepairResponseClock = () => {
         window.clearInterval(repairResponseTimer)
     }
 
+    // 平均响应时间每 30 秒刷新一次，避免页面停留时指标变成静态值。
     repairResponseTimer = window.setInterval(() => {
         repairResponseNow.value = Date.now()
     }, 30000)
@@ -1622,6 +1650,29 @@ useRealtimeRefresh(refreshDashboardData, {
                 </div>
             </div>
 
+          <section class="panel resource-panel">
+            <div class="panel-header">
+              <h2>小区资源</h2>
+            </div>
+            <div class="resource-grid">
+              <div>
+                <el-icon><OfficeBuilding /></el-icon>
+                <strong>{{ formatNumber(numberValue(data.house_count)) }}</strong>
+                <span>房屋总数</span>
+              </div>
+              <div>
+                <el-icon><User /></el-icon>
+                <strong>{{ formatNumber(numberValue(data.owner_count)) }}</strong>
+                <span>业主总数</span>
+              </div>
+              <div>
+                <el-icon><Van /></el-icon>
+                <strong>{{ formatNumber(numberValue(data.parking_count)) }}</strong>
+                <span>总车位</span>
+              </div>
+            </div>
+          </section>
+
             <div class="metric-grid">
                 <article
                     v-for="item in adminMetrics"
@@ -1641,46 +1692,64 @@ useRealtimeRefresh(refreshDashboardData, {
             </div>
 
             <div class="workbench-grid admin-grid">
-                <section class="panel main-panel">
-                    <div class="panel-header">
-                        <h2>待办工单</h2>
-                    </div>
+                <div class="admin-main-stack">
+                    <section class="panel main-panel">
+                        <div class="panel-header">
+                            <h2>待办工单</h2>
+                        </div>
 
-                    <div class="tab-row">
-                        <span class="active">全部 32</span>
-                        <span>待派单 8</span>
-                        <span>待处理 16</span>
-                        <span>处理中 5</span>
-                        <span>待验收 2</span>
-                    </div>
+                        <div class="tab-row">
+                            <span class="active">全部 32</span>
+                            <span>待派单 8</span>
+                            <span>待处理 16</span>
+                            <span>处理中 5</span>
+                            <span>待验收 2</span>
+                        </div>
 
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>工单号</th>
-                                <th>业主</th>
-                                <th>房号</th>
-                                <th>类型</th>
-                                <th>状态</th>
-                                <th>优先级</th>
-                                <th>处理人</th>
-                                <th>创建时间</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="row in adminWorkOrders" :key="row[0]">
-                                <td>{{ row[0] }}</td>
-                                <td>{{ row[1] }}</td>
-                                <td>{{ row[2] }}</td>
-                                <td>{{ row[3] }}</td>
-                                <td><span class="status-pill" :class="statusClass(row[4])">{{ row[4] }}</span></td>
-                                <td><span class="status-pill" :class="statusClass(row[5])">{{ row[5] }}</span></td>
-                                <td>{{ row[6] }}</td>
-                                <td>{{ row[7] }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>工单号</th>
+                                    <th>业主</th>
+                                    <th>房号</th>
+                                    <th>类型</th>
+                                    <th>状态</th>
+                                    <th>优先级</th>
+                                    <th>处理人</th>
+                                    <th>创建时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in adminWorkOrders" :key="row[0]">
+                                    <td>{{ row[0] }}</td>
+                                    <td>{{ row[1] }}</td>
+                                    <td>{{ row[2] }}</td>
+                                    <td>{{ row[3] }}</td>
+                                    <td><span class="status-pill" :class="statusClass(row[4])">{{ row[4] }}</span></td>
+                                    <td><span class="status-pill" :class="statusClass(row[5])">{{ row[5] }}</span></td>
+                                    <td>{{ row[6] }}</td>
+                                    <td>{{ row[7] }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <div class="bottom-grid two admin-chart-grid">
+                        <section class="panel admin-chart-panel">
+                            <div class="panel-header">
+                                <h2>费用概览</h2>
+                                <span class="muted">本月</span>
+                            </div>
+                            <FeeChart :dashboard-data="data" />
+                        </section>
+                        <section class="panel admin-chart-panel">
+                            <div class="panel-header">
+                                <h2>报修统计</h2>
+                            </div>
+                            <RepairChart :dashboard-data="data" />
+                        </section>
+                    </div>
+                </div>
 
                 <aside class="side-stack">
                     <section class="panel">
@@ -1696,6 +1765,7 @@ useRealtimeRefresh(refreshDashboardData, {
                             </li>
                         </ul>
                     </section>
+
 
                     <section class="panel">
                         <div class="panel-header">
@@ -1722,46 +1792,6 @@ useRealtimeRefresh(refreshDashboardData, {
                         </ul>
                     </section>
                 </aside>
-            </div>
-
-            <div class="bottom-grid three">
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>费用概览</h2>
-                        <span class="muted">本月</span>
-                    </div>
-                    <FeeChart :dashboard-data="data" />
-                </section>
-
-                <section class="panel resource-panel">
-                    <div class="panel-header">
-                        <h2>小区资源</h2>
-                    </div>
-                    <div class="resource-grid">
-                        <div>
-                            <el-icon><OfficeBuilding /></el-icon>
-                            <strong>{{ formatNumber(numberValue(data.house_count)) }}</strong>
-                            <span>房屋总数</span>
-                        </div>
-                        <div>
-                            <el-icon><User /></el-icon>
-                            <strong>{{ formatNumber(numberValue(data.owner_count)) }}</strong>
-                            <span>业主总数</span>
-                        </div>
-                        <div>
-                            <el-icon><Van /></el-icon>
-                            <strong>{{ formatNumber(numberValue(data.parking_count)) }}</strong>
-                            <span>总车位</span>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>报修统计</h2>
-                    </div>
-                    <RepairChart :dashboard-data="data" />
-                </section>
             </div>
         </section>
 
@@ -2617,6 +2647,7 @@ useRealtimeRefresh(refreshDashboardData, {
     display: grid;
     gap: 16px;
     align-items: start;
+    min-width: 0;
 }
 
 .admin-grid,
@@ -2624,6 +2655,32 @@ useRealtimeRefresh(refreshDashboardData, {
 .repair-grid,
 .owner-grid {
     grid-template-columns: minmax(0, 1fr) 330px;
+}
+
+.admin-main-stack {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-self: start;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.admin-chart-grid {
+    align-items: stretch;
+}
+
+.admin-chart-panel {
+    display: flex;
+    min-height: 470px;
+    flex-direction: column;
+}
+
+.admin-chart-panel :deep(.chart-container) {
+    flex: 1;
+    width: 100%;
+    height: auto;
+    min-height: 400px;
 }
 
 .panel {
@@ -2839,6 +2896,9 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .side-stack {
     display: flex;
+    width: 100%;
+    min-width: 0;
+    align-self: start;
     flex-direction: column;
     gap: 14px;
 }
@@ -2960,6 +3020,7 @@ useRealtimeRefresh(refreshDashboardData, {
 .bottom-grid {
     display: grid;
     gap: 16px;
+    align-items: stretch;
 }
 
 .bottom-grid.three {
@@ -2974,7 +3035,7 @@ useRealtimeRefresh(refreshDashboardData, {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
-    height: 400px;
+    height: 140px;
     align-items: center;
 }
 
@@ -3019,14 +3080,16 @@ useRealtimeRefresh(refreshDashboardData, {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 420px);
     gap: 18px;
-    align-items: stretch;
+    align-items: start;
     min-width: 0;
 }
 
 .finance-main-column,
 .finance-side-column {
     display: flex;
+    width: 100%;
     min-width: 0;
+    align-self: start;
     flex-direction: column;
     gap: 18px;
 }
@@ -3036,6 +3099,16 @@ useRealtimeRefresh(refreshDashboardData, {
 .finance-trend-panel,
 .finance-category-panel {
     padding: 22px;
+}
+
+.finance-bill-panel {
+    display: flex;
+    min-height: 500px;
+    flex-direction: column;
+}
+
+.finance-side-column .panel {
+    width: 100%;
 }
 
 .finance-panel-title {
@@ -3104,6 +3177,8 @@ useRealtimeRefresh(refreshDashboardData, {
 }
 
 .finance-table-wrap {
+    flex: 1;
+    min-height: 330px;
     overflow: hidden;
     border: 1px solid #eef1f5;
     border-radius: 6px;
@@ -3321,11 +3396,14 @@ useRealtimeRefresh(refreshDashboardData, {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 18px;
+    align-items: stretch;
 }
 
 .finance-trend-panel,
 .finance-category-panel {
-    min-height: 340px;
+    display: flex;
+    min-height: 360px;
+    flex-direction: column;
 }
 
 .finance-trend-panel .panel-header strong {
@@ -3366,6 +3444,7 @@ useRealtimeRefresh(refreshDashboardData, {
 .finance-trend-chart {
     display: grid;
     grid-template-columns: 54px minmax(0, 1fr);
+    flex: 1;
     min-height: 246px;
 }
 
@@ -3436,9 +3515,19 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .finance-category-list {
     display: flex;
+    flex: 1;
     flex-direction: column;
+    justify-content: center;
     gap: 20px;
     margin-top: 18px;
+}
+
+.finance-today-panel {
+    min-height: 210px;
+}
+
+.finance-recent-panel {
+    min-height: 360px;
 }
 
 .finance-category-row {
@@ -3573,14 +3662,17 @@ useRealtimeRefresh(refreshDashboardData, {
     grid-template-columns: minmax(660px, 1fr) minmax(340px, 390px);
     gap: 18px;
     align-items: start;
+    min-width: 0;
 }
 
 .repair-main-stack,
 .repair-side-stack {
     display: flex;
+    width: 100%;
+    min-width: 0;
+    align-self: start;
     flex-direction: column;
     gap: 18px;
-    min-width: 0;
 }
 
 .repair-summary-panel {
@@ -3646,6 +3738,7 @@ useRealtimeRefresh(refreshDashboardData, {
 }
 
 .repair-order-pool {
+    min-height: 420px;
     padding: 20px;
 }
 
@@ -3797,6 +3890,7 @@ useRealtimeRefresh(refreshDashboardData, {
 }
 
 .repair-calendar-panel {
+    min-height: 390px;
     padding: 18px 20px 20px;
 }
 
@@ -3804,11 +3898,17 @@ useRealtimeRefresh(refreshDashboardData, {
     grid-template-columns: minmax(0, 1fr) 210px;
 }
 
+.repair-calendar-body.no-events {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .repair-route-panel {
+    min-height: 420px;
     padding: 20px;
 }
 
 .repair-tools-panel {
+    min-height: 238px;
     padding: 18px 20px;
 }
 
@@ -4039,12 +4139,15 @@ button.owner-house-status {
     grid-template-columns: minmax(0, 1fr) 380px;
     gap: 16px;
     align-items: start;
+    min-width: 0;
 }
 
 .owner-main-stack,
 .owner-side-stack {
     display: flex;
+    width: 100%;
     min-width: 0;
+    align-self: start;
     flex-direction: column;
     gap: 16px;
 }
@@ -4183,6 +4286,7 @@ button.owner-house-status {
 }
 
 .owner-calendar-panel {
+    min-height: 380px;
     padding: 18px 20px;
 }
 

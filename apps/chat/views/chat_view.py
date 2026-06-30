@@ -27,10 +27,14 @@ TARGET_ROLE_ALIASES = {
 
 
 def _user_can_manage_chat(user):
+    """管理侧角色可以查看和处理所有会话。"""
+
     return bool(get_user_role_codes(user) & MANAGER_ROLES)
 
 
 def _role_user_queryset(role_code):
+    """按目标角色找到可参与会话的处理人员账号。"""
+
     role_codes = TARGET_ROLE_ALIASES.get(role_code, {role_code})
 
     return User.objects.filter(
@@ -42,6 +46,8 @@ def _role_user_queryset(role_code):
 
 
 def _conversation_queryset(user):
+    """普通用户只看自己发起或参与的会话，管理侧可看全部。"""
+
     queryset = ChatConversation.objects.prefetch_related(
         "participants",
         "messages__sender",
@@ -54,6 +60,8 @@ def _conversation_queryset(user):
 
 
 def _can_access_conversation(user, conversation):
+    """会话访问控制兜底，防止用户通过 id 猜测访问他人会话。"""
+
     if _user_can_manage_chat(user):
         return True
 
@@ -80,6 +88,8 @@ def _expire_idle_conversations(queryset=None):
 
 
 def _expire_idle_conversation(conversation):
+    """单个会话详情/发送消息前的超时兜底。"""
+
     expire_before = timezone.now() - timedelta(minutes=CHAT_TIMEOUT_MINUTES)
 
     if conversation.status == "active" and conversation.updated_at <= expire_before:
@@ -93,6 +103,8 @@ def _expire_idle_conversation(conversation):
 
 
 def _validate_rating_score(raw_score):
+    """评分支持 0.5 分粒度，统一在后端校验防止重复提交异常值。"""
+
     try:
         score = Decimal(str(raw_score))
     except (InvalidOperation, TypeError, ValueError):
@@ -111,6 +123,7 @@ class ChatConversationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # 列表查询前先懒清理超时会话，保证状态和评分入口及时更新。
         _expire_idle_conversations(_conversation_queryset(request.user))
         queryset = _conversation_queryset(request.user)
         status = request.GET.get("status")
@@ -139,6 +152,7 @@ class ChatConversationCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 创建会话时自动拉入目标角色处理人员，也允许前端附加指定参与人。
         serializer = ChatConversationSerializer(data=request.data)
 
         if not serializer.is_valid():
@@ -161,6 +175,7 @@ class ChatConversationCreateView(APIView):
         content = (request.data.get("content") or "").strip()
 
         if content:
+            # 首条内容同步写入 last_message，列表页不用再额外查询消息表。
             ChatMessage.objects.create(
                 conversation=conversation,
                 sender=request.user,
@@ -176,6 +191,7 @@ class ChatConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        # 详情接口需要预取消息和发送人，避免序列化时重复查库。
         conversation = get_object_or_404(
             ChatConversation.objects.prefetch_related("participants", "messages__sender"),
             pk=pk,
@@ -193,6 +209,7 @@ class ChatMessageCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
+        # 只有活跃会话允许继续发送消息，超时或手动结束后转为评分流程。
         conversation = get_object_or_404(ChatConversation, pk=pk)
 
         if not _can_access_conversation(request.user, conversation):
@@ -224,6 +241,7 @@ class ChatConversationStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
+        # 管理人员手动结束会话时记录结束原因和时间，重新激活时清空结束态。
         conversation = get_object_or_404(ChatConversation, pk=pk)
 
         if not _can_access_conversation(request.user, conversation):
@@ -255,6 +273,7 @@ class ChatConversationRatingView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
+        # 评分只允许会话发起人提交一次，避免处理人员或重复弹窗二次评分。
         conversation = get_object_or_404(ChatConversation, pk=pk)
 
         if conversation.created_by_id != request.user.id:

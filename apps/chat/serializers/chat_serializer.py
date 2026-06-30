@@ -6,6 +6,8 @@ from apps.users.utils.role_access import get_user_role_codes
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
+    """消息序列化器，补充发送人名称和角色编码给前端直接展示。"""
+
     sender_name = serializers.CharField(source="sender.username", read_only=True)
     sender_real_name = serializers.CharField(source="sender.real_name", read_only=True)
     sender_role_codes = serializers.SerializerMethodField()
@@ -27,10 +29,13 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         read_only_fields = ["conversation", "sender", "message_type"]
 
     def get_sender_role_codes(self, obj):
+        # 前端用角色编码区分“谁发给谁”，避免只靠用户名判断消息关系。
         return sorted(get_user_role_codes(obj.sender))
 
 
 class ChatConversationSerializer(serializers.ModelSerializer):
+    """会话序列化器，聚合会话状态、参与人和最近消息。"""
+
     created_by_name = serializers.CharField(source="created_by.username", read_only=True)
     created_by_real_name = serializers.CharField(source="created_by.real_name", read_only=True)
     target_role_text = serializers.CharField(source="get_target_role_display", read_only=True)
@@ -78,6 +83,7 @@ class ChatConversationSerializer(serializers.ModelSerializer):
         ]
 
     def get_participant_names(self, obj):
+        # 名称展示优先真实姓名，缺失时回退用户名，保证消息列表不会空白。
         return [
             item.real_name or item.username
             for item in obj.participants.all().order_by("id")

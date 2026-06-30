@@ -23,6 +23,7 @@ export function useRealtimeRefresh(
     refresh: (reason: RefreshReason, event?: Event) => Promise<void> | void,
     options: RealtimeRefreshOptions = {},
 ) {
+    // 刷新状态分块：调用方可展示 loading、最近更新时间和最近一次错误。
     const loading = ref(false)
     const lastUpdatedAt = ref('')
     const error = ref<unknown>(null)
@@ -39,10 +40,12 @@ export function useRealtimeRefresh(
     let activeRequestId = 0
 
     const runRefresh = async (reason: RefreshReason = 'manual', event?: Event) => {
+        // 组件卸载后忽略后续刷新，避免异步请求回写已经销毁的页面状态。
         if (destroyed) {
             return
         }
 
+        // 只接受最后一次请求结果，防止频繁刷新时旧响应覆盖新数据。
         const requestId = ++activeRequestId
         loading.value = true
 
@@ -65,6 +68,7 @@ export function useRealtimeRefresh(
     }
 
     const handleDataRefresh = (event: Event) => {
+        // 全局数据刷新事件按 scope 匹配，避免一个模块变更触发所有页面重载。
         const detail = (event as CustomEvent<DataRefreshDetail>).detail
 
         if (!dataRefreshScopeMatches(scopes, detail?.scope || 'all')) {
@@ -79,6 +83,7 @@ export function useRealtimeRefresh(
     }
 
     const handleStorage = (event: StorageEvent) => {
+        // localStorage 事件用于跨浏览器标签同步刷新。
         if (event.key === DATA_REFRESH_STORAGE_KEY) {
             try {
                 const detail = event.newValue ? JSON.parse(event.newValue) as DataRefreshDetail : null
@@ -112,6 +117,7 @@ export function useRealtimeRefresh(
     }
 
     onMounted(() => {
+        // 生命周期分块：挂载时注册事件、定时器和可见性刷新。
         window.addEventListener(DATA_REFRESH_EVENT, handleDataRefresh)
         window.addEventListener('storage', handleStorage)
         document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -132,6 +138,7 @@ export function useRealtimeRefresh(
     })
 
     onBeforeUnmount(() => {
+        // 卸载时清理事件和定时器，避免离开页面后仍持续请求接口。
         destroyed = true
         window.removeEventListener(DATA_REFRESH_EVENT, handleDataRefresh)
         window.removeEventListener('storage', handleStorage)

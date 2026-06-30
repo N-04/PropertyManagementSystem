@@ -14,17 +14,16 @@ type RetriableRequestConfig = InternalAxiosRequestConfig & {
     _retry?: boolean
 }
 
-// 创建 axios 实例
+// 请求实例分块：所有业务接口统一走同一个 baseURL、超时和拦截器。
 const request = axios.create({
-    // Django 地址
     baseURL,
-
-    // 超时时间
     timeout: 5000,
 })
 
+// 多个接口同时发现 token 过期时，共用同一次 refresh 请求，避免刷新风暴。
 let refreshTokenPromise: Promise<string> | null = null
 
+// 公共接口不需要携带 access token，也不参与 401 自动刷新重试。
 const publicRequestPaths = [
     '/login/',
     '/login/phone/',
@@ -49,6 +48,7 @@ const isPublicOrRefreshRequest = (url = '') => {
 
 const mutationMethods = new Set(['post', 'put', 'patch', 'delete'])
 
+// 写操作刷新范围映射：把后端资源路径转换成前端页面关心的数据域。
 const refreshScopeRules: Array<{ pattern: string; scopes: string[] }> = [
     { pattern: '/fee/', scopes: ['fees', 'dashboard', 'messages'] },
     { pattern: '/repair/', scopes: ['repairs', 'dashboard', 'messages'] },
@@ -173,7 +173,7 @@ const setAuthorizationHeader = (config: InternalAxiosRequestConfig, token: strin
     config.headers.Authorization = `Bearer ${token}`
 }
 
-// axios 请求拦截器
+// 请求拦截器：优先使用未过期 access token，临近过期时静默刷新。
 request.interceptors.request.use(async (config) => {
     if (isPublicOrRefreshRequest(config.url)) {
         return config
@@ -208,6 +208,7 @@ request.interceptors.request.use(async (config) => {
 request.interceptors.response.use(
     (response) => {
         if (shouldBroadcastDataRefresh(response)) {
+            // 写操作成功后异步广播，避免阻塞当前接口响应。
             window.setTimeout(() => {
                 getDataRefreshScopes(response.config?.url).forEach((scope) => {
                     emitDataRefresh(scope, 'mutation')
@@ -233,6 +234,7 @@ request.interceptors.response.use(
         originalConfig._retry = true
 
         try {
+            // 401 重试只执行一次；刷新成功后带新 token 重新发起原请求。
             const token = await getFreshAccessToken()
             originalConfig.headers.Authorization = `Bearer ${token}`
 
@@ -244,5 +246,4 @@ request.interceptors.response.use(
     }
 )
 
-// 导出
 export default request

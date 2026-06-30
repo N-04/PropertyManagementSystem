@@ -31,6 +31,16 @@ const formatDate = (value: string) => {
     return value.replace('T', ' ').substring(0, 19)
 }
 
+// 详情页兼容后端展示字段和原始枚举值，避免车辆类型为空。
+const getCarTypeText = (row: any) => {
+    const carTypeMap: Record<string, string> = {
+        monthly: '月租车',
+        temporary: '临时车',
+    }
+
+    return row.car_type_text || carTypeMap[row.car_type] || '-'
+}
+
 onMounted(() => {
     loadDetail()
 })
@@ -68,7 +78,7 @@ onMounted(() => {
             </el-descriptions-item>
 
             <el-descriptions-item label="车辆类型">
-                {{ detail.TYPE_CHOICES }}
+                {{ getCarTypeText(detail) }}
             </el-descriptions-item>
 
             <el-descriptions-item label="车位">

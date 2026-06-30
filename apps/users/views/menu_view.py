@@ -13,6 +13,8 @@ from rest_framework.response import Response
 RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
 DEPRECATED_USER_MENU_TITLES = {
     "联系客服",
+    "派单处理",
+    "派单管理",
     "停车缴费",
     "车位缴费",
     "停车费缴纳",
@@ -89,6 +91,8 @@ def _get_user_menu_ids(user):
 
 
 def _build_menu_tree(menu, menu_ids):
+    """递归构建当前用户可见的菜单节点。"""
+
     if _is_deprecated_user_menu(menu):
         return None
 
@@ -101,6 +105,7 @@ def _build_menu_tree(menu, menu_ids):
     child_nodes = []
 
     for child in children:
+        # 子节点可能是旧菜单或隐藏菜单，递归返回空时不加入最终菜单树。
         child_node = _build_menu_tree(child, menu_ids)
 
         if child_node:
@@ -121,6 +126,8 @@ def _build_menu_tree(menu, menu_ids):
 
 
 def _build_menu_tree_list(menus, menu_ids):
+    """把根菜单集合转成前端可直接渲染的树形列表。"""
+
     data = []
 
     for menu in menus:
@@ -133,6 +140,8 @@ def _build_menu_tree_list(menus, menu_ids):
 
 
 class MenuCreateView(APIView):
+    """后台菜单创建接口，仅管理员角色可用。"""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -151,6 +160,8 @@ class MenuCreateView(APIView):
 
 
 class MenuListView(APIView):
+    """后台菜单平铺列表，用于角色配置和菜单维护。"""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -168,32 +179,15 @@ class MenuTreeView(APIView):
     """
     菜单树接口
 
-    功能：
-
-    用户登录后，根据用户拥有的角色和权限，
-
-    动态返回当前用户可访问的菜单树。
-
+    用户登录后，根据用户拥有的角色和权限动态返回当前用户可访问的菜单树。
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
-        # ==================================
-
-        # 获取当前登录用户
-
-        # ==================================
-
+        # 权限菜单分块：先收集用户权限，再只查询根菜单，子级交给递归函数处理。
         user = request.user
         menu_ids = _get_user_menu_ids(user)
-
-        # ==================================
-
-        # 查询一级菜单
-
-        # ==================================
 
         roots = Menu.objects.filter(
             parent__isnull=True,
@@ -204,19 +198,7 @@ class MenuTreeView(APIView):
             "id",
         )
 
-        # ==================================
-
-        # 构建完整菜单树
-
-        # ==================================
-
         data = _build_menu_tree_list(roots, menu_ids)
-
-        # ==================================
-
-        # 返回结果
-
-        # ==================================
 
         return ResponseSuccess(data=data)
 
@@ -233,10 +215,10 @@ class UserMenuTreeView(APIView):
         获取当前用户菜单树
         """
 
+        # 和 MenuTreeView 保持相同口径，给前端布局层提供当前用户菜单。
         user = request.user
         menu_ids = _get_user_menu_ids(user)
 
-        # 一级菜单
         root_menus = Menu.objects.filter(
             parent__isnull=True,
             id__in=menu_ids,

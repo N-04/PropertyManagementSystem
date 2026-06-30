@@ -155,7 +155,6 @@ const adminDisplayMenus = (): AppMenuItem[] => {
         ]),
         groupMenu('admin-repair', '工单中心', [
             leafMenu('admin-repair-list', '报修工单', '/repair/list'),
-            leafMenu('admin-repair-dispatch', '派单处理', '/repair/list?status=assigned'),
             leafMenu('admin-repair-finished', '完成验收', '/repair/list?status=finished'),
         ]),
         groupMenu('admin-fee', '收费管理', [

@@ -10,10 +10,12 @@ export type DataRefreshDetail = {
 }
 
 export const emitDataRefresh = (scope = 'all', source = 'manual', persist = true) => {
+    // SSR 或测试环境没有 window 时直接跳过广播。
     if (typeof window === 'undefined') {
         return
     }
 
+    // version 保证每次写入 localStorage 都会触发其他标签页的 storage 事件。
     const detail: DataRefreshDetail = {
         scope,
         source,
@@ -22,6 +24,7 @@ export const emitDataRefresh = (scope = 'all', source = 'manual', persist = true
 
     window.dispatchEvent(new CustomEvent<DataRefreshDetail>(DATA_REFRESH_EVENT, { detail }))
 
+    // persist=false 只刷新当前标签页，适合不需要跨标签同步的轻量场景。
     if (!persist) {
         return
     }
@@ -34,5 +37,6 @@ export const emitDataRefresh = (scope = 'all', source = 'manual', persist = true
 }
 
 export const dataRefreshScopeMatches = (targetScopes: string[], scope = 'all') => {
+    // all 是全局刷新；页面声明 all 时也接收任意业务域刷新。
     return scope === 'all' || targetScopes.includes('all') || targetScopes.includes(scope)
 }

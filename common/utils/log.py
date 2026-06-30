@@ -8,6 +8,9 @@ def save_log(
     module,
     action,
 ):
+    """写入操作日志，供后台审计列表统一展示。"""
+
+    # 这里只负责最小日志字段，复杂审计内容由业务视图先组装好再传入。
     OperationLog.objects.create(
         username=username,
         module=module,

@@ -2,6 +2,7 @@
 import { computed, type Ref } from 'vue'
 
 const normalizeValue = (value: unknown) => {
+    // 搜索比较统一转小写字符串，兼容数字、空值和后端返回的枚举字段。
     return String(value ?? '').trim().toLowerCase()
 }
 
@@ -11,6 +12,7 @@ export function useKeywordFilter<T extends Record<string, any>>(
     fields: Array<keyof T | string>
 ) {
     return computed(() => {
+        // 关键字为空时直接返回原数据，避免不必要的数组复制。
         const text = normalizeValue(keyword.value)
 
         if (!text) {
