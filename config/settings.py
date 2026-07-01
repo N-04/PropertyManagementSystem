@@ -13,15 +13,41 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
 from django.core.management.utils import get_random_secret_key
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# 项目路径分块：所有相对路径都基于 BASE_DIR 派生。
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# 环境变量读取分块：先读取 .env，再让系统环境变量保持最高优先级。
+def load_env_file(path):
+    """轻量读取本地 .env，避免开发命令漏配环境变量；已有环境变量优先。"""
+
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_env_file(BASE_DIR / ".env")
+
+
+# 环境变量解析工具分块：集中处理布尔值和逗号列表，避免各处重复解析。
 def env_bool(name, default=False):
     """把环境变量里的布尔字符串转换为 Python bool。"""
 
@@ -44,14 +70,21 @@ def env_list(name, default=None):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+# 基础安全配置分块：生产默认关闭 DEBUG，并要求关键密钥显式配置。
 # Quick-start development settings - unsuitable for production unless env is set
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECRET_KEY 必须从环境变量提供；本地未配置时生成临时密钥，避免提交固定密钥。
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
-
 # DEBUG 默认关闭，开发环境可显式设置 DJANGO_DEBUG=true。
 DEBUG = env_bool("DJANGO_DEBUG", default=False)
+IS_TESTING = "test" in sys.argv
+
+# 非调试环境必须显式提供长期密钥，避免进程重启后生成临时密钥导致 token/session 全部失效。
+raw_secret_key = os.environ.get("DJANGO_SECRET_KEY")
+
+if not DEBUG and not IS_TESTING and not raw_secret_key:
+    raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG=false")
+
+SECRET_KEY = raw_secret_key or get_random_secret_key()
 
 # 允许的主机由环境变量控制，默认只放开本机和测试客户端。
 ALLOWED_HOSTS = env_list(
@@ -59,15 +92,14 @@ ALLOWED_HOSTS = env_list(
     default=["127.0.0.1", "localhost", "testserver"],
 )
 
-# 上传文件根目录
+# 媒体文件分块：上传文件保存目录和外部访问前缀。
 
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
-# 访问路径
 
 MEDIA_URL = "/media/"
 
 
+# 应用注册分块：业务模块、DRF、JWT 黑名单和跨域组件在这里统一启用。
 # Application definition
 
 INSTALLED_APPS = [
@@ -94,6 +126,7 @@ INSTALLED_APPS = [
     "apps.chat",
     "django_extensions",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 ]
 
@@ -110,6 +143,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
+# 接口安全分块：跨域和 DRF 默认认证策略统一配置。
 # CORS 默认不再放开所有来源；开发调试时可设置 DJANGO_CORS_ALLOW_ALL_ORIGINS=true。
 CORS_ALLOW_ALL_ORIGINS = env_bool("DJANGO_CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ALLOWED_ORIGINS = env_list(
@@ -157,19 +191,39 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 
+# 数据库配置分块：测试缺少 MySQL 密码时走内存 SQLite，避免默认测试漏跑。
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.environ.get("MYSQL_DATABASE", "property_management"),
-        "USER": os.environ.get("MYSQL_USER", "root"),
-        "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
-        "HOST": os.environ.get("MYSQL_HOST", "127.0.0.1"),
-        "PORT": os.environ.get("MYSQL_PORT", "3306"),
+if IS_TESTING and not os.environ.get("MYSQL_PASSWORD"):
+    # 默认测试命令不依赖本机 MySQL 密码，避免 manage.py test 因环境变量缺失而漏跑。
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
     }
-}
+else:
+    if not DEBUG and not IS_TESTING:
+        required_db_envs = ("MYSQL_DATABASE", "MYSQL_USER", "MYSQL_PASSWORD")
+        missing_db_envs = [name for name in required_db_envs if not os.environ.get(name)]
+
+        if missing_db_envs:
+            raise RuntimeError(
+                "Missing required database environment variables: "
+                + ", ".join(missing_db_envs)
+            )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.environ.get("MYSQL_DATABASE", "property_management"),
+            "USER": os.environ.get("MYSQL_USER", "root"),
+            "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
+            "HOST": os.environ.get("MYSQL_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("MYSQL_PORT", "3306"),
+        }
+    }
 
 
 # Password validation
@@ -193,10 +247,11 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# JWT 分块：refresh token 依赖 token_blacklist 应用，退出登录会把 refresh 加入黑名单。
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": False,
+    "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
@@ -224,20 +279,23 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# 生产环境安全开关。开发环境如需 HTTP 本地访问，可显式关闭对应环境变量。
-SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=not DEBUG)
-SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", 31536000 if not DEBUG else 0))
+# 生产安全分块：开发和测试环境如需 HTTP 本地访问，可显式关闭对应环境变量。
+secure_default = not DEBUG and not IS_TESTING
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=secure_default)
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", 31536000 if secure_default else 0)
+)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
     "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
-    default=not DEBUG,
+    default=secure_default,
 )
-SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=not DEBUG)
-SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
-CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=secure_default)
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=secure_default)
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=secure_default)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 X_FRAME_OPTIONS = "DENY"
 
-# 认证与上传安全阈值。
+# 认证与上传安全阈值分块：登录限流、调试短信和上传白名单都由环境变量覆盖。
 LOGIN_FAIL_LIMIT = int(os.environ.get("LOGIN_FAIL_LIMIT", 5))
 LOGIN_FAIL_WINDOW_SECONDS = int(os.environ.get("LOGIN_FAIL_WINDOW_SECONDS", 600))
 LOGIN_LOCK_SECONDS = int(os.environ.get("LOGIN_LOCK_SECONDS", 900))

@@ -4,29 +4,26 @@
 # 导入 DRF APIView
 # =====================================================
 
-from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 # =====================================================
 # 导入响应
 # =====================================================
-
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 # =====================================================
 # 导入权限模型
 # =====================================================
-
 from apps.users.models.permission import Permission
 
 # =====================================================
 # 导入序列化器
 # =====================================================
-
 from apps.users.serializers.permission_serializer import PermissionSerializer
 from apps.users.utils.role_access import has_any_role
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import ResponseError, ResponseSuccess
-
 
 RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
 
@@ -52,14 +49,13 @@ class PermissionListView(APIView):
         if not _can_manage_rbac(request.user):
             return _rbac_forbidden_response()
 
-        # 查询全部权限
-        queryset = Permission.objects.all()
+        # 查询权限列表并排序，分页后返回给权限管理表格。
+        queryset = Permission.objects.all().order_by("id")
 
-        # 序列化
-        serializer = PermissionSerializer(queryset, many=True)
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = PermissionSerializer(page_queryset, many=True)
 
-        # 返回结果
-        return Response({"code": 200, "data": serializer.data})
+        return Response({"code": 200, "data": build_paginated_data(serializer.data, page_meta)})
 
 
 # =====================================================

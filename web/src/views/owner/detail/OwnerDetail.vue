@@ -3,6 +3,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getOwnerDetail } from '@/api/owner'
+import { toMediaURL } from '@/utils/url'
 
 const route = useRoute()
 const ownerDetail = ref<any>(null)
@@ -31,7 +32,7 @@ onMounted(() => {
 
         <el-descriptions :column="2" border>
             <el-descriptions-item label="头像">
-                <el-avatar :size="100" :src="'http://127.0.0.1:8000' + ownerDetail.data.avatar" />
+                <el-avatar :size="100" :src="toMediaURL(ownerDetail.data.avatar)" />
             </el-descriptions-item>
 
             <el-descriptions-item label="姓名">{{ ownerDetail.data.name }}</el-descriptions-item>
@@ -64,11 +65,11 @@ onMounted(() => {
                 >{{ ownerDetail.data.id_card_image ? '有' : '无' }}
                 <div style="display: flex; align-items: center; margin-bottom: 20px">
                     <el-image
-                        :src="'http://127.0.0.1:8000' + ownerDetail.data.id_card_image"
+                        :src="toMediaURL(ownerDetail.data.id_card_image)"
                         style="width: 300px"
                         fit="contain"
                         :preview-src-list="[
-                            'http://127.0.0.1:8000' + ownerDetail.data.id_card_image,
+                            toMediaURL(ownerDetail.data.id_card_image),
                         ]"
                     />
                 </div>

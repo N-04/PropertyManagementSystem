@@ -5,6 +5,7 @@ export function getOwnerList(keyword = '') {
     return request.get('/owner/list/', {
         params: {
             keyword,
+            page_size: 100,
         },
     })
 }

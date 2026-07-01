@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { getOwnerList } from '@/api/owner'
 import { getParkingList } from '@/api/parking'
 import { createCar } from '@/api/car'
+import { extractListRows } from '@/utils/listResponse'
 
 const router = useRouter()
 
@@ -44,7 +45,7 @@ const parkingList = reactive<any[]>([])
 const loadOwnerList = async () => {
     const res = await getOwnerList()
 
-    ownerList.push(...res.data.data)
+    ownerList.push(...extractListRows(res.data.data))
 }
 
 /**
@@ -53,7 +54,7 @@ const loadOwnerList = async () => {
 const loadParkingList = async () => {
     const res = await getParkingList()
 
-    parkingList.push(...res.data.data)
+    parkingList.push(...extractListRows(res.data.data))
 }
 
 /**

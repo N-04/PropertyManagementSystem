@@ -9,6 +9,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { createOwner } from '@/api/owner'
 import { getHouseList } from '@/api/house'
+import { toMediaURL } from '@/utils/url'
 import Upload from '@/views/upload/Upload.vue'
 
 const router = useRouter()
@@ -90,7 +91,7 @@ onMounted(() => {
 
                 <div v-if="form.avatar" style="margin-top: 10px">
                     <el-image
-                        :src="'http://127.0.0.1:8000' + form.avatar"
+                        :src="toMediaURL(form.avatar)"
                         style="width: 100px; height: 100px"
                         fit="cover"
                     />
@@ -119,7 +120,7 @@ onMounted(() => {
                 />
                 <div v-if="form.id_card_image" style="margin-top: 10px">
                     <el-image
-                        :src="'http://127.0.0.1:8000' + form.id_card_image"
+                        :src="toMediaURL(form.id_card_image)"
                         style="width: 200px"
                         fit="cover"
                     />

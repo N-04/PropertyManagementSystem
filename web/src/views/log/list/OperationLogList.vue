@@ -6,6 +6,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { toApiURL } from '@/utils/url'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
@@ -32,7 +33,7 @@ const loadData = async (shouldResetPage = true) => {
  * 导出Excel
  */
 const exportExcel = () => {
-    window.open('http://127.0.0.1:8000/api/log/operation/export/')
+    window.open(toApiURL('/log/operation/export/'))
 }
 
 const handleFilter = () => {

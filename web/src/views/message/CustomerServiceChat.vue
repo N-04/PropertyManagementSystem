@@ -11,6 +11,7 @@ import {
     updateChatConversationStatus,
 } from '@/api/chat'
 import { clearAuthState, getStoredRefresh, getStoredUsername } from '@/utils/authState'
+import { extractListRows } from '@/utils/listResponse'
 
 type Conversation = {
     id: number
@@ -116,8 +117,8 @@ const loadConversations = async (options: { silent?: boolean } = {}) => {
     }
 
     try {
-        const res = await getChatConversationList({})
-        conversations.value = res.data.data || []
+        const res = await getChatConversationList({ page_size: 100 })
+        conversations.value = extractListRows(res.data.data)
 
         if (!activeId.value && conversations.value[0]) {
             activeId.value = conversations.value[0].id

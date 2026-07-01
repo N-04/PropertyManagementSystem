@@ -1,10 +1,20 @@
 // 文件说明：封装 src/api/repair.ts 对应后端接口请求，供页面组件调用。
 import request from '@/utils/request'
 
+const clampListParams = (params: any = {}) => {
+    const pageSize = Number(params.page_size || 100)
+
+    // 报修列表作为高频工作台接口，统一把 page_size 控制在后端允许范围内。
+    return {
+        ...params,
+        page_size: Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 100) : 100,
+    }
+}
+
 // 获取报修列表
 export function getRepairList(params: any) {
     return request.get('/repair/list/', {
-        params,
+        params: clampListParams(params),
     })
 }
 

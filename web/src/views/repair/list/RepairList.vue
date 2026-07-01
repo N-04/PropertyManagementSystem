@@ -12,6 +12,7 @@ import DataPagination from '@/components/common/DataPagination.vue'
 import RepairResultDrawer from '@/components/repair/RepairResultDrawer.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
 import { appendMessageFeedback } from '@/utils/messageCenterRows'
+import { extractListRows } from '@/utils/listResponse'
 
 const router = useRouter()
 const route = useRoute()
@@ -60,7 +61,7 @@ const loadData = async (shouldResetPage = true) => {
     // 列表数据由后端按角色过滤；前端只负责保留当前筛选条件和分页状态。
     const res = await getRepairList(queryForm.value)
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()

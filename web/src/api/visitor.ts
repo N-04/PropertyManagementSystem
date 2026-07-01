@@ -1,13 +1,19 @@
 // 文件说明：封装 src/api/visitor.ts 对应后端接口请求，供页面组件调用。
 import request from '@/utils/request'
 
-export function getVisitorList(keyword = '') {
+type VisitorListParams = {
+    keyword?: string
+    status?: string
+    page?: number
+    page_size?: number
+}
+
+export function getVisitorList(params: VisitorListParams | string = {}) {
+    const requestParams = typeof params === 'string' ? { keyword: params } : params
+
     return request.get('/visitor/list/', {
-        params: {
-            keyword,
-            // 访客列表前端使用统一分页组件，这里拉取足量数据供页面本地分页和搜索。
-            page_size: 1000,
-        },
+        // 访客列表已改为后端分页，调用方按需传 page/page_size。
+        params: requestParams,
     })
 }
 

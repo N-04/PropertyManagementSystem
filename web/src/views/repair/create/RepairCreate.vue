@@ -4,6 +4,7 @@ import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createRepair } from '@/api/repair'
+import { toMediaURL } from '@/utils/url'
 import Upload from '@/views/upload/Upload.vue'
 const router = useRouter()
 const form = reactive({
@@ -32,7 +33,7 @@ const getFileUrl = (url: string) => {
         return ''
     }
 
-    return url.startsWith('http') ? url : `http://127.0.0.1:8000${url}`
+    return toMediaURL(url)
 }
 
 const addRepairImage = (url: string) => {

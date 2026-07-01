@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
 
 const router = useRouter()
 
@@ -35,7 +36,7 @@ const {
 const getList = async (shouldResetPage = true) => {
     const res = await getCarList(keyword.value)
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()

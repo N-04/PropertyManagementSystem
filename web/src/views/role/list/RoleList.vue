@@ -20,6 +20,7 @@ import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { ElMessage } from 'element-plus'
+import { extractListRows } from '@/utils/listResponse'
 
 // =====================================================
 // 角色列表数据
@@ -40,9 +41,9 @@ const {
 // =====================================================
 const getList = async (shouldResetPage = true) => {
     // 调用接口
-    const res = await getRoleList()
+    const res = await getRoleList({ page_size: 100 })
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()

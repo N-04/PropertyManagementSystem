@@ -11,9 +11,9 @@ from rest_framework.views import APIView
 from apps.chat.models import ChatConversation, ChatMessage
 from apps.chat.serializers import ChatConversationSerializer, ChatMessageSerializer
 from apps.users.models import User
-from apps.users.utils.role_access import get_user_role_codes, has_any_role
+from apps.users.utils.role_access import get_user_role_codes
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import ResponseError, ResponseSuccess
-
 
 MANAGER_ROLES = {"super_admin", "admin", "property_admin", "customer_service"}
 CHAT_TIMEOUT_MINUTES = 5
@@ -144,8 +144,12 @@ class ChatConversationListView(APIView):
                 | Q(created_by__real_name__icontains=keyword)
             )
 
-        serializer = ChatConversationSerializer(queryset, many=True)
-        return ResponseSuccess(data=serializer.data)
+        queryset = queryset.order_by("-updated_at", "-id")
+        # 会话列表按页返回，既保护隐私边界，也避免消息中心一次加载所有历史会话。
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = ChatConversationSerializer(page_queryset, many=True)
+
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class ChatConversationCreateView(APIView):

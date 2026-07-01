@@ -7,9 +7,11 @@ import request from '@/utils/request'
 // =====================================================
 // 获取角色列表
 // =====================================================
-export const getRoleList = () => {
+export const getRoleList = (params: any = {}) => {
     // GET请求
-    return request.get('/role/list/')
+    return request.get('/role/list/', {
+        params,
+    })
 }
 
 // =====================================================

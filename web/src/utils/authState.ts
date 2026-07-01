@@ -5,8 +5,11 @@ type AuthKey = 'token' | 'refresh' | 'username' | 'role' | 'roles' | 'permission
 export const AUTH_STATE_CHANGED_EVENT = 'property-management-auth-state-changed'
 
 const authKeys: AuthKey[] = ['token', 'refresh', 'username', 'role', 'roles', 'permissions', 'userInfo']
+const sensitiveAuthKeys: AuthKey[] = ['token', 'refresh']
+const persistedAuthKeys = authKeys.filter((key) => !sensitiveAuthKeys.includes(key))
 const authVersionKey = 'authVersion'
 
+// 角色解析分块：后端可能返回单角色或多角色，前端统一转成主角色编码。
 // 多角色账号按优先级确定当前主角色，保证菜单和首页工作台选择稳定。
 const rolePriority = [
     'super_admin',
@@ -20,6 +23,7 @@ const rolePriority = [
     'owner',
 ]
 
+// Storage 安全访问分块：浏览器隐私模式或禁用存储时不让页面直接崩溃。
 const safeRead = (storage: Storage, key: AuthKey) => {
     try {
         return storage.getItem(key)
@@ -42,6 +46,11 @@ const safeRemove = (storage: Storage, key: AuthKey) => {
     } catch {
         // Storage 不可用时无需额外处理。
     }
+}
+
+const clearPersistedSensitiveAuth = () => {
+    // refresh/access token 不再落 localStorage；这里同时清理旧版本遗留值。
+    sensitiveAuthKeys.forEach((key) => safeRemove(localStorage, key))
 }
 
 const notifyAuthStateChanged = () => {
@@ -77,10 +86,11 @@ const hasCurrentSessionAuth = () => {
     return Boolean(safeRead(sessionStorage, 'token') || safeRead(sessionStorage, 'refresh'))
 }
 
+// 标签页同步分块：localStorage 只作为新标签页初始化来源，当前会话以 sessionStorage 为准。
 const copyLocalAuthToSession = () => {
     let changed = false
 
-    authKeys.forEach((key) => {
+    persistedAuthKeys.forEach((key) => {
         const localValue = safeRead(localStorage, key)
         const sessionValue = safeRead(sessionStorage, key)
 
@@ -115,12 +125,14 @@ export const isAuthStorageKey = (key: string | null) => {
 }
 
 export const syncSessionAuthStateFromLocal = (notify = true) => {
+    clearPersistedSensitiveAuth()
+
     // 复制标签页会复制 sessionStorage；已有会话必须保持当前标签独立，不再被 localStorage 覆盖。
     if (hasCurrentSessionAuth()) {
         return false
     }
 
-    if (!safeRead(localStorage, 'token') && !safeRead(localStorage, 'refresh')) {
+    if (!persistedAuthKeys.some((key) => safeRead(localStorage, key))) {
         return false
     }
 
@@ -162,6 +174,7 @@ const collectRoleCodes = (value: any): string[] => {
     return code ? [code] : []
 }
 
+// 登录态读写分块：令牌只进入 sessionStorage，降低复制标签和持久化存储带来的串号风险。
 export const getAuthItem = (key: AuthKey) => {
     syncSessionAuthStateFromLocal(false)
 
@@ -172,7 +185,9 @@ export const getAuthItem = (key: AuthKey) => {
 export const setAuthItem = (key: AuthKey, value: string, persist = false, notify = false) => {
     safeWrite(sessionStorage, key, value)
 
-    if (persist) {
+    if (sensitiveAuthKeys.includes(key)) {
+        safeRemove(localStorage, key)
+    } else if (persist) {
         safeWrite(localStorage, key, value)
     }
 
@@ -231,7 +246,9 @@ export const saveAuthState = (loginData: any) => {
     const username = loginData.username || loginData.user?.username || ''
     const version = createAuthVersion()
 
-    // 登录成功同时写入 sessionStorage 和 localStorage，让当前标签即时可用且新标签可初始化。
+    clearPersistedSensitiveAuth()
+
+    // token 仅写入 sessionStorage，localStorage 只保存角色等非令牌元数据。
     setAuthItem('token', token, true)
     setAuthItem('refresh', loginData.refresh || '', true)
     setAuthItem('username', username, true)

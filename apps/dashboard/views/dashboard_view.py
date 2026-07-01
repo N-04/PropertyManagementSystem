@@ -1,5 +1,7 @@
 # 文件说明：处理 apps/dashboard/views/dashboard_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework.views import APIView
 
 from apps.community.models import House
@@ -8,12 +10,8 @@ from apps.owners.models import Owner
 from apps.parking.models import Parking
 from apps.repairs.models import Repair
 from apps.users.utils.role_access import get_user_role_codes
-from django.db.models import Sum
-from django.utils import timezone
-
 from apps.visitors.models import Visitor
 from common.response.response import ResponseSuccess
-
 
 MANAGER_ROLE_CODES = {
     "admin",
@@ -22,7 +20,16 @@ MANAGER_ROLE_CODES = {
     "finance_staff",
 }
 
+VISITOR_MANAGER_ROLE_CODES = {
+    "admin",
+    "super_admin",
+    "property_admin",
+    "customer_service",
+    "service",
+}
 
+
+# 金额聚合工具分块：避免空查询集把 None 传给前端图表。
 def _money_total(queryset):
     """汇总金额字段，空结果统一返回 0，避免前端出现 null。"""
 
@@ -72,6 +79,7 @@ class DashboardView(APIView):
         获取首页统计数据
         """
 
+        # 首页统计必须先判断角色，再按角色传入对应查询集，避免普通角色拿到全局数据。
         role_codes = get_user_role_codes(request.user)
 
         if role_codes & MANAGER_ROLE_CODES:
@@ -125,24 +133,38 @@ class VisitorStatisticsView(APIView):
     def get(self, request):
         # 获取当前日期
         today = timezone.localdate()
+        role_codes = get_user_role_codes(request.user)
+
+        # 访客统计同样按角色隔离，防止维修/财务等角色看到全局访客状态。
+        if role_codes & VISITOR_MANAGER_ROLE_CODES:
+            # 只有访客管理侧角色可以看全局访客统计。
+            visitor_qs = Visitor.objects.all()
+        elif "owner" in role_codes:
+            # 业主只统计访问自己的访客记录。
+            visitor_qs = Visitor.objects.filter(
+                owner__in=_owner_queryset_for_user(request.user)
+            )
+        else:
+            # 财务、维修等无访客管理职责的角色不暴露全局访客状态。
+            visitor_qs = Visitor.objects.none()
 
         # 今日来访数量
-        today_count = Visitor.objects.filter(visit_time__date=today).count()
+        today_count = visitor_qs.filter(visit_time__date=today).count()
 
         # 待审核数量
-        waiting_count = Visitor.objects.filter(status="waiting").count()
+        waiting_count = visitor_qs.filter(status="waiting").count()
 
         # 已通过数量
-        approved_count = Visitor.objects.filter(status="approved").count()
+        approved_count = visitor_qs.filter(status="approved").count()
 
         # 已到访数量
-        entered_count = Visitor.objects.filter(status="entered").count()
+        entered_count = visitor_qs.filter(status="entered").count()
 
         # 已离开数量
-        left_count = Visitor.objects.filter(status="left").count()
+        left_count = visitor_qs.filter(status="left").count()
 
         # 访客总数
-        total_count = Visitor.objects.count()
+        total_count = visitor_qs.count()
 
         return ResponseSuccess(
             data={

@@ -8,6 +8,7 @@ from apps.complaints.models import Complaint
 from apps.complaints.serializers import ComplaintSerializer
 from apps.owners.models import Owner
 from apps.users.utils.role_access import has_any_role, is_owner_user
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import ResponseError, ResponseSuccess
 
 COMPLAINT_MANAGE_ROLES = (
@@ -75,8 +76,12 @@ class ComplaintListView(APIView):
         if status:
             queryset = queryset.filter(status=status)
 
-        serializer = ComplaintSerializer(queryset, many=True)
-        return ResponseSuccess(data=serializer.data)
+        queryset = queryset.order_by("-id")
+        # 列表接口统一分页，避免投诉数据量增长后一次性序列化全集。
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = ComplaintSerializer(page_queryset, many=True)
+
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class ComplaintCreateView(APIView):

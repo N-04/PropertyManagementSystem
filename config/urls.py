@@ -1,12 +1,13 @@
 # 文件说明：汇总项目根路由，把各业务模块接口挂载到统一 API 前缀下。
 
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),  # 用户认证
+    # 认证路由使用 /api/auth/ 作为唯一前端调用前缀。
     path("api/auth/", include("apps.users.urls.auth_urls")),
     path("api/menu/", include("apps.users.urls.menu_urls")),
     # 公告管理
@@ -17,8 +18,7 @@ urlpatterns = [
     path("api/permission/", include("apps.users.urls.permission_urls")),
     path("api/role/", include("apps.users.urls.role_urls")),
     path("api/user/", include("apps.users.urls.user_urls")),
-    path("api/", include("apps.users.urls.auth_urls")),
-    # 小区管理
+    # 小区管理保留在 /api/ 下，是因为内部 urls 已经带 building/unit/house 等资源前缀。
     path(
         "api/",
         include("apps.community.urls"),
@@ -55,6 +55,7 @@ urlpatterns = [
         "api/log/",
         include("apps.logs.urls"),
     ),
+    # 上传接口内部使用 upload/ 前缀，统一挂在 /api/upload/。
     path(
         "api/",
         include("apps.upload.urls"),

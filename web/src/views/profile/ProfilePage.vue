@@ -12,6 +12,7 @@ import { getHouseList } from '@/api/house'
 import { getOwnerList } from '@/api/owner'
 import { uploadFile } from '@/api/upload'
 import { clearAuthState, setAuthItem } from '@/utils/authState'
+import { toMediaURL } from '@/utils/url'
 
 const router = useRouter()
 const route = useRoute()
@@ -86,11 +87,7 @@ const avatarUrl = computed(() => {
         return ''
     }
 
-    if (profileForm.avatar.startsWith('http')) {
-        return profileForm.avatar
-    }
-
-    return `http://127.0.0.1:8000${profileForm.avatar}`
+    return toMediaURL(profileForm.avatar)
 })
 
 const avatarActionText = computed(() => avatarUrl.value ? '更改头像' : '上传头像')

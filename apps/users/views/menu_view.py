@@ -1,14 +1,14 @@
 # 文件说明：处理 apps/users/views/menu_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
-from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.users.models.menu import Menu
 from apps.users.serializers.menu_serializer import MenuSerializer
 from apps.users.utils.role_access import has_any_role
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import ResponseError, ResponseSuccess
-from rest_framework.response import Response
-
 
 RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
 DEPRECATED_USER_MENU_TITLES = {
@@ -170,9 +170,11 @@ class MenuListView(APIView):
 
         queryset = Menu.objects.all().order_by("sort", "id")
 
-        serializer = MenuSerializer(queryset, many=True)
+        # 只给后台菜单维护的平铺列表分页；用户侧菜单树保持完整返回。
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = MenuSerializer(page_queryset, many=True)
 
-        return Response({"code": 200, "data": serializer.data})
+        return Response({"code": 200, "data": build_paginated_data(serializer.data, page_meta)})
 
 
 class MenuTreeView(APIView):

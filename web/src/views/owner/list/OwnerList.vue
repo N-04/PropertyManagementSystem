@@ -6,6 +6,8 @@ import { useRouter } from 'vue-router'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
+import { toMediaURL } from '@/utils/url'
 
 // =====================================================
 // 响应式数据
@@ -26,7 +28,7 @@ const {
 const getList = async (shouldResetPage = true) => {
     const res = await getOwnerList(keyword.value)
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()
@@ -129,8 +131,8 @@ useRealtimeRefresh(() => getList(false), {
                     <el-tooltip content="点击查看大图">
                         <el-image
                             v-if="scope.row.id_card_image"
-                            :src="'http://127.0.0.1:8000' + scope.row.id_card_image"
-                            :preview-src-list="['http://127.0.0.1:8000' + scope.row.id_card_image]"
+                            :src="toMediaURL(scope.row.id_card_image)"
+                            :preview-src-list="[toMediaURL(scope.row.id_card_image)]"
                             preview-teleported
                             style="width: 120px; height: 80px; cursor: pointer"
                             fit="cover"

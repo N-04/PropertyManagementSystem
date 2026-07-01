@@ -5,16 +5,17 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.owners.models import Owner
-from apps.visitors.models.visitor import Visitor
-from common.response.response import ResponseSuccess, ResponseError
-from apps.visitors.serializers.visitor_serializer import VisitorSerializer
 from apps.logs.services.log_service import save_operation_log
+from apps.owners.models import Owner
 from apps.users.utils.role_access import (
     is_customer_service_user,
     is_owner_user,
     is_property_manager_user,
 )
+from apps.visitors.models.visitor import Visitor
+from apps.visitors.serializers.visitor_serializer import VisitorSerializer
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
+from common.response.response import ResponseError, ResponseSuccess
 
 
 def _can_manage_visitor(user):
@@ -91,13 +92,8 @@ class VisitorListView(APIView):
 
     def get(self, request):
 
-        try:
-            page = max(int(request.GET.get("page", 1)), 1)
-            page_size = min(max(int(request.GET.get("page_size", 1000)), 1), 1000)
-        except (TypeError, ValueError):
-            return ResponseError(msg="分页参数错误")
-
         keyword = (request.GET.get("keyword") or "").strip()
+        status = (request.GET.get("status") or "").strip()
         queryset = Visitor.objects.select_related("owner", "approve_user").all().order_by("-id")
 
         if is_owner_user(request.user):
@@ -115,15 +111,14 @@ class VisitorListView(APIView):
                 | Q(reason__icontains=keyword)
             )
 
-        start = (page - 1) * page_size
-        end = start + page_size
+        if status:
+            # 状态筛选下沉到数据库层，避免前端为了筛选而一次性拉取大量访客记录。
+            queryset = queryset.filter(status=status)
 
-        serializer = VisitorSerializer(
-            queryset[start:end],
-            many=True,
-        )
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = VisitorSerializer(page_queryset, many=True)
 
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class VisitorUpdateView(APIView):

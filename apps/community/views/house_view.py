@@ -3,15 +3,15 @@
 from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from rest_framework.response import Response
 
 from apps.community.models import House
 from apps.community.serializers.house_serializer import HouseSerializer
 from apps.logs.services.log_service import save_operation_log
 from apps.users.utils.role_access import is_owner_user, is_property_manager_user
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 from common.utils.log import save_log
 
@@ -61,12 +61,8 @@ class HouseListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        page = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 10))
         keyword = request.GET.get("keyword", "").strip()
         profile_select = request.GET.get("profile_select") in {"1", "true", "True"}
-        page = max(page, 1)
-        page_size = min(max(page_size, 1), 100)
         queryset = House.objects.select_related("unit__building__community").all().order_by("-id")
 
         if is_owner_user(request.user):
@@ -90,27 +86,14 @@ class HouseListView(APIView):
                 | Q(unit__building__community__name__icontains=keyword)
             )
 
-        total = queryset.count()
-        start = (page - 1) * page_size
-        end = start + page_size
-
+        # 统一分页会安全处理非法 page/page_size，避免手写 int() 解析导致 500。
+        page_queryset, page_meta = paginate_queryset(queryset, request)
         serializer = HouseSerializer(
-            queryset[start:end],
+            page_queryset,
             many=True,
         )
 
-        return Response(
-            {
-                "code": 200,
-                "msg": "success",
-                "data": {
-                    "results": serializer.data,
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                },
-            }
-        )
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class HouseUpdateView(APIView):

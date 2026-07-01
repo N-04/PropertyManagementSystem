@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { getOwnerList } from '@/api/owner'
 import { getVisitorDetail, updateVisitor } from '@/api/visitor'
+import { extractListRows } from '@/utils/listResponse'
 
 const router = useRouter()
 const route = useRoute()
@@ -40,7 +41,7 @@ const ownerList = reactive<any[]>([])
 const loadOwnerList = async () => {
     const res = await getOwnerList()
 
-    ownerList.push(...res.data.data)
+    ownerList.push(...extractListRows(res.data.data))
 }
 
 /**

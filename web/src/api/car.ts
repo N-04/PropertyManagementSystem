@@ -5,6 +5,7 @@ export function getCarList(keyword = '') {
     return request.get('/car/list/', {
         params: {
             keyword,
+            page_size: 100,
         },
     })
 }

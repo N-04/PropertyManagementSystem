@@ -3,6 +3,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getRepairDetail } from '@/api/repair'
+import { toMediaURL } from '@/utils/url'
 
 const route = useRoute()
 const detail = ref<any>({})
@@ -74,7 +75,7 @@ const getFileUrl = (url: string) => {
         return ''
     }
 
-    return url.startsWith('http') ? url : `http://127.0.0.1:8000${url}`
+    return toMediaURL(url)
 }
 
 onMounted(() => {

@@ -12,6 +12,7 @@ import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole, getStoredUsername } from '@/utils/authState'
 import { appendMessageFeedback } from '@/utils/messageCenterRows'
+import { extractListRows } from '@/utils/listResponse'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
@@ -24,6 +25,7 @@ const router = useRouter()
 const route = useRoute()
 const PARKING_FEEDBACK_EVENT = 'property-management-parking-feedback'
 const PARKING_FEEDBACK_STORAGE_KEY = 'parkingPurchaseFeedback'
+const PARKING_FETCH_PAGE_SIZE = 100
 
 // 车位页数据分块：业主车位、可售车位和访客临停分开缓存，避免列表互相污染。
 const visitorParkingRows = ref<any[]>([])
@@ -194,21 +196,21 @@ const buildVisitorParkingNo = (item: any, index: number) => {
 
 const getList = async () => {
     // 可视化分区需要拿到足够多的车位，再由前端分页控制表格显示。
-    const res = await getParkingList({ page_size: 1000 })
+    const res = await getParkingList({ page_size: PARKING_FETCH_PAGE_SIZE })
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
     resetPage()
 }
 
 const getOwnerParkingList = async () => {
     // 业主默认只看自己的车位；可购买车位通过 include_idle 单独拉取，避免混入“我的车位”。
     const [mineRes, candidateRes] = await Promise.all([
-        getParkingList({ page_size: 1000 }),
-        getParkingList({ page_size: 1000, include_idle: true }),
+        getParkingList({ page_size: PARKING_FETCH_PAGE_SIZE }),
+        getParkingList({ page_size: PARKING_FETCH_PAGE_SIZE, include_idle: true }),
     ])
 
-    tableData.value = mineRes.data.data || []
-    availableParkingRows.value = (candidateRes.data.data || []).filter((item: any) => {
+    tableData.value = extractListRows(mineRes.data.data)
+    availableParkingRows.value = extractListRows(candidateRes.data.data).filter((item: any) => {
         return item.status === 'idle' && !item.owner && isSaleParking(item)
     })
     resetPage()
@@ -221,8 +223,8 @@ const getVisitorParkingList = async () => {
     }
 
     try {
-        const res = await getVisitorList()
-        const visitors = res.data.data || []
+        const res = await getVisitorList({ page_size: 100 })
+        const visitors = extractListRows(res.data.data)
 
         // 访客临停不占用业主已购买/绑定车位，按访客预约记录单独生成临停列表。
         visitorParkingRows.value = visitors.map((item: any, index: number) => ({

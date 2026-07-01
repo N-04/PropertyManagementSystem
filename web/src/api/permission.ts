@@ -7,8 +7,10 @@ import request from '@/utils/request'
 // =====================================================
 // 获取权限列表
 // =====================================================
-export const getPermissionList = () => {
-    return request.get('/permission/list/')
+export const getPermissionList = (params: any = {}) => {
+    return request.get('/permission/list/', {
+        params,
+    })
 }
 
 // 获取权限树/权限选项

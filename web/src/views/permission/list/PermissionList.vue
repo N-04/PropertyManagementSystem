@@ -15,6 +15,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
 
 // =====================================================
 // 权限表格数据
@@ -37,10 +38,10 @@ const {
 
 const getList = async (shouldResetPage = true) => {
     // 调用接口
-    const res = await getPermissionList()
+    const res = await getPermissionList({ page_size: 100 })
 
     // 保存数据
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()

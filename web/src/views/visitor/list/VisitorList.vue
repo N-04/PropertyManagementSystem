@@ -3,7 +3,7 @@
 // =====================================================
 // Vue 相关
 // =====================================================
-import { computed, ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 // =====================================================
 // 路由
@@ -22,9 +22,9 @@ import { getVisitorList, deleteVisitor } from '@/api/visitor'
 
 import { enterVisitor } from '@/api/visitor'
 import { leaveVisitor } from '@/api/visitor'
-import { useClientPagination } from '@/composables/useClientPagination'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows, extractListTotal } from '@/utils/listResponse'
 
 // =====================================================
 // 路由实例
@@ -36,20 +36,9 @@ const router = useRouter()
 // =====================================================
 const tableData = ref<any[]>([])
 const statusFilter = ref('')
-const filteredTableData = computed(() => {
-    if (!statusFilter.value) {
-        return tableData.value
-    }
-
-    return tableData.value.filter((item) => item.status === statusFilter.value)
-})
-const {
-    page,
-    pageSize,
-    total,
-    pagedData: pagedTableData,
-    resetPage,
-} = useClientPagination(filteredTableData)
+const page = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 
 // =====================================================
 // 搜索关键字
@@ -63,13 +52,12 @@ const resetSearch = () => {
     keyword.value = ''
     statusFilter.value = ''
 
-    getList()
+    resetPageAndLoad()
 }
 
 const handleFilter = () => {
-    // 访客关键字走接口模糊搜索，状态在当前结果内继续筛选。
-    page.value = 1
-    getList()
+    // 访客关键字和状态都下沉到后端筛选，避免前端一次性拉取大列表。
+    resetPageAndLoad()
 }
 
 /**
@@ -140,17 +128,41 @@ const handleLeave = async (row: any) => {
  * 获取访客列表
  */
 const getList = async (shouldResetPage = true) => {
-    const res = await getVisitorList(keyword.value)
-
-    tableData.value = res.data.data
-
     if (shouldResetPage) {
-        resetPage()
+        page.value = 1
     }
+
+    const res = await getVisitorList({
+        keyword: keyword.value,
+        status: statusFilter.value,
+        page: page.value,
+        page_size: pageSize.value,
+    })
+    const payload = res.data.data
+
+    tableData.value = extractListRows(payload)
+    total.value = extractListTotal(payload)
+
+    if (payload?.page && payload.page !== page.value) {
+        page.value = payload.page
+    }
+}
+
+const resetPageAndLoad = () => {
+    if (page.value === 1) {
+        getList(false)
+        return
+    }
+
+    page.value = 1
 }
 
 onMounted(() => {
     getList()
+})
+
+watch([page, pageSize], () => {
+    getList(false)
 })
 
 useRealtimeRefresh(() => getList(false), {
@@ -191,7 +203,7 @@ useRealtimeRefresh(() => getList(false), {
             <el-button @click="resetSearch">重置</el-button>
         </div>
 
-        <el-table :data="pagedTableData" border style="width: 100%">
+        <el-table :data="tableData" border style="width: 100%">
             <el-table-column prop="id" label="ID" width="80" />
 
             <el-table-column prop="name" label="访客姓名" />

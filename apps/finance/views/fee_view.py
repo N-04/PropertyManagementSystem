@@ -10,16 +10,15 @@ from apps.chat.models import ChatConversation, ChatMessage
 from apps.chat.serializers import ChatConversationSerializer
 from apps.finance.models import Fee
 from apps.finance.serializers.fee_serializer import FeeSerializer
+from apps.logs.services.log_service import save_operation_log
 from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.users.utils.role_access import has_any_role, is_owner_user
-
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 from common.utils.log import save_log
-from apps.logs.services.log_service import save_operation_log
-
 
 FEE_MANAGE_ROLES = (
     "admin",
@@ -35,6 +34,7 @@ FEE_CREATE_ROLES = (
 )
 
 
+# 财务权限分块：新增、维护和业主支付分开判断，避免财务代替业主付款。
 def _can_create_fee(user):
     """新增账单只开放给管理员和物业管理员，财务人员负责查看和维护已有账单。"""
 
@@ -63,17 +63,6 @@ def _parse_query_date(raw_value):
     return None
 
 
-def _parse_positive_int(raw_value, default=None):
-    """解析分页参数，非法值按默认值处理。"""
-
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        return default
-
-    return value if value > 0 else default
-
-
 def _fee_type_text(fee):
     """把账单费用类型转为面向用户的中文文案。"""
 
@@ -89,6 +78,7 @@ def _format_fee_deadline(deadline):
     return timezone.localtime(deadline).strftime("%Y-%m-%d %H:%M")
 
 
+# 账单接口分块：列表、支付和提醒都复用同一套费用模型。
 class FeeCreateView(APIView):
     """
     新增收费
@@ -165,6 +155,7 @@ class FeeListView(APIView):
             request.GET.get("date_to") or request.GET.get("end_date") or ""
         ).strip()
 
+        # 筛选分块：先按关键字/类型/状态/日期收窄，再统一分页返回。
         # 搜索覆盖业主、手机号、房号和备注，匹配前端统一搜索框。
         if keyword:
             queryset = queryset.filter(
@@ -212,32 +203,15 @@ class FeeListView(APIView):
             # 结束日期按自然日包含当天，避免前端日期控件选择当天却查不到数据。
             queryset = queryset.filter(deadline__date__lte=date_to)
 
-        page_size = _parse_positive_int(request.GET.get("page_size"))
+        page_queryset, page_meta = paginate_queryset(
+            queryset,
+            request,
+            default_page_size=10,
+            max_page_size=100,
+        )
+        serializer = FeeSerializer(page_queryset, many=True)
 
-        if page_size:
-            # 前端大屏和普通列表共用接口，有 page_size 时返回分页元信息。
-            page = _parse_positive_int(request.GET.get("page"), 1)
-            page_size = min(page_size, 1000)
-            total = queryset.count()
-            start = (page - 1) * page_size
-            end = start + page_size
-            serializer = FeeSerializer(
-                queryset[start:end],
-                many=True,
-            )
-
-            return ResponseSuccess(
-                data={
-                    "results": serializer.data,
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                }
-            )
-
-        serializer = FeeSerializer(queryset, many=True)
-
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class FeeUpdateView(APIView):
@@ -390,6 +364,7 @@ class FeeReminderView(APIView):
         if not owner_user:
             return ResponseError(msg="未找到该业主对应登录账号")
 
+        # 提醒消息落到业主消息中心，财务端只返回发送结果和会话摘要。
         # 将账单信息组装成面向业主的站内信内容。
         fee_type = _fee_type_text(fee)
         room_parts = [

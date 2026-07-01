@@ -3,17 +3,17 @@ import request from '@/utils/request'
 
 // 登录接口
 export function loginApi(data: any) {
-    return request.post('/login/', data)
+    return request.post('/auth/login/', data)
 }
 
 // 手机号验证码登录
 export function phoneLoginApi(data: { phone: string; sms_code: string }) {
-    return request.post('/login/phone/', data)
+    return request.post('/auth/login/phone/', data)
 }
 
 // 获取图形验证码
 export function getCaptchaApi() {
-    return request.get('/captcha/')
+    return request.get('/auth/captcha/')
 }
 
 // 获取短信验证码
@@ -23,7 +23,7 @@ export function sendSmsCodeApi(data: {
     captcha_key: string
     captcha_code: string
 }) {
-    return request.post('/sms-code/', data)
+    return request.post('/auth/sms-code/', data)
 }
 
 // 注册
@@ -38,7 +38,7 @@ export function registerApi(data: {
     sms_code: string
     agreed: boolean
 }) {
-    return request.post('/register/', data)
+    return request.post('/auth/register/', data)
 }
 
 // 找回密码
@@ -48,12 +48,12 @@ export function resetPasswordApi(data: {
     password: string
     confirm_password: string
 }) {
-    return request.post('/password/reset/', data)
+    return request.post('/auth/password/reset/', data)
 }
 
 // 退出登录
 export function logoutApi(refresh: string) {
-    return request.post('/logout/', {
+    return request.post('/auth/logout/', {
         refresh,
     })
 }

@@ -3,25 +3,22 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
-from django.utils import timezone
-from apps.repairs.serializers.repair_serializer import RepairSerializer
-
-from common.response.response import (
-    ResponseSuccess,
-    ResponseError,
-)
-from apps.logs.services.log_service import save_operation_log
 from django.shortcuts import get_object_or_404
-
-from rest_framework.views import APIView
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
-from apps.repairs.models import Repair, RepairLog
-
-from apps.users.models import User
+from apps.logs.services.log_service import save_operation_log
 from apps.owners.models import Owner
+from apps.repairs.models import Repair, RepairLog
+from apps.repairs.serializers.repair_serializer import RepairSerializer
+from apps.users.models import User
 from apps.users.utils.role_access import has_any_role, is_owner_user, is_repair_user
-from rest_framework.pagination import PageNumberPagination
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
+from common.response.response import (
+    ResponseError,
+    ResponseSuccess,
+)
 
 REPAIR_MANAGE_ROLES = (
     "admin",
@@ -32,6 +29,7 @@ REPAIR_MANAGE_ROLES = (
 )
 
 
+# 报修权限分块：业主、维修员和物业/客服的可见范围不同。
 def _can_manage_repair(user):
     """物业管理员和客服类角色可以派单、查看和维护报修工单。"""
 
@@ -141,18 +139,13 @@ class RepairListView(APIView):
         if end_time:
             queryset = queryset.filter(created_at__date__lte=end_time)
 
-        serializer = RepairSerializer(
-            queryset,
-            many=True,
-        )
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = RepairSerializer(page_queryset, many=True)
 
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
-class MyPage(PageNumberPagination):
-    page_size = 10
-
-
+# 工单状态流分块：接单、维修中、完成和评价都在更新接口内统一校验。
 class RepairUpdateView(APIView):
     """修改报修，统一处理业主编辑、维修员接单流转和业主评价。"""
 

@@ -4,14 +4,16 @@ from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.cars.models import Car
 from apps.cars.serializers.cars_serializer import CarSerializer
 from apps.logs.services.log_service import save_operation_log
 from apps.owners.models import Owner
 from apps.users.utils.role_access import is_owner_user, is_property_manager_user
-from common.response.response import ResponseSuccess, ResponseError
-from apps.cars.models import Car
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
+from common.response.response import ResponseError, ResponseSuccess
 
 
+# 车辆权限分块：业主端按手机号隔离车辆，物业端保留全量管理视角。
 def _owner_for_user(user):
     """根据登录手机号找到对应业主档案，用于业主侧车辆数据隔离。"""
 
@@ -24,6 +26,8 @@ def _owner_for_user(user):
 
 
 def _car_queryset_for_user(user):
+    """按角色返回车辆可见范围，避免业主看到其他住户车辆。"""
+
     if is_property_manager_user(user):
         return Car.objects.all()
 
@@ -37,6 +41,8 @@ def _car_queryset_for_user(user):
 
 
 def _can_manage_cars(user):
+    """车辆资料维护只开放给物业管理员，业主仅能新增和查看自己的车辆。"""
+
     return is_property_manager_user(user)
 
 
@@ -103,6 +109,7 @@ class CarListView(APIView):
     def get(self, request):
 
         keyword = request.GET.get("keyword")
+        # 列表入口先按角色裁剪，再叠加搜索和分页，避免搜索绕过数据权限。
         queryset = _car_queryset_for_user(request.user)
 
         if keyword:
@@ -110,12 +117,10 @@ class CarListView(APIView):
                 Q(plate_no__icontains=keyword) | Q(owner__name__icontains=keyword)
             )
 
-        serializer = CarSerializer(
-            queryset.order_by("-id"),
-            many=True,
-        )
+        page_queryset, page_meta = paginate_queryset(queryset.order_by("-id"), request)
+        serializer = CarSerializer(page_queryset, many=True)
 
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class CarUpdateView(APIView):
@@ -135,6 +140,7 @@ class CarUpdateView(APIView):
         except Car.DoesNotExist:
             return ResponseError(msg="车辆不存在")
 
+        # 管理员编辑车辆时允许局部更新，前端详情页不会因为缺少非必填字段失败。
         serializer = CarSerializer(
             instance,
             data=request.data,

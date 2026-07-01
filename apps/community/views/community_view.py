@@ -6,8 +6,8 @@ from rest_framework.views import APIView
 from apps.community.models import Community
 from apps.community.serializers import CommunitySerializer
 from apps.users.utils.role_access import is_property_manager_user
-
-from common.response.response import ResponseSuccess, ResponseError
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
+from common.response.response import ResponseError, ResponseSuccess
 
 
 class CommunityCreateView(APIView):
@@ -45,6 +45,8 @@ class CommunityListView(APIView):
 
         queryset = Community.objects.all().order_by("id")
 
-        serializer = CommunitySerializer(queryset, many=True)
+        # 小区列表也走统一分页，防止后续多小区数据一次性返回。
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = CommunitySerializer(page_queryset, many=True)
 
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))

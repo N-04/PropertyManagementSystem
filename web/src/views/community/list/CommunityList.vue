@@ -6,6 +6,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
@@ -19,9 +20,9 @@ const {
 } = useClientPagination(filteredTableData)
 
 const getList = async () => {
-    const res = await getCommunityList()
+    const res = await getCommunityList({ page_size: 100 })
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 }
 
 const handleFilter = () => {

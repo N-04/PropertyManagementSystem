@@ -11,18 +11,17 @@ from rest_framework.views import APIView
 
 from apps.chat.models import ChatConversation, ChatMessage
 from apps.finance.models import Fee
+from apps.owners.models import Owner
 from apps.parking.models import Parking
 from apps.parking.serializers.parking_serializer import ParkingSerializer
-from apps.owners.models import Owner
 from apps.users.models import User
 from apps.users.utils.role_access import has_any_role, is_owner_user
-
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 from common.utils.log import save_log
-
 
 PARKING_MANAGE_ROLES = (
     "admin",
@@ -35,6 +34,7 @@ PARKING_FEE_DEFAULT_AMOUNT = Decimal("285.00")
 PARKING_FEE_REMARK_PREFIX = "车位费："
 
 
+# 权限与分区规则分块：车位管理、业主购买和访客临停在这里做边界定义。
 def _can_manage_parking(user):
     """车位资料由管理员维护，业主只选择和查看自己的车位。"""
 
@@ -81,6 +81,7 @@ def _parking_fee_amount(parking):
     return PARKING_FEE_DEFAULT_AMOUNT
 
 
+# 账单联动分块：业主购买车位后需要立刻生成缴费中心可见的车位费。
 def _parking_fee_deadline():
     """购买当月 25 日前缴当月费，否则生成下月 25 日截止的车位费。"""
 
@@ -160,6 +161,7 @@ def _notify_property_admins_for_parking(parking, owner, sender):
     return conversation
 
 
+# 车位接口分块：管理员维护基础资料，业主只能购买售卖区空闲车位。
 class ParkingCreateView(APIView):
     """
     创建车位
@@ -204,11 +206,10 @@ class ParkingListView(APIView):
 
     def get(self, request):
 
-        page = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 10))
         include_idle = request.GET.get("include_idle") in {"1", "true", "True"}
         queryset = Parking.objects.all().order_by("-id")
 
+        # 默认只看“我的车位”；购买页显式 include_idle 时才补充售卖区空闲车位。
         if is_owner_user(request.user):
             owner_filter = Q(owner__phone=request.user.phone)
 
@@ -223,15 +224,11 @@ class ParkingListView(APIView):
             queryset = queryset.filter(owner_filter)
         elif not _can_manage_parking(request.user):
             queryset = queryset.none()
-        start = (page - 1) * page_size
-        end = start + page_size
 
-        serializer = ParkingSerializer(
-            queryset[start:end],
-            many=True,
-        )
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = ParkingSerializer(page_queryset, many=True)
 
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class ParkingBindView(APIView):

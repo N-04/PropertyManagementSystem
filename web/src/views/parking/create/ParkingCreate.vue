@@ -5,13 +5,14 @@ import { getOwnerList } from '@/api/owner'
 import { createParking } from '@/api/parking'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { extractListRows } from '@/utils/listResponse'
 
 const ownerList = ref<any[]>([])
 
 const loadOwnerList = async () => {
     const res = await getOwnerList()
 
-    ownerList.value = res.data.data
+    ownerList.value = extractListRows(res.data.data)
 }
 const form = ref({
     owner: '',

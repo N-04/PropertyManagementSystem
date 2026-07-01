@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getRepairDetail, updateRepair } from '@/api/repair'
+import { toMediaURL } from '@/utils/url'
 import Upload from '@/views/upload/Upload.vue'
 
 const route = useRoute()
@@ -44,7 +45,7 @@ const getFileUrl = (url: string) => {
         return ''
     }
 
-    return url.startsWith('http') ? url : `http://127.0.0.1:8000${url}`
+    return toMediaURL(url)
 }
 
 const addRepairImage = (url: string) => {

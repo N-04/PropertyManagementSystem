@@ -4,6 +4,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { Camera, Close, DocumentChecked } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { updateRepair } from '@/api/repair'
+import { toMediaURL } from '@/utils/url'
 import Upload from '@/views/upload/Upload.vue'
 
 const props = defineProps<{
@@ -67,7 +68,7 @@ const getFileUrl = (url: string) => {
         return ''
     }
 
-    return url.startsWith('http') ? url : `http://127.0.0.1:8000${url}`
+    return toMediaURL(url)
 }
 
 const addResultImage = (url: string) => {

@@ -7,6 +7,7 @@ import { useClientPagination } from '@/composables/useClientPagination'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { getStoredRole } from '@/utils/authState'
+import { extractListRows } from '@/utils/listResponse'
 
 const role = getStoredRole()
 const isOwner = role === 'owner'
@@ -35,9 +36,12 @@ const {
 } = useClientPagination(tableData)
 
 const loadData = async (shouldResetPage = true) => {
-    const res = await getComplaintList(queryForm)
+    const res = await getComplaintList({
+        ...queryForm,
+        page_size: 100,
+    })
 
-    tableData.value = res.data.data || []
+    tableData.value = extractListRows(res.data.data)
 
     if (shouldResetPage) {
         resetPage()

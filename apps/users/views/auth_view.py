@@ -7,7 +7,9 @@ from django.contrib.auth import authenticate
 from django.core.cache import cache
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+
 from apps.logs.models.login_log import LoginLog
 from apps.users.models.user import User
 from apps.users.serializers.auth_serializer import (
@@ -23,6 +25,7 @@ from apps.users.utils.sms import SMS_COOLDOWN, SMS_TTL, create_sms_code
 from common.response.response import ResponseError, ResponseSuccess
 
 
+# 登录响应分块：所有登录方式最终都复用同一个 token 返回结构。
 def _build_token_data(user):
     """
     统一生成登录成功后的 JWT 返回数据。
@@ -49,6 +52,7 @@ def _build_token_data(user):
     }
 
 
+# 登录安全分块：账号状态、客户端 IP 和失败锁定逻辑集中在这里。
 def _ensure_user_can_login(user):
     """
     登录前的账号状态校验。
@@ -136,6 +140,7 @@ class CaptchaView(APIView):
         return ResponseSuccess(data=create_captcha(), msg="获取成功")
 
 
+# 公开认证接口分块：验证码、登录、注册和找回密码不依赖 JWT。
 class SmsCodeView(APIView):
     """
     短信验证码接口。
@@ -308,8 +313,7 @@ class LogoutView(APIView):
     """
     退出登录接口。
 
-    如果项目启用了 SimpleJWT blacklist，会尝试把 refresh token 加入黑名单；
-    没启用 blacklist 时也正常返回成功，由前端清理本地 token。
+    refresh token 必须进入服务端黑名单，避免用户退出后被窃取的 refresh 继续换取 access。
     """
 
     permission_classes = [IsAuthenticated]
@@ -318,17 +322,16 @@ class LogoutView(APIView):
         serializer = LogoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        refresh_token = serializer.validated_data.get("refresh")
+        refresh_token = serializer.validated_data["refresh"]
 
-        if refresh_token:
-            try:
-                # token_blacklist 未安装时 blacklist 方法不可用，所以这里兼容处理。
-                RefreshToken(refresh_token).blacklist()
-            except AttributeError:
-                # 当前环境未启用黑名单应用时，退出登录仍交给前端清理本地凭证。
-                pass
-            except Exception:
-                # 黑名单写入失败不阻塞退出流程，避免用户被困在已失效会话里。
-                pass
+        try:
+            # token_blacklist 已加入 INSTALLED_APPS；这里失败必须反馈给调用方。
+            RefreshToken(refresh_token).blacklist()
+        except TokenError:
+            return ResponseError(msg="refresh token无效或已过期", code=401)
+        except AttributeError:
+            return ResponseError(msg="服务端未启用token黑名单", code=503)
+        except Exception:
+            return ResponseError(msg="退出登录失败，请稍后再试", code=503)
 
         return ResponseSuccess(msg="退出登录成功")

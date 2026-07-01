@@ -5,17 +5,18 @@ import re
 from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+
 from apps.logs.services.log_service import save_operation_log
 from apps.owners.models import Owner
 from apps.owners.serializers.owner_serializer import OwnerSerializer
 from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.users.utils.role_access import has_any_role, is_owner_user
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 from common.utils.log import save_log
-
 
 OWNER_MANAGE_ROLES = (
     "admin",
@@ -24,6 +25,7 @@ OWNER_MANAGE_ROLES = (
 )
 
 
+# 业主权限分块：管理员维护业主档案，业主本人只读自己的资料。
 def _can_manage_owner(user):
     """业主资料由管理员维护，业主只能查看自己的资料。"""
 
@@ -31,6 +33,8 @@ def _can_manage_owner(user):
 
 
 def _can_access_owner(user, owner):
+    """校验单条业主资料访问权，避免详情接口暴露其他业主身份证和手机号。"""
+
     if _can_manage_owner(user):
         return True
 
@@ -108,6 +112,7 @@ class OwnerListView(APIView):
         keyword = request.GET.get("keyword")
         queryset = Owner.objects.all().order_by("-id")
 
+        # 业主列表先按身份收窄，再执行关键字搜索和分页，避免搜索其他业主资料。
         if is_owner_user(request.user):
             queryset = queryset.filter(phone=request.user.phone)
         elif not _can_manage_owner(request.user):
@@ -118,17 +123,10 @@ class OwnerListView(APIView):
                 Q(name__icontains=keyword) | Q(phone__icontains=keyword)
             )
 
-        page = int(request.GET.get("page", 1))
-        page_size = int(request.GET.get("page_size", 10))
-        start = (page - 1) * page_size
-        end = start + page_size
+        page_queryset, page_meta = paginate_queryset(queryset, request)
+        serializer = OwnerSerializer(page_queryset, many=True)
 
-        serializer = OwnerSerializer(
-            queryset[start:end],
-            many=True,
-        )
-
-        return ResponseSuccess(data=serializer.data)
+        return ResponseSuccess(data=build_paginated_data(serializer.data, page_meta))
 
 
 class OwnerUpdateView(APIView):
@@ -156,6 +154,7 @@ class OwnerUpdateView(APIView):
             if not id_card:
                 return ResponseError(msg="身份证不能为空")
 
+            # 这里只做轻量格式校验，完整身份证规则由注册/认证流程负责。
             if not re.match(pattern, id_card):
                 return ResponseError(msg="身份证格式错误")
 
@@ -216,6 +215,7 @@ class OwnerDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):
+        # 删除前先取对象，保证不存在和无权限两类错误能给出明确提示。
         instance = Owner.objects.filter(id=pk).first()
 
         if not instance:

@@ -1420,6 +1420,8 @@ const readSettledList = (result: PromiseSettledResult<any>) => {
     return extractList(result.value?.data?.data)
 }
 
+const WORKBENCH_FETCH_PAGE_SIZE = 100
+
 // 数据加载分块：各角色只请求自己工作台需要的接口，减少无关 401 和慢请求。
 const loadOwnerHomeData = async () => {
     const [
@@ -1433,9 +1435,9 @@ const loadOwnerHomeData = async () => {
     ] = await Promise.allSettled([
         getHouseList(),
         getOwnerList(''),
-        getFeeList({ page_size: 1000 }),
-        getRepairList({ page_size: 1000 }),
-        getComplaintList({ page_size: 1000 }),
+        getFeeList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
+        getRepairList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
+        getComplaintList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
         getNoticeList(),
         getUserInfo(),
     ])
@@ -1459,8 +1461,8 @@ const loadAdminHomeData = async () => {
         noticeResult,
         visitorResult,
     ] = await Promise.allSettled([
-        getRepairList({ page_size: 1000 }),
-        getComplaintList({ page_size: 1000 }),
+        getRepairList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
+        getComplaintList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
         getNoticeList(),
         getVisitorStatistics(),
     ])
@@ -1496,7 +1498,7 @@ const loadFinanceHomeData = async () => {
         }
     })
 
-    const fullFeeRequest = getFeeList({ page_size: 1000 }).then((res) => {
+    const fullFeeRequest = getFeeList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }).then((res) => {
         if (isCurrentRequest()) {
             // 完整结果作为最终权威数据，覆盖快照并驱动图表、今日收款和近期缴费。
             financeFees.value = extractList(res.data?.data)
@@ -1537,7 +1539,7 @@ const handleFeeReminder = async (row: FinanceBillRow) => {
 
 const loadRepairerHomeData = async () => {
     const [repairResult] = await Promise.allSettled([
-        getRepairList({ page_size: 1000 }),
+        getRepairList({ page_size: WORKBENCH_FETCH_PAGE_SIZE }),
     ])
 
     repairerRepairs.value = readSettledList(repairResult)

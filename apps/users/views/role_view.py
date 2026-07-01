@@ -1,16 +1,16 @@
 # 文件说明：处理 apps/users/views/role_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from django.shortcuts import get_object_or_404
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from common.response.response import ResponseSuccess, ResponseError
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.users.models.permission import Permission
 from apps.users.models.role import Role
 from apps.users.serializers.role_serializer import RoleSerializer
 from apps.users.utils.role_access import has_any_role
-
+from common.pagination.base_pagination import build_paginated_data, paginate_queryset
+from common.response.response import ResponseError, ResponseSuccess
 
 RBAC_MANAGE_ROLES = ("admin", "super_admin", "property_admin")
 
@@ -91,14 +91,13 @@ class RoleListView(APIView):
         if not _can_manage_rbac(request.user):
             return _rbac_forbidden_response()
 
-        # 查询全部角色
-        roles = Role.objects.all()
+        # 查询角色列表并分页，避免 RBAC 页面一次性拉取全部角色。
+        roles = Role.objects.all().order_by("id")
 
-        # 序列化
-        serializer = RoleSerializer(roles, many=True)
+        page_queryset, page_meta = paginate_queryset(roles, request)
+        serializer = RoleSerializer(page_queryset, many=True)
 
-        # 返回结果
-        return Response({"code": 200, "data": serializer.data})
+        return Response({"code": 200, "data": build_paginated_data(serializer.data, page_meta)})
 
 
 class RoleDetailView(APIView):

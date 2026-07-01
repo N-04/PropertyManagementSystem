@@ -219,6 +219,6 @@ class PasswordResetSerializer(serializers.Serializer):
 
 
 class LogoutSerializer(serializers.Serializer):
-    """退出登录参数；refresh 可选，兼容只在前端清理 token 的场景。"""
+    """退出登录参数；refresh 必须传入，后端会把它加入黑名单。"""
 
-    refresh = serializers.CharField(required=False, allow_blank=True)
+    refresh = serializers.CharField(required=True, allow_blank=False)
