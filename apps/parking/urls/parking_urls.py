@@ -3,12 +3,12 @@
 from django.urls import path
 
 from apps.parking.views.parking_view import (
+    ParkingBindView,
     ParkingCreateView,
-    ParkingListView,
-    ParkingUpdateView,
     ParkingDeleteView,
     ParkingDetailView,
-    ParkingBindView,
+    ParkingListView,
+    ParkingUpdateView,
 )
 
 urlpatterns = [

@@ -25,6 +25,11 @@ class HouseSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    community = serializers.IntegerField(
+        source="unit.building.community_id",
+        read_only=True,
+    )
+
     created_at = serializers.DateTimeField(
         format="%Y-%m-%d %H:%M:%S",
         read_only=True,

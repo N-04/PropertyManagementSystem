@@ -3,12 +3,12 @@
 from django.urls import path
 
 from apps.repairs.views.repair_view import (
+    RepairAssignView,
     RepairCreateView,
-    RepairListView,
-    RepairUpdateView,
     RepairDeleteView,
     RepairDetailView,
-    RepairAssignView,
+    RepairListView,
+    RepairUpdateView,
 )
 
 urlpatterns = [

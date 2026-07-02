@@ -1,3 +1,5 @@
+# 文件说明：验证工作台统计接口的数据权限边界，避免普通角色看到全局敏感数据。
+
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -9,7 +11,10 @@ from apps.visitors.models import Visitor
 
 
 class VisitorStatisticsPermissionTests(TestCase):
+    """访客统计接口按角色隔离数据：业主只看自己，维修员为空，物业看全局。"""
+
     def setUp(self):
+        # 测试数据分块：构造三个角色和两户业主，覆盖同户/他户访客统计。
         self.client = APIClient()
         owner_role = Role.objects.create(name="业主", code="owner")
         repair_role = Role.objects.create(name="维修员", code="repair_staff")
@@ -84,10 +89,13 @@ class VisitorStatisticsPermissionTests(TestCase):
         )
 
     def get_statistics_as(self, user):
+        # 直接认证测试客户端，避免登录流程影响统计权限断言。
         self.client.force_authenticate(user=user)
         return self.client.get("/api/dashboard/statistics/")
 
     def test_owner_only_gets_own_visitor_statistics(self):
+        """业主只能统计自己名下访客，不能看到其他业主访客。"""
+
         response = self.get_statistics_as(self.owner_user)
 
         self.assertEqual(response.status_code, 200)
@@ -97,6 +105,8 @@ class VisitorStatisticsPermissionTests(TestCase):
         self.assertEqual(response.data["data"]["approved"], 0)
 
     def test_repair_user_gets_empty_visitor_statistics(self):
+        """维修员不参与访客管理，统计接口应返回空数据。"""
+
         response = self.get_statistics_as(self.repair_user)
 
         self.assertEqual(response.status_code, 200)
@@ -104,6 +114,8 @@ class VisitorStatisticsPermissionTests(TestCase):
         self.assertEqual(response.data["data"]["today_count"], 0)
 
     def test_property_admin_can_get_global_visitor_statistics(self):
+        """物业管理员负责访客通行，可以查看全局访客统计。"""
+
         response = self.get_statistics_as(self.property_user)
 
         self.assertEqual(response.status_code, 200)

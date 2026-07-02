@@ -62,6 +62,7 @@ class HouseListView(APIView):
 
     def get(self, request):
         keyword = request.GET.get("keyword", "").strip()
+        community_id = request.GET.get("community")
         profile_select = request.GET.get("profile_select") in {"1", "true", "True"}
         queryset = House.objects.select_related("unit__building__community").all().order_by("-id")
 
@@ -75,6 +76,9 @@ class HouseListView(APIView):
                 queryset = queryset.filter(owners__phone=request.user.phone).distinct()
         elif not is_property_manager_user(request.user):
             queryset = queryset.none()
+
+        if community_id:
+            queryset = queryset.filter(unit__building__community_id=community_id)
 
         if keyword:
             queryset = queryset.filter(

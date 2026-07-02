@@ -2,9 +2,10 @@
 import request from '@/utils/request'
 
 // 单元列表
-export function getUnitList() {
+export function getUnitList(params: any = {}) {
     return request({
         url: '/unit/list/',
         method: 'get',
+        params,
     })
 }

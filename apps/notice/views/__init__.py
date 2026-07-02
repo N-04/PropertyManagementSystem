@@ -2,8 +2,16 @@
 
 from .notice_view import (
     NoticeCreateView,
-    NoticeListView,
-    NoticeUpdateView,
     NoticeDeleteView,
     NoticeDetailView,
+    NoticeListView,
+    NoticeUpdateView,
 )
+
+__all__ = [
+    "NoticeCreateView",
+    "NoticeDeleteView",
+    "NoticeDetailView",
+    "NoticeListView",
+    "NoticeUpdateView",
+]

@@ -1,6 +1,7 @@
 # 文件说明：定义 apps/visitors/models/visitor.py 对应业务的数据模型和数据库映射。
 
 from django.db import models
+
 from apps.owners.models import Owner
 from apps.users.models import User
 

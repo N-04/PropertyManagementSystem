@@ -5,7 +5,9 @@ import { getBuildingList } from '@/api/building'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
+import { getSelectedCommunityParams, useSelectedCommunity } from '@/composables/useSelectedCommunity'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
@@ -17,11 +19,15 @@ const {
     pagedData: pagedTableData,
     resetPage,
 } = useClientPagination(filteredTableData)
+const { selectedCommunityId } = useSelectedCommunity(() => {
+    resetPage()
+    getList()
+})
 
 const getList = async () => {
-    const res = await getBuildingList()
+    const res = await getBuildingList(getSelectedCommunityParams(selectedCommunityId.value))
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 }
 
 const handleFilter = () => {

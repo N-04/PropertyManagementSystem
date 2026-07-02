@@ -1,5 +1,5 @@
 // 文件说明：为本地列表页提供统一的关键字模糊搜索能力。
-import { computed, type Ref } from 'vue'
+import { computed, type ComputedRef, type Ref } from 'vue'
 
 const normalizeValue = (value: unknown) => {
     // 搜索比较统一转小写字符串，兼容数字、空值和后端返回的枚举字段。
@@ -7,7 +7,7 @@ const normalizeValue = (value: unknown) => {
 }
 
 export function useKeywordFilter<T extends Record<string, any>>(
-    source: Ref<T[]>,
+    source: Ref<T[]> | ComputedRef<T[]>,
     keyword: Ref<string>,
     fields: Array<keyof T | string>
 ) {

@@ -6,13 +6,11 @@ from rest_framework.views import APIView
 from apps.notice.models import Notice
 from apps.notice.serializers.notice_serializer import NoticeSerializer
 from apps.users.utils.role_access import has_any_role
-
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 from common.utils.log import save_log
-
 
 NOTICE_PUBLISH_ROLES = (
     "admin",

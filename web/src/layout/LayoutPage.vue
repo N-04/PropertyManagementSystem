@@ -22,6 +22,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { logoutApi } from '@/api/auth'
+import { getCommunityList } from '@/api/community'
 import { getUserMenus, buildDisplayMenusByRole } from '@/api/menu'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
 import { appMenuTitle, fallbackMenus, type AppMenuItem } from '@/menu/fallbackMenus'
@@ -39,6 +40,7 @@ import {
     getStoredRole,
     getStoredUsername,
 } from '@/utils/authState'
+import { extractListRows } from '@/utils/listResponse'
 
 defineOptions({
     name: 'LayoutPage',
@@ -56,8 +58,31 @@ const selectedThirdId = ref('')
 const selectedFunctionTitle = ref('')
 const expandedFirstIds = ref<string[]>([])
 const messageCenterRows = ref<MessageRow[]>(getImmediateMessageRows(role.value))
+const selectedCommunityId = ref(localStorage.getItem('selectedCommunityId') || '')
+const communityOptions = ref([
+    {
+        id: 'default',
+        name: '幸福里小区',
+    },
+])
 let menuLoadRequestId = 0
 let messageLoadRequestId = 0
+
+type RequestError = {
+    response?: {
+        status?: number
+    }
+}
+
+type CommunityRow = {
+    id?: number | string
+    name?: string
+    community_name?: string
+}
+
+const getErrorStatus = (error: unknown) => {
+    return (error as RequestError | undefined)?.response?.status
+}
 
 // 角色展示映射：兼容后端历史角色编码，顶部身份胶囊始终显示中文。
 const roleTitleMap: Record<string, string> = {
@@ -75,6 +100,11 @@ const roleTitleMap: Record<string, string> = {
 const roleTitle = computed(() => roleTitleMap[role.value] || '用户')
 const usernameInitial = computed(() => (username.value || '用').slice(0, 1).toUpperCase())
 const notificationCount = computed(() => messageCenterRows.value.length)
+const selectedCommunityName = computed(() => {
+    return communityOptions.value.find((item) => item.id === selectedCommunityId.value)?.name
+        || communityOptions.value[0]?.name
+        || '幸福里小区'
+})
 
 // 顶部搜索提示按角色切换，避免不同工作台看到无关的业务关键词。
 const searchPlaceholder = computed(() => {
@@ -408,12 +438,12 @@ const loadMenus = async () => {
 
         // 后端菜单还没配置时，使用本地菜单，并根据角色过滤
         menuItems.value = buildFallbackMenusForRole(requestRole)
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (!acceptCurrentMenuRequest()) {
             return
         }
 
-        const status = error?.response?.status
+        const status = getErrorStatus(error)
 
         if (status === 401 || status === 403) {
             menuItems.value = []
@@ -452,6 +482,45 @@ const loadNotificationMessages = async () => {
     }
 
     messageCenterRows.value = rows
+}
+
+const loadCommunities = async () => {
+    // 顶部小区下拉分块：后端可用时展示真实小区，失败时保留默认演示项。
+    try {
+        const res = await getCommunityList({ page_size: 20 })
+        const rows = extractListRows<CommunityRow>(res.data.data)
+        const options = rows
+            .map((item) => ({
+                id: item.id == null ? '' : String(item.id),
+                name: item.name || item.community_name || '未命名小区',
+            }))
+            .filter((item) => item.id && item.name)
+
+        if (options.length) {
+            communityOptions.value = options
+        }
+    } catch {
+        communityOptions.value = communityOptions.value.length
+            ? communityOptions.value
+            : [{ id: 'default', name: '幸福里小区' }]
+    }
+
+    if (!communityOptions.value.some((item) => item.id === selectedCommunityId.value)) {
+        selectedCommunityId.value = communityOptions.value[0]?.id || 'default'
+        localStorage.setItem('selectedCommunityId', selectedCommunityId.value)
+    }
+}
+
+const handleCommunityCommand = (id: string) => {
+    // 先记录当前选择，其他页面后续需要按小区过滤时可监听这个事件。
+    selectedCommunityId.value = id
+    localStorage.setItem('selectedCommunityId', id)
+    window.dispatchEvent(new CustomEvent('property-management-community-changed', {
+        detail: {
+            id,
+            name: selectedCommunityName.value,
+        },
+    }))
 }
 
 const reloadMenusForCurrentRole = () => {
@@ -535,6 +604,7 @@ useRealtimeRefresh(
 onMounted(() => {
     window.addEventListener(AUTH_STATE_CHANGED_EVENT, refreshLayoutAuthState)
     loadMenus()
+    loadCommunities()
 })
 
 onBeforeUnmount(() => {
@@ -611,11 +681,28 @@ watch(
 
         <main class="layout-main">
             <header class="layout-header">
-                <div class="community-select">
-                    <el-icon><OfficeBuilding /></el-icon>
-                    <span>幸福里小区</span>
-                    <el-icon class="community-arrow"><ArrowDown /></el-icon>
-                </div>
+                <el-dropdown
+                    trigger="click"
+                    popper-class="community-select-popper"
+                    @command="handleCommunityCommand"
+                >
+                    <button type="button" class="community-select">
+                        <el-icon><OfficeBuilding /></el-icon>
+                        <span>{{ selectedCommunityName }}</span>
+                        <el-icon class="community-arrow"><ArrowDown /></el-icon>
+                    </button>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item
+                                v-for="item in communityOptions"
+                                :key="item.id"
+                                :command="item.id"
+                            >
+                                {{ item.name }}
+                            </el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
 
                 <div class="global-search">
                     <el-icon><Search /></el-icon>
@@ -910,18 +997,45 @@ watch(
     border-radius: 6px;
     color: var(--text-subtle);
     background: var(--surface-card);
+    cursor: pointer;
     font-size: 14px;
     font-weight: 400;
     line-height: 22px;
+    text-align: left;
+    transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 .community-select .el-icon:first-child {
     color: var(--text-muted);
 }
 
+.community-select:hover,
+.community-select:focus-visible {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+    outline: none;
+}
+
+.community-select:hover .el-icon,
+.community-select:focus-visible .el-icon {
+    color: var(--brand-primary);
+}
+
 .community-arrow {
     margin-left: auto;
     font-size: 13px;
+}
+
+:global(.community-select-popper .el-dropdown-menu__item) {
+    color: var(--text-subtle);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+:global(.community-select-popper .el-dropdown-menu__item:hover),
+:global(.community-select-popper .el-dropdown-menu__item:focus) {
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
 }
 
 .global-search {

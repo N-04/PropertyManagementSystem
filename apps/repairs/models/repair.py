@@ -1,9 +1,10 @@
 # 文件说明：定义 apps/repairs/models/repair.py 对应业务的数据模型和数据库映射。
 
 from django.db import models
-from apps.users.models import User
+
 from apps.community.models import House
 from apps.owners.models import Owner
+from apps.users.models import User
 
 
 class Repair(models.Model):

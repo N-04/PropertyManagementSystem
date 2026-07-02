@@ -1,3 +1,3 @@
 # 文件说明：声明 Python 包，便于模块被项目导入。
 
-from .upload_url import urlpatterns
+from .upload_url import urlpatterns as urlpatterns

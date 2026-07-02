@@ -2,8 +2,16 @@
 
 from .fee_view import (
     FeeCreateView,
-    FeeListView,
-    FeeUpdateView,
     FeeDeleteView,
+    FeeListView,
     FeeReminderView,
+    FeeUpdateView,
 )
+
+__all__ = [
+    "FeeCreateView",
+    "FeeDeleteView",
+    "FeeListView",
+    "FeeReminderView",
+    "FeeUpdateView",
+]

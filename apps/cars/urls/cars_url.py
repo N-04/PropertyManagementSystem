@@ -4,12 +4,12 @@ from django.urls import path
 
 from apps.cars.views import (
     CarCreateView,
-    CarListView,
-    CarUpdateView,
     CarDeleteView,
     CarDetailView,
     CarDisableView,
     CarEnableView,
+    CarListView,
+    CarUpdateView,
 )
 
 urlpatterns = [

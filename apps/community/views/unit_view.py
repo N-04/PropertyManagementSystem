@@ -1,16 +1,15 @@
 # 文件说明：处理 apps/community/views/unit_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.community.models import Unit
 from apps.community.serializers.unit_serializer import UnitSerializer
 from apps.users.utils.role_access import is_property_manager_user
-
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 
 
@@ -50,8 +49,12 @@ class UnitListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        community_id = request.GET.get("community")
 
-        queryset = Unit.objects.all().order_by("-id")
+        queryset = Unit.objects.select_related("building__community").all().order_by("-id")
+
+        if community_id:
+            queryset = queryset.filter(building__community_id=community_id)
 
         serializer = UnitSerializer(
             queryset,

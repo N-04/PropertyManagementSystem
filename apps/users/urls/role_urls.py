@@ -7,8 +7,8 @@ from apps.users.views.role_view import (
     RoleDeleteView,
     RoleDetailView,
     RoleListView,
-    RoleUpdateView,
     RolePermissionAssignView,
+    RoleUpdateView,
 )
 
 urlpatterns = [

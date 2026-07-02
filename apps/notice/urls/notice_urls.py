@@ -4,10 +4,10 @@ from django.urls import path
 
 from apps.notice.views import (
     NoticeCreateView,
-    NoticeListView,
-    NoticeUpdateView,
     NoticeDeleteView,
     NoticeDetailView,
+    NoticeListView,
+    NoticeUpdateView,
 )
 
 urlpatterns = [

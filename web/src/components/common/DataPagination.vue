@@ -10,11 +10,13 @@ const props = withDefaults(
         pageSizes?: number[]
         background?: boolean
         layout?: string
+        hideOnSinglePage?: boolean
     }>(),
     {
         pageSizes: () => [5, 10, 20, 50],
         background: true,
         layout: 'total, sizes, prev, pager, next, jumper',
+        hideOnSinglePage: true,
     }
 )
 
@@ -32,6 +34,7 @@ const lastPage = computed(() => {
 
 const isFirstPage = computed(() => props.currentPage <= 1)
 const isLastPage = computed(() => props.currentPage >= lastPage.value)
+const shouldShow = computed(() => !props.hideOnSinglePage || props.total > props.pageSize)
 const paginationLayout = computed(() => {
     return props.layout
         .split(',')
@@ -82,7 +85,7 @@ const goLastPage = () => {
 </script>
 
 <template>
-    <div class="data-pagination">
+    <div v-if="shouldShow" class="data-pagination">
         <el-button size="small" :disabled="isFirstPage" @click="goFirstPage">首页</el-button>
 
         <span class="pagination-total">共 {{ total }} 条</span>

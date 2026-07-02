@@ -1,6 +1,6 @@
 # 文件说明：声明 Python 包，便于模块被项目导入。
 
-from .fee_serializer import *
+from .fee_serializer import FeeSerializer
 
 __all__ = [
     "FeeSerializer",

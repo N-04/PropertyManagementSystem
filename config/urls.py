@@ -6,15 +6,15 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
-    path("admin/", admin.site.urls),  # 用户认证
+    path("admin/", admin.site.urls),  # Django 管理后台入口。
     # 认证路由使用 /api/auth/ 作为唯一前端调用前缀。
     path("api/auth/", include("apps.users.urls.auth_urls")),
+    # RBAC 分块：菜单、权限、角色和用户管理按资源独立挂载。
     path("api/menu/", include("apps.users.urls.menu_urls")),
-    # 公告管理
     path(
         "api/notice/",
         include("apps.notice.urls"),
-    ),
+    ),  # 公告管理接口。
     path("api/permission/", include("apps.users.urls.permission_urls")),
     path("api/role/", include("apps.users.urls.role_urls")),
     path("api/user/", include("apps.users.urls.user_urls")),
@@ -49,12 +49,11 @@ urlpatterns = [
     path(
         "api/dashboard/",
         include("apps.dashboard.urls"),
-    ),
-    # 日志
+    ),  # 首页工作台和统计接口。
     path(
         "api/log/",
         include("apps.logs.urls"),
-    ),
+    ),  # 操作日志和登录日志接口。
     # 上传接口内部使用 upload/ 前缀，统一挂在 /api/upload/。
     path(
         "api/",
@@ -63,19 +62,18 @@ urlpatterns = [
     path(
         "api/visitor/",
         include("apps.visitors.urls.visitor_url"),
-    ),
+    ),  # 访客通行接口。
     path(
         "api/complaint/",
         include("apps.complaints.urls.complaint_urls"),
-    ),
+    ),  # 投诉建议接口。
     path(
         "api/chat/",
         include("apps.chat.urls"),
-    ),
+    ),  # 角色消息会话接口。
 ]
 
-# 开发环境文件访问
-
+# 开发环境文件访问分块：DEBUG 下让浏览器能访问本地上传的媒体文件。
 urlpatterns += static(
     settings.MEDIA_URL,
     document_root=settings.MEDIA_ROOT,

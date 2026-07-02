@@ -1,3 +1,5 @@
 # 文件说明：声明 Python 包，便于模块被项目导入。
 
-from .parking import *
+from .parking import Parking
+
+__all__ = ["Parking"]

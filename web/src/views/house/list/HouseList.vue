@@ -3,6 +3,7 @@
 import { onMounted, ref } from 'vue'
 import { getHouseList } from '@/api/house'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
+import { getSelectedCommunityParams, useSelectedCommunity } from '@/composables/useSelectedCommunity'
 import DataPagination from '@/components/common/DataPagination.vue'
 
 const tableData = ref<any[]>([])
@@ -10,12 +11,17 @@ const keyword = ref('')
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const { selectedCommunityId } = useSelectedCommunity(() => {
+    page.value = 1
+    getList()
+})
 
 /**
  * 获取房屋列表
  */
 const getList = async () => {
     const res = await getHouseList({
+        ...getSelectedCommunityParams(selectedCommunityId.value),
         keyword: keyword.value,
         page: page.value,
         page_size: pageSize.value,

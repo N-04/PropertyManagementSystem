@@ -4,9 +4,9 @@ from django.urls import path
 
 from apps.community.views.house_view import (
     HouseCreateView,
+    HouseDeleteView,
     HouseListView,
     HouseUpdateView,
-    HouseDeleteView,
 )
 
 urlpatterns = [

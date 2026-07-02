@@ -2,11 +2,11 @@
 
 from django.urls import path
 
-from apps.logs.views.operation_log_view import (
-    OperationLogListView,
-)
 from apps.logs.views.operation_log_export_view import (
     OperationLogExportView,
+)
+from apps.logs.views.operation_log_view import (
+    OperationLogListView,
 )
 
 urlpatterns = [

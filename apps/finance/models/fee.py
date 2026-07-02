@@ -1,8 +1,9 @@
 # 文件说明：定义 apps/finance/models/fee.py 对应业务的数据模型和数据库映射。
 
 from django.db import models
-from apps.owners.models import Owner
+
 from apps.community.models import House
+from apps.owners.models import Owner
 
 
 class Fee(models.Model):

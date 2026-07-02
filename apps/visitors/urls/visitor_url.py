@@ -3,14 +3,14 @@
 from django.urls import path
 
 from apps.visitors.views.visitor_view import (
+    VisitorApproveView,
     VisitorCreateView,
-    VisitorListView,
-    VisitorUpdateView,
     VisitorDeleteView,
     VisitorDetailView,
-    VisitorApproveView,
     VisitorEnterView,
     VisitorLeaveView,
+    VisitorListView,
+    VisitorUpdateView,
 )
 
 urlpatterns = [

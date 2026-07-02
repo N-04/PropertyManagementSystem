@@ -1,28 +1,26 @@
 # 文件说明：提供 Django 管理命令，用于维护或生成项目数据。
 
-from datetime import datetime
-from decimal import Decimal
 import random
 import string
+from datetime import datetime
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
-
 from faker import Faker
 
-from apps.community.models.community import Community
+from apps.cars.models import Car
 from apps.community.models.building import Building
-from apps.community.models.unit import Unit
+from apps.community.models.community import Community
 from apps.community.models.house import House
-
+from apps.community.models.unit import Unit
+from apps.finance.models.fee import Fee
 from apps.owners.models.owner import Owner
 from apps.owners.services.owner_account_service import ensure_owner_login_user
 from apps.parking.models.parking import Parking
-from apps.cars.models import Car
 from apps.visitors.models.visitor import Visitor
-from apps.finance.models.fee import Fee
 
 fake = Faker("zh_CN")
 

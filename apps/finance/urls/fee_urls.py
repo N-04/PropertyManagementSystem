@@ -4,11 +4,11 @@ from django.urls import path
 
 from apps.finance.views.fee_view import (
     FeeCreateView,
-    FeeListView,
-    FeeUpdateView,
     FeeDeleteView,
+    FeeListView,
     FeePayView,
     FeeReminderView,
+    FeeUpdateView,
 )
 
 urlpatterns = [

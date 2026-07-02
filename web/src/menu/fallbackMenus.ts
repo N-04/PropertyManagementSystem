@@ -49,7 +49,6 @@ export const fallbackMenus: AppMenuItem[] = [
         ]),
         item('admin-parking', '车位管理', undefined, [
             item('admin-owner-parking', '业主车位', '/parking/list?parking_view=owner'),
-            item('admin-visitor-parking', '访客临停', '/parking/list?parking_view=visitor'),
             item('admin-car-list', '车辆管理', '/car/list'),
         ]),
         item('admin-repair', '工单中心', undefined, [

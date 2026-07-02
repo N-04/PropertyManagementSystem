@@ -279,9 +279,11 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# 生产安全分块：开发和测试环境如需 HTTP 本地访问，可显式关闭对应环境变量。
+# 生产安全分块：开发和测试环境允许本地 HTTP，生产环境强制 HTTPS 跳转。
 secure_default = not DEBUG and not IS_TESTING
-SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=secure_default)
+SECURE_SSL_REDIRECT = (
+    True if secure_default else env_bool("DJANGO_SECURE_SSL_REDIRECT", default=False)
+)
 SECURE_HSTS_SECONDS = int(
     os.environ.get("DJANGO_SECURE_HSTS_SECONDS", 31536000 if secure_default else 0)
 )

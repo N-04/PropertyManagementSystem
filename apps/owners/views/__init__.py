@@ -2,7 +2,14 @@
 
 from .owner_view import (
     OwnerCreateView,
+    OwnerDeleteView,
     OwnerListView,
     OwnerUpdateView,
-    OwnerDeleteView,
 )
+
+__all__ = [
+    "OwnerCreateView",
+    "OwnerDeleteView",
+    "OwnerListView",
+    "OwnerUpdateView",
+]

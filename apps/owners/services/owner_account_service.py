@@ -9,7 +9,6 @@ from django.contrib.auth import get_user_model
 from apps.owners.models import Owner
 from apps.users.models.role import Role
 
-
 PASSWORD_SPECIAL_CHARS = "@#$%&*?"
 
 

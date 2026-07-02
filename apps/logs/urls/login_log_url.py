@@ -2,8 +2,8 @@
 
 from django.urls import path
 
-from apps.logs.views.login_log_view import LoginLogListView
 from apps.logs.views.login_log_export_view import LoginLogExportView
+from apps.logs.views.login_log_view import LoginLogListView
 
 urlpatterns = [
     # 登录日志列表

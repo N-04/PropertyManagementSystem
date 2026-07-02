@@ -15,6 +15,16 @@ class UnitSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    community = serializers.IntegerField(
+        source="building.community_id",
+        read_only=True,
+    )
+
+    community_name = serializers.CharField(
+        source="building.community.name",
+        read_only=True,
+    )
+
     created_at = serializers.DateTimeField(
         format="%Y-%m-%d %H:%M:%S",
         read_only=True,

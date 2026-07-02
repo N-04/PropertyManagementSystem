@@ -4,11 +4,15 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from rest_framework import serializers
 
 from apps.community.models import House
+from apps.owners.models import Owner
 from apps.users.models.user import User
 from apps.users.serializers.role_serializer import RoleSerializer
-from apps.users.utils.validators import mask_id_card, validate_password_strength, validate_phone_format
 from apps.users.utils.role_access import is_owner_user
-from apps.owners.models import Owner
+from apps.users.utils.validators import (
+    mask_id_card,
+    validate_password_strength,
+    validate_phone_format,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):

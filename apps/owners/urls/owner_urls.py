@@ -4,10 +4,10 @@ from django.urls import path
 
 from apps.owners.views.owner_view import (
     OwnerCreateView,
-    OwnerListView,
-    OwnerUpdateView,
     OwnerDeleteView,
     OwnerDetailView,
+    OwnerListView,
+    OwnerUpdateView,
 )
 
 urlpatterns = [

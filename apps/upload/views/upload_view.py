@@ -1,25 +1,17 @@
 # 文件说明：处理 apps/upload/views/upload_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 import logging
-
 import os
-
 import uuid
 
 from django.conf import settings
-
-from PIL import Image
-
-from PIL import ImageDraw
-
-from PIL import ImageFont
-
+from PIL import Image, ImageDraw, ImageFont
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from common.response.response import (
-    ResponseSuccess,
     ResponseError,
+    ResponseSuccess,
 )
 
 logger = logging.getLogger(__name__)

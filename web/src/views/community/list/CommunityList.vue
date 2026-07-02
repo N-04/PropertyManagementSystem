@@ -1,16 +1,21 @@
 <!-- 文件说明：实现 src/views/community/list/CommunityList.vue 对应业务页面的展示、表单和交互逻辑。 -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { getCommunityList } from '@/api/community'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
+import { matchesSelectedCommunity, useSelectedCommunity } from '@/composables/useSelectedCommunity'
 import DataPagination from '@/components/common/DataPagination.vue'
 import { extractListRows } from '@/utils/listResponse'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
-const filteredTableData = useKeywordFilter(tableData, keyword, ['name', 'address'])
+const { selectedCommunityId } = useSelectedCommunity(() => resetPage())
+const communityRows = computed(() => {
+    return tableData.value.filter((item) => matchesSelectedCommunity(item, selectedCommunityId.value, ['id']))
+})
+const filteredTableData = useKeywordFilter(communityRows, keyword, ['name', 'address'])
 const {
     page,
     pageSize,

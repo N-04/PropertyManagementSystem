@@ -76,6 +76,15 @@ const submitForm = async () => {
     router.push('/car/list')
 }
 
+const goBack = () => {
+    if (window.history.length > 1) {
+        router.back()
+        return
+    }
+
+    router.push('/car/list')
+}
+
 onMounted(() => {
     loadOwnerList()
     loadParkingList()
@@ -86,7 +95,10 @@ onMounted(() => {
 <template>
     <el-card>
         <template #header>
-            <span>修改车辆信息</span>
+            <div class="card-header">
+                <span>修改车辆信息</span>
+                <el-button @click="goBack">返回</el-button>
+            </div>
         </template>
 
         <el-form :model="form" label-width="120px" style="max-width: 700px">
@@ -141,3 +153,11 @@ onMounted(() => {
         </el-form>
     </el-card>
 </template>
+
+<style scoped>
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+</style>

@@ -9,10 +9,9 @@ from django.urls import path
 # =====================================================
 # 导入视图
 # =====================================================
-
 from apps.users.views.permission_view import (
-    PermissionListView,
     PermissionCreateView,
+    PermissionListView,
     PermissionTreeView,
 )
 

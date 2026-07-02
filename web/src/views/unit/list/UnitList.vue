@@ -5,11 +5,13 @@ import { getUnitList } from '@/api/unit'
 import { useClientPagination } from '@/composables/useClientPagination'
 import { useKeywordFilter } from '@/composables/useKeywordFilter'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh'
+import { getSelectedCommunityParams, useSelectedCommunity } from '@/composables/useSelectedCommunity'
 import DataPagination from '@/components/common/DataPagination.vue'
+import { extractListRows } from '@/utils/listResponse'
 
 const tableData = ref<any[]>([])
 const keyword = ref('')
-const filteredTableData = useKeywordFilter(tableData, keyword, ['building_name', 'name', 'code'])
+const filteredTableData = useKeywordFilter(tableData, keyword, ['community_name', 'building_name', 'name', 'code'])
 const {
     page,
     pageSize,
@@ -17,11 +19,15 @@ const {
     pagedData: pagedTableData,
     resetPage,
 } = useClientPagination(filteredTableData)
+const { selectedCommunityId } = useSelectedCommunity(() => {
+    resetPage()
+    getList()
+})
 
 const getList = async () => {
-    const res = await getUnitList()
+    const res = await getUnitList(getSelectedCommunityParams(selectedCommunityId.value))
 
-    tableData.value = res.data.data
+    tableData.value = extractListRows(res.data.data)
 }
 
 const handleFilter = () => {
@@ -55,7 +61,7 @@ useRealtimeRefresh(getList, {
             <el-input
                 v-model="keyword"
                 clearable
-                placeholder="楼栋/单元/编码"
+                placeholder="小区/楼栋/单元/编码"
                 style="width: 260px"
                 @keyup.enter="handleFilter"
                 @clear="handleFilter"
@@ -68,6 +74,8 @@ useRealtimeRefresh(getList, {
             <el-table-column prop="id" label="ID" />
 
             <el-table-column prop="building_name" label="所属楼栋" />
+
+            <el-table-column prop="community_name" label="所属小区" />
 
             <el-table-column prop="name" label="单元名称" />
 

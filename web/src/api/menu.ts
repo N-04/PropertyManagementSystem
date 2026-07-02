@@ -95,6 +95,7 @@ const hiddenMenuIds = [
     'message',
     'file-oss',
     'file-security',
+    'admin-visitor-parking',
 ]
 
 const adminRoles = ['admin', 'super_admin', 'property_admin']
@@ -150,7 +151,6 @@ const adminDisplayMenus = (): AppMenuItem[] => {
         ]),
         groupMenu('admin-parking', '车位管理', [
             leafMenu('admin-owner-parking', '业主车位', '/parking/list?parking_view=owner'),
-            leafMenu('admin-visitor-parking', '访客临停', '/parking/list?parking_view=visitor'),
             leafMenu('admin-car-list', '车辆管理', '/car/list'),
         ]),
         groupMenu('admin-repair', '工单中心', [

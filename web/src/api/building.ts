@@ -2,10 +2,11 @@
 import request from '@/utils/request'
 
 // 楼栋列表
-export function getBuildingList() {
+export function getBuildingList(params: any = {}) {
     return request({
         url: '/building/list/',
         method: 'get',
+        params,
     })
 }
 

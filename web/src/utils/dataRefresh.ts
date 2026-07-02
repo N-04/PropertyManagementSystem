@@ -4,11 +4,15 @@ export const DATA_REFRESH_EVENT = 'property-management-data-refresh'
 export const DATA_REFRESH_STORAGE_KEY = 'propertyManagementDataRefresh'
 
 export type DataRefreshDetail = {
+    // scope 标识业务域，例如 fees、repairs、dashboard。
     scope: string
+    // source 标识触发来源，便于排查是手动刷新还是写操作广播。
     source: string
+    // version 每次变化，保证跨标签页 storage 事件稳定触发。
     version: string
 }
 
+// 刷新广播分块：当前标签页用 CustomEvent，其他标签页用 localStorage 同步。
 export const emitDataRefresh = (scope = 'all', source = 'manual', persist = true) => {
     // SSR 或测试环境没有 window 时直接跳过广播。
     if (typeof window === 'undefined') {
@@ -36,6 +40,7 @@ export const emitDataRefresh = (scope = 'all', source = 'manual', persist = true
     }
 }
 
+// 作用域匹配分块：页面声明自己关心的业务域，只响应相关刷新。
 export const dataRefreshScopeMatches = (targetScopes: string[], scope = 'all') => {
     // all 是全局刷新；页面声明 all 时也接收任意业务域刷新。
     return scope === 'all' || targetScopes.includes('all') || targetScopes.includes(scope)

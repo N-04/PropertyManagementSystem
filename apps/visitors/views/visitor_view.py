@@ -25,6 +25,8 @@ def _can_manage_visitor(user):
 
 
 def _owner_for_user(user):
+    """按登录用户手机号查找业主资料，业主端数据隔离依赖这个映射。"""
+
     if not is_owner_user(user) or not getattr(user, "phone", ""):
         return None
 
@@ -32,9 +34,12 @@ def _owner_for_user(user):
 
 
 def _can_access_visitor(user, visitor):
+    """校验当前用户是否可以查看指定访客记录。"""
+
     if _can_manage_visitor(user):
         return True
 
+    # 业主只能访问自己名下的访客，避免看到其他房屋访客记录。
     owner = _owner_for_user(user)
     return bool(owner and visitor.owner_id == owner.id)
 
@@ -47,6 +52,7 @@ class VisitorCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 复制请求体后再补默认字段，避免直接修改 request.data。
         payload = request.data.copy()
 
         if is_owner_user(request.user):
@@ -92,10 +98,12 @@ class VisitorListView(APIView):
 
     def get(self, request):
 
+        # 筛选参数分块：keyword 做模糊搜索，status 做精确过滤。
         keyword = (request.GET.get("keyword") or "").strip()
         status = (request.GET.get("status") or "").strip()
         queryset = Visitor.objects.select_related("owner", "approve_user").all().order_by("-id")
 
+        # 数据权限分块：业主只看自己的访客，非管理角色不返回访客数据。
         if is_owner_user(request.user):
             owner = _owner_for_user(request.user)
             queryset = queryset.filter(owner=owner) if owner else queryset.none()
@@ -115,6 +123,7 @@ class VisitorListView(APIView):
             # 状态筛选下沉到数据库层，避免前端为了筛选而一次性拉取大量访客记录。
             queryset = queryset.filter(status=status)
 
+        # 分页分块：返回 results/count/page，前端表格不再做本地分页。
         page_queryset, page_meta = paginate_queryset(queryset, request)
         serializer = VisitorSerializer(page_queryset, many=True)
 

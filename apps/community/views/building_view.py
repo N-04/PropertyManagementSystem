@@ -1,13 +1,13 @@
 # 文件说明：处理 apps/community/views/building_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.community.models import Building
 from apps.community.serializers.building_serializer import BuildingSerializer
 from apps.users.utils.role_access import is_property_manager_user
-from rest_framework.response import Response
-from common.response.response import ResponseSuccess, ResponseError
+from common.response.response import ResponseError, ResponseSuccess
 
 
 class BuildingCreateView(APIView):
@@ -41,8 +41,12 @@ class BuildingListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        community_id = request.GET.get("community")
 
-        queryset = Building.objects.all().order_by("-id")
+        queryset = Building.objects.select_related("community").all().order_by("-id")
+
+        if community_id:
+            queryset = queryset.filter(community_id=community_id)
 
         serializer = BuildingSerializer(
             queryset,
