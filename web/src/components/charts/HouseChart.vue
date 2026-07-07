@@ -17,6 +17,7 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement>()
 let chart: echarts.ECharts | null = null
 
+// 图表渲染分块：把后端统计值转换成柱状图四个资源维度。
 const renderChart = () => {
     if (!chartRef.value) {
         return
@@ -60,6 +61,7 @@ const renderChart = () => {
                     position: 'top',
                     formatter: '{c}',
                 },
+                // 数据顺序要和 xAxis 文案保持一致，避免统计项错位。
                 data: [
                     Number(props.dashboardData.house_count || 0),
                     Number(props.dashboardData.owner_count || 0),
@@ -71,6 +73,7 @@ const renderChart = () => {
     })
 }
 
+// 生命周期分块：窗口尺寸变化时同步刷新 ECharts 画布。
 const resizeChart = () => {
     chart?.resize()
 }

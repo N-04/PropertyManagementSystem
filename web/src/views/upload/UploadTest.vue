@@ -6,6 +6,7 @@ import Upload from './Upload.vue'
 
 const imageUrl = ref('')
 
+// 上传验证分块：测试页只记录最近一次上传路径，用于快速确认媒体地址可预览。
 const handleUploadSuccess = (url: string) => {
     imageUrl.value = url
 }
@@ -13,10 +14,12 @@ const handleUploadSuccess = (url: string) => {
 
 <template>
     <el-card>
+        <!-- 上传组件分块：复用正式上传组件，便于联调文件接口。 -->
         <Upload @success="handleUploadSuccess" />
 
         <br />
 
+        <!-- 预览分块：上传成功后展示后端返回文件的可访问地址。 -->
         <img v-if="imageUrl" :src="toMediaURL(imageUrl)" width="300" />
     </el-card>
 </template>

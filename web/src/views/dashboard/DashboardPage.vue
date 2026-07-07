@@ -1708,7 +1708,7 @@ useRealtimeRefresh(refreshDashboardData, {
                             <span>待验收 2</span>
                         </div>
 
-                        <table class="data-table">
+                        <table class="data-table admin-work-table">
                             <thead>
                                 <tr>
                                     <th>工单号</th>
@@ -2443,7 +2443,7 @@ useRealtimeRefresh(refreshDashboardData, {
 .workbench {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
 }
 
 .workbench-heading {
@@ -2456,9 +2456,9 @@ useRealtimeRefresh(refreshDashboardData, {
 .workbench-heading h1 {
     margin: 0;
     color: var(--text-heading);
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
-    line-height: 32px;
+    line-height: 36px;
 }
 
 .workbench-heading p {
@@ -2508,36 +2508,36 @@ useRealtimeRefresh(refreshDashboardData, {
     gap: 8px;
     min-height: 42px;
     padding: 0 22px;
-    border-radius: 6px;
+    border-radius: 8px;
     color: #fff;
     font-size: 14px;
     font-weight: 600;
     line-height: 20px;
-    box-shadow: 0 8px 16px rgba(15, 118, 110, 0.14);
+    box-shadow: var(--shadow-active);
 }
 
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 18px;
 }
 
 .metric-card,
 .panel,
 .owner-card,
 .owner-hero {
-    border: 1px solid #e4e7ed;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.04);
+    background: var(--surface-card);
+    box-shadow: var(--shadow-panel);
 }
 
 .metric-card {
     display: flex;
     align-items: center;
     gap: 18px;
-    min-height: 112px;
-    padding: 20px;
+    min-height: 122px;
+    padding: 22px;
 }
 
 .metric-icon {
@@ -2630,7 +2630,7 @@ useRealtimeRefresh(refreshDashboardData, {
 .solid-mini,
 .primary-wide,
 .filter-line button {
-    background: linear-gradient(135deg, #0f766e, #0b625b);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-hover));
 }
 
 .quick-action.tone-blue {
@@ -2647,7 +2647,7 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .workbench-grid {
     display: grid;
-    gap: 16px;
+    gap: 18px;
     align-items: start;
     min-width: 0;
 }
@@ -2665,7 +2665,7 @@ useRealtimeRefresh(refreshDashboardData, {
     min-width: 0;
     align-self: start;
     flex-direction: column;
-    gap: 16px;
+    gap: 18px;
 }
 
 .admin-chart-grid {
@@ -2674,20 +2674,20 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .admin-chart-panel {
     display: flex;
-    min-height: 470px;
+    min-height: 500px;
     flex-direction: column;
 }
 
 .admin-chart-panel :deep(.chart-container) {
     flex: 1;
     width: 100%;
-    height: auto;
-    min-height: 400px;
+    height: 100%;
+    min-height: 430px;
 }
 
 .panel {
     min-width: 0;
-    padding: 16px;
+    padding: 18px;
 }
 
 .main-panel {
@@ -2699,7 +2699,7 @@ useRealtimeRefresh(refreshDashboardData, {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
 }
 
 .panel-header h2 {
@@ -2722,16 +2722,16 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .filter-line span {
     min-width: 92px;
-    padding: 8px 12px;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    background: #fff;
+    padding: 9px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-card);
 }
 
 .filter-line button {
     min-width: 58px;
-    height: 34px;
-    border-radius: 6px;
+    height: 38px;
+    border-radius: 8px;
     color: #fff;
 }
 
@@ -2744,11 +2744,11 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .tab-row span,
 .tab-row button {
-    padding: 7px 16px;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
+    padding: 8px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
     color: var(--text-subtle);
-    background: #f8fafc;
+    background: var(--surface-muted);
     font-size: 13px;
     font-family: inherit;
     line-height: 20px;
@@ -2781,8 +2781,8 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .data-table th,
 .data-table td {
-    padding: 12px 10px;
-    border-bottom: 1px solid #eef1f5;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border-soft);
     text-align: left;
     white-space: nowrap;
 }
@@ -2796,7 +2796,7 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .data-table th {
     color: var(--text-subtle);
-    background: #f8fafc;
+    background: var(--surface-muted);
     font-size: 13px;
     font-weight: 600;
     line-height: 20px;
@@ -2806,6 +2806,55 @@ useRealtimeRefresh(refreshDashboardData, {
     padding: 28px 12px;
     color: var(--text-muted);
     text-align: center;
+}
+
+/* 管理员待办工单分块：固定列宽并截断长处理人账号，避免挤压右侧栏。 */
+.admin-work-table {
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.admin-work-table th,
+.admin-work-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-work-table th:nth-child(1),
+.admin-work-table td:nth-child(1) {
+    width: 18%;
+}
+
+.admin-work-table th:nth-child(2),
+.admin-work-table td:nth-child(2) {
+    width: 7%;
+}
+
+.admin-work-table th:nth-child(3),
+.admin-work-table td:nth-child(3) {
+    width: 15%;
+}
+
+.admin-work-table th:nth-child(4),
+.admin-work-table td:nth-child(4) {
+    width: 17%;
+}
+
+.admin-work-table th:nth-child(5),
+.admin-work-table td:nth-child(5),
+.admin-work-table th:nth-child(6),
+.admin-work-table td:nth-child(6) {
+    width: 10%;
+}
+
+.admin-work-table th:nth-child(7),
+.admin-work-table td:nth-child(7) {
+    width: 13%;
+}
+
+.admin-work-table th:nth-child(8),
+.admin-work-table td:nth-child(8) {
+    width: 10%;
 }
 
 .status-pill {
@@ -2902,7 +2951,7 @@ useRealtimeRefresh(refreshDashboardData, {
     min-width: 0;
     align-self: start;
     flex-direction: column;
-    gap: 14px;
+    gap: 18px;
 }
 
 .compact-list,
@@ -2926,7 +2975,7 @@ useRealtimeRefresh(refreshDashboardData, {
     align-items: center;
     gap: 8px;
     min-height: 34px;
-    border-bottom: 1px solid #eef1f5;
+    border-bottom: 1px solid var(--border-soft);
     color: var(--text-muted);
     font-size: 13px;
     font-weight: 400;
@@ -3002,7 +3051,7 @@ useRealtimeRefresh(refreshDashboardData, {
     align-items: center;
     gap: 8px;
     min-height: 36px;
-    border-bottom: 1px solid #eef1f5;
+    border-bottom: 1px solid var(--border-soft);
     font-size: 13px;
 }
 
@@ -3021,7 +3070,7 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .bottom-grid {
     display: grid;
-    gap: 16px;
+    gap: 18px;
     align-items: stretch;
 }
 

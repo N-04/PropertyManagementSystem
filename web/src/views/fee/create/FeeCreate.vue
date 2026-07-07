@@ -17,6 +17,7 @@ const form = ref({
     remark: '',
 })
 
+// 数据源分块：费用账单需要先加载房屋列表，供新增账单绑定到具体房屋。
 const houseList = ref<any[]>([])
 
 const loadHouseList = async () => {
@@ -25,6 +26,7 @@ const loadHouseList = async () => {
     houseList.value = res.data.data
 }
 
+// 提交分块：创建成功后回到费用列表，并重置本地表单避免残留输入。
 const submitForm = async () => {
     await createFee(form.value)
 
@@ -48,6 +50,7 @@ onMounted(() => {
 </script>
 
 <template>
+    <!-- 表单分块：录入房屋、费用类型、月份和缴费状态。 -->
     <el-form-item label="房屋">
         <el-select v-model="form.house" placeholder="请选择房屋">
             <el-option
@@ -85,6 +88,7 @@ onMounted(() => {
     <el-form-item label="备注">
         <el-input v-model="form.remark" />
     </el-form-item>
+    <!-- 操作分块：新增账单只保留提交入口。 -->
     <el-form-item label="提交">
         <el-button type="primary" @click="submitForm"> 提交 </el-button>
     </el-form-item>

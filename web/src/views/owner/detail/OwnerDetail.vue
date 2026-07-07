@@ -7,6 +7,7 @@ import { toMediaURL } from '@/utils/url'
 
 const route = useRoute()
 const ownerDetail = ref<any>(null)
+// 字典分块：接口返回关系编码，详情页统一转换成中文展示。
 const relationshipMap: Record<string, string> = {
     self: '本人',
     spouse: '配偶',
@@ -15,6 +16,7 @@ const relationshipMap: Record<string, string> = {
     other: '其他',
 }
 
+// 数据加载分块：详情页只按路由 id 拉取当前业主资料。
 const loadOwnerDetail = async () => {
     const res = await getOwnerDetail(Number(route.params.id))
     ownerDetail.value = res.data
@@ -30,6 +32,7 @@ onMounted(() => {
             <span>业主详情</span>
         </template>
 
+        <!-- 资料分块：身份信息、家庭关系和房屋归属集中在描述表格中展示。 -->
         <el-descriptions :column="2" border>
             <el-descriptions-item label="头像">
                 <el-avatar :size="100" :src="toMediaURL(ownerDetail.data.avatar)" />
@@ -40,6 +43,7 @@ onMounted(() => {
             <el-descriptions-item label="手机号">{{ ownerDetail.data.phone }}</el-descriptions-item>
 
             <el-descriptions-item label="身份证号">
+                <!-- 身份证只做脱敏展示，避免详情页暴露完整证件号。 -->
                 {{ ownerDetail.data.id_card?.replace(/^(.{6}).*(.{4})$/, '$1********$2') }}
             </el-descriptions-item>
 

@@ -28,6 +28,7 @@ const emit = defineEmits<{
     change: []
 }>()
 
+// 分页状态分块：统一计算最后一页和可见状态，避免各列表页重复处理。
 const lastPage = computed(() => {
     return Math.max(1, Math.ceil(props.total / props.pageSize))
 })
@@ -36,6 +37,7 @@ const isFirstPage = computed(() => props.currentPage <= 1)
 const isLastPage = computed(() => props.currentPage >= lastPage.value)
 const shouldShow = computed(() => !props.hideOnSinglePage || props.total > props.pageSize)
 const paginationLayout = computed(() => {
+    // 首页/尾页按钮由本组件接管，Element Plus 原生 layout 中去掉 total 以免重复显示。
     return props.layout
         .split(',')
         .map((item) => item.trim())
@@ -56,6 +58,7 @@ const handleCurrentChange = (value: number) => {
 const handleSizeChange = (value: number) => {
     emit('update:pageSize', value)
 
+    // 切换每页条数后如果当前页超出范围，主动回落到新的最后一页。
     const nextLastPage = Math.max(1, Math.ceil(props.total / value))
 
     if (props.currentPage > nextLastPage) {

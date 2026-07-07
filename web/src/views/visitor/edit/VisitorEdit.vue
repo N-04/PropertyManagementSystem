@@ -9,6 +9,8 @@ import { extractListRows } from '@/utils/listResponse'
 
 const router = useRouter()
 const route = useRoute()
+
+// 详情加载分块：按路由 id 拉取访客资料并回填表单。
 const loadDetail = async () => {
     const res = await getVisitorDetail(Number(route.params.id))
 
@@ -41,6 +43,7 @@ const ownerList = reactive<any[]>([])
 const loadOwnerList = async () => {
     const res = await getOwnerList()
 
+    // 列表响应兼容分块：统一提取分页或数组接口里的真实行数据。
     ownerList.push(...extractListRows(res.data.data))
 }
 
@@ -67,6 +70,7 @@ onMounted(() => {
             <span>修改访客信息</span>
         </template>
 
+        <!-- 表单分块：修改访客基础资料、被访业主和来访事由。 -->
         <el-form :model="form" label-width="120px" style="max-width: 700px">
             <el-form-item label="访客姓名">
                 <el-input v-model="form.name" />

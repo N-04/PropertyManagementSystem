@@ -16,6 +16,7 @@ const form = reactive({
     status: 1,
 })
 
+// 提交分块：管理员创建账号后回到账号列表，失败时透出后端错误原因。
 const handleSubmit = async () => {
     try {
         const res = await createUser(form)
@@ -36,13 +37,14 @@ const handleSubmit = async () => {
 <template>
     <div class="page-container">
         <el-card>
-            <template #header>
-                <span>新增用户</span>
-            </template>
+        <template #header>
+            <span>新增用户</span>
+        </template>
 
-            <el-form label-width="100px" @submit.prevent>
-                <el-form-item label="用户名">
-                    <el-input v-model="form.username" />
+        <!-- 表单分块：最小账号资料，角色和状态由默认值控制。 -->
+        <el-form label-width="100px" @submit.prevent>
+            <el-form-item label="用户名">
+                <el-input v-model="form.username" />
                 </el-form-item>
 
                 <el-form-item label="密码">

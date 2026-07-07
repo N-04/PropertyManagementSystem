@@ -7,12 +7,15 @@ import { createRepair } from '@/api/repair'
 import { toMediaURL } from '@/utils/url'
 import Upload from '@/views/upload/Upload.vue'
 const router = useRouter()
+
+// 表单状态分块：报修图片只存后端返回路径，提交时再拼成接口约定格式。
 const form = reactive({
     title: '',
     content: '',
     repairImages: [] as string[],
 })
 
+// 提交分块：新增报修要求标题和内容齐全，图片作为可选附件上传。
 const submit = async () => {
     if (!form.title || !form.content) {
         ElMessage.warning('请填写报修标题和内容')
@@ -28,6 +31,7 @@ const submit = async () => {
     router.push('/repair/list')
 }
 
+// 图片预览分块：后端可能返回相对路径，统一转换成可访问媒体地址。
 const getFileUrl = (url: string) => {
     if (!url) {
         return ''
@@ -36,6 +40,7 @@ const getFileUrl = (url: string) => {
     return toMediaURL(url)
 }
 
+// 上传回调分块：上传组件只负责返回路径，当前页维护图片列表顺序。
 const addRepairImage = (url: string) => {
     form.repairImages.push(url)
 }
@@ -52,6 +57,7 @@ const removeRepairImage = (index: number) => {
                 <span>新增报修</span>
             </template>
 
+            <!-- 表单分块：报修信息、图片附件和提交操作在同一张卡片内完成。 -->
             <el-form :model="form" label-width="100px">
                 <el-form-item label="报修标题">
                     <el-input v-model="form.title" />

@@ -27,6 +27,7 @@ const handleForm = reactive({
     return_visit: '',
 })
 
+// 分页分块：后端当前返回批量数据，前端统一复用客户端分页组件。
 const {
     page,
     pageSize,
@@ -35,6 +36,7 @@ const {
     resetPage,
 } = useClientPagination(tableData)
 
+// 数据加载分块：筛选条件传给后端，刷新时可选择是否重置页码。
 const loadData = async (shouldResetPage = true) => {
     const res = await getComplaintList({
         ...queryForm,
@@ -55,6 +57,7 @@ const resetSearch = () => {
     loadData()
 }
 
+// 处理弹窗分块：打开时把当前行状态和回访内容同步进表单。
 const openHandleDialog = (row: any) => {
     currentRow.value = row
     handleForm.status = row.status || 'processing'
@@ -63,6 +66,7 @@ const openHandleDialog = (row: any) => {
     dialogVisible.value = true
 }
 
+// 保存分块：物业侧处理后刷新列表，业主侧只能查看结果。
 const submitHandle = async () => {
     if (!currentRow.value) {
         return
@@ -117,6 +121,7 @@ useRealtimeRefresh(() => loadData(false), {
             </div>
         </template>
 
+        <!-- 筛选分块：按关键词、类型和处理状态缩小投诉建议范围。 -->
         <el-form class="filter-form" :inline="true" :model="queryForm">
             <el-form-item label="搜索">
                 <el-input
@@ -150,6 +155,7 @@ useRealtimeRefresh(() => loadData(false), {
             </el-form-item>
         </el-form>
 
+        <!-- 列表分块：业主只能删除待处理记录，管理人员可处理和回访。 -->
         <el-table :data="pagedTableData" border>
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column prop="category_text" label="类型" width="90" />
@@ -200,6 +206,7 @@ useRealtimeRefresh(() => loadData(false), {
         />
     </el-card>
 
+    <!-- 弹窗分块：管理人员填写处理结果和回访记录。 -->
     <el-dialog v-model="dialogVisible" title="处理投诉/建议" width="520px">
         <el-form label-width="90px">
             <el-form-item label="处理状态">

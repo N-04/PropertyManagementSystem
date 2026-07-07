@@ -9,11 +9,14 @@ import { extractListRows } from '@/utils/listResponse'
 
 const ownerList = ref<any[]>([])
 
+// 数据源分块：管理员新增车位时可选择绑定业主，也可先创建空闲车位。
 const loadOwnerList = async () => {
     const res = await getOwnerList()
 
     ownerList.value = extractListRows(res.data.data)
 }
+
+// 表单状态分块：默认新建为空闲车位，后续可在列表页绑定或售卖。
 const form = ref({
     owner: '',
     parking_no: '',
@@ -23,6 +26,7 @@ const form = ref({
 
 const router = useRouter()
 
+// 提交分块：保存成功后清空表单并回到车位列表核对结果。
 const submitForm = async () => {
     await createParking(form.value)
 
@@ -43,6 +47,7 @@ onMounted(() => {
 </script>
 
 <template>
+    <!-- 表单分块：录入业主、车位号、面积和当前状态。 -->
     <el-form-item label="所属业主">
         <el-select v-model="form.owner" placeholder="请选择业主">
             <el-option

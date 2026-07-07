@@ -11,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 
 const id = Number(route.params.id)
+// 表单状态分块：编辑页先使用空结构占位，详情加载后合并真实数据。
 const form = ref({
     title: '',
     content: '',
@@ -18,6 +19,7 @@ const form = ref({
     repairImages: [] as string[],
 })
 
+// 提交分块：编辑接口只提交允许业主修改的字段和图片列表。
 const submit = async () => {
     await updateRepair(id, {
         title: form.value.title,
@@ -31,6 +33,7 @@ const submit = async () => {
 }
 
 onMounted(async () => {
+    // 详情加载分块：兼容后端拆好的 repair_image_list，便于前端直接预览。
     const res = await getRepairDetail(id)
 
     form.value = {
@@ -40,6 +43,7 @@ onMounted(async () => {
     }
 })
 
+// 图片预览分块：统一把媒体路径转换成浏览器可打开的地址。
 const getFileUrl = (url: string) => {
     if (!url) {
         return ''
@@ -48,6 +52,7 @@ const getFileUrl = (url: string) => {
     return toMediaURL(url)
 }
 
+// 上传回调分块：新增和删除都只维护本地列表，保存时一次性提交。
 const addRepairImage = (url: string) => {
     form.value.repairImages.push(url)
 }
@@ -61,6 +66,7 @@ const removeRepairImage = (index: number) => {
     <el-card>
         <template #header>编辑报修</template>
 
+        <!-- 表单分块：编辑基础报修信息，联系电话只展示不允许修改。 -->
         <el-form label-width="100px">
             <el-form-item label="报修标题">
                 <el-input v-model="form.title" />

@@ -22,11 +22,13 @@ const form = reactive({
     status: 'vacant',
 })
 
+// 数据源分块：房屋必须挂到单元下，页面加载时先取可选单元。
 const loadUnitList = async () => {
     const res = await getUnitList()
     unitList.value = res.data.data
 }
 
+// 提交分块：后端保存房屋后返回房屋列表，便于继续核对新增结果。
 const submitForm = async () => {
     await createHouse(form)
 
@@ -46,6 +48,7 @@ onMounted(() => {
             <span>新增房屋</span>
         </template>
 
+        <!-- 表单分块：录入单元、房号、面积、户型和入住状态。 -->
         <el-form :model="form" label-width="120px" style="max-width: 600px">
             <el-form-item label="所属单元">
                 <el-select v-model="form.unit" placeholder="请选择单元">

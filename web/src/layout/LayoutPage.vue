@@ -798,7 +798,8 @@ watch(
 
 <style scoped>
 .layout-container {
-    display: flex;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
     min-width: 1180px;
     height: 100vh;
     color: var(--text-primary);
@@ -811,8 +812,7 @@ watch(
 
 .second-sidebar {
     position: relative;
-    width: 230px;
-    flex: 0 0 230px;
+    width: 240px;
     display: flex;
     flex-direction: column;
     background: var(--surface-card);
@@ -821,14 +821,14 @@ watch(
 }
 
 .logo {
-    height: 66px;
+    height: 70px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 20px;
+    gap: 14px;
+    padding: 0 22px;
     color: var(--brand-primary);
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 900;
     line-height: 28px;
     border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
@@ -836,13 +836,13 @@ watch(
 
 .logo .el-icon {
     color: var(--brand-primary);
-    font-size: 26px;
+    font-size: 28px;
 }
 
 .sidebar-menu {
     flex: 1;
     min-height: 0;
-    padding: 20px 12px 14px;
+    padding: 24px 16px 16px;
     overflow-y: auto;
 }
 
@@ -851,31 +851,31 @@ watch(
 }
 
 .sidebar-group + .sidebar-group {
-    margin-top: 6px;
+    margin-top: 10px;
 }
 
 .first-menu-item {
     width: 100%;
     border: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-subtle);
     cursor: pointer;
     text-align: left;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 44px;
-    padding: 0 12px;
-    font-size: 14px;
-    font-weight: 500;
+    min-height: 46px;
+    padding: 0 18px;
+    font-size: 15px;
+    font-weight: 700;
     line-height: 22px;
 }
 
 .menu-label {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
 }
 
@@ -907,9 +907,9 @@ watch(
 
 .first-menu-item.active {
     color: #ffffff;
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-hover));
-    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.18);
-    font-weight: 600;
+    background: linear-gradient(90deg, var(--brand-primary), var(--brand-primary-hover));
+    box-shadow: var(--shadow-active);
+    font-weight: 800;
     line-height: 22px;
 }
 
@@ -921,18 +921,18 @@ watch(
 .second-menu-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin: 4px 0 6px 16px;
-    padding: 6px 0 6px 10px;
+    gap: 6px;
+    margin: 8px 0 8px 22px;
+    padding: 6px 0 6px 12px;
     border-left: 2px solid var(--brand-primary-soft);
 }
 
 .second-menu-item {
     width: 100%;
-    min-height: 36px;
-    padding: 0 10px;
+    min-height: 40px;
+    padding: 0 12px;
     border: 0;
-    border-radius: 5px;
+    border-radius: 7px;
     background: var(--brand-primary-subtle);
     color: var(--text-primary);
     cursor: pointer;
@@ -968,19 +968,20 @@ watch(
 }
 
 .layout-main {
-    flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
 }
 
 .layout-header {
-    height: 66px;
+    position: relative;
+    z-index: 30;
+    height: 70px;
     display: grid;
-    grid-template-columns: minmax(170px, 220px) minmax(220px, 1fr) max-content;
+    grid-template-columns: minmax(180px, 220px) minmax(320px, 1fr) max-content;
     align-items: center;
-    column-gap: clamp(14px, 2vw, 28px);
-    padding: 0 clamp(18px, 2vw, 28px);
+    column-gap: 20px;
+    padding: 0 24px;
     background: var(--surface-card);
     border-bottom: 1px solid var(--border-color);
 }
@@ -989,17 +990,17 @@ watch(
     display: flex;
     align-items: center;
     gap: 10px;
-    width: 180px;
-    min-height: 38px;
+    width: 200px;
+    min-height: 42px;
     justify-self: start;
     padding: 0 12px;
-    border: 1px solid #dfe5ef;
-    border-radius: 6px;
+    border: 1px solid #d5e2ea;
+    border-radius: 8px;
     color: var(--text-subtle);
     background: var(--surface-card);
     cursor: pointer;
     font-size: 14px;
-    font-weight: 400;
+    font-weight: 700;
     line-height: 22px;
     text-align: left;
     transition: border-color 0.2s ease, color 0.2s ease;
@@ -1042,14 +1043,14 @@ watch(
     display: flex;
     align-items: center;
     width: 100%;
-    max-width: 560px;
+    max-width: 660px;
     min-width: 0;
-    min-height: 38px;
+    min-height: 42px;
     justify-self: center;
     padding: 0 14px;
-    border: 1px solid #dfe5ef;
-    border-radius: 6px;
-    background: var(--surface-card);
+    border: 1px solid #d5e2ea;
+    border-radius: 8px;
+    background: #fbfdff;
 }
 
 .global-search .el-icon {
@@ -1078,7 +1079,7 @@ watch(
     min-width: max-content;
     white-space: nowrap;
     position: relative;
-    z-index: 1;
+    z-index: 31;
 }
 
 .notification-button {
@@ -1089,7 +1090,7 @@ watch(
     height: 40px;
     padding: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     cursor: pointer;
     transition: background 0.2s ease;
@@ -1113,14 +1114,18 @@ watch(
 }
 
 .role-pill {
-    min-width: 78px;
-    padding: 9px 18px;
-    border-radius: 18px;
+    min-width: 118px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    border-radius: 999px;
     color: var(--brand-primary);
     background: var(--brand-primary-soft);
     text-align: center;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 900;
     line-height: 22px;
 }
 
@@ -1145,12 +1150,12 @@ watch(
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
     color: #ffffff;
-    background: #2563eb;
-    font-weight: 700;
+    background: var(--blue-primary);
+    font-weight: 900;
 }
 
 :global(.user-dropdown-popper .el-dropdown-menu__item) {
@@ -1196,7 +1201,7 @@ watch(
 .layout-content {
     flex: 1;
     min-width: 0;
-    padding: 20px 28px 28px;
+    padding: 22px;
     overflow-y: auto;
 }
 
@@ -1204,7 +1209,7 @@ watch(
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
-    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.04);
+    box-shadow: var(--shadow-panel);
 }
 
 .layout-content :deep(.el-card__header) {
@@ -1250,8 +1255,8 @@ watch(
 
 .layout-content :deep(.el-input__wrapper),
 .layout-content :deep(.el-select__wrapper) {
-    border-radius: 6px;
-    box-shadow: 0 0 0 1px #dfe5ef inset;
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px #d5e2ea inset;
 }
 
 .layout-content :deep(.el-input),

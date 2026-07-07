@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
         </header>
 
         <section class="summary-grid">
-            <article class="summary-card active">
+            <article class="summary-card">
                 <span>消息总数</span>
                 <strong>{{ tableData.length }}</strong>
                 <small>顶部红点同步此统计</small>
@@ -314,11 +314,6 @@ onBeforeUnmount(() => {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--surface-card);
-}
-
-.summary-card.active {
-    border-color: var(--brand-primary);
-    background: var(--brand-primary-subtle);
 }
 
 .summary-card span,
