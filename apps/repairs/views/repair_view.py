@@ -29,6 +29,15 @@ REPAIR_MANAGE_ROLES = (
 )
 
 
+def _repair_queryset():
+    """报修列表/详情统一预加载展示字段，避免序列化时逐行查询关联对象。"""
+
+    return Repair.objects.select_related(
+        "owner",
+        "house__unit__building__community",
+    ).prefetch_related("repair_user")
+
+
 # 报修权限分块：业主、维修员和物业/客服的可见范围不同。
 def _can_manage_repair(user):
     """物业管理员和客服类角色可以派单、查看和维护报修工单。"""
@@ -100,7 +109,7 @@ class RepairListView(APIView):
 
     def get(self, request):
 
-        queryset = Repair.objects.all().order_by("-id")
+        queryset = _repair_queryset().order_by("-id")
 
         # 列表按角色裁剪：业主看自己的，维修员看已分配或可接单池，管理员看全部。
         if is_owner_user(request.user):
@@ -346,7 +355,7 @@ class RepairDetailView(APIView):
 
     def get(self, request, pk):
         instance = get_object_or_404(
-            Repair,
+            _repair_queryset(),
             pk=pk,
         )
 

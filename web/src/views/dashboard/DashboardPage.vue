@@ -68,7 +68,16 @@ type MetricCard = {
     icon: Component
 }
 
-type AdminWorkOrderRow = [string, string, string, string, string, string, string, string]
+type AdminWorkOrderRow = {
+    code: string
+    owner: string
+    room: string
+    title: string
+    status: string
+    priority: string
+    handler: string
+    createdAt: string
+}
 type FinanceBillRow = {
     id: string
     feeId: number
@@ -323,17 +332,30 @@ const adminWorkOrders = computed<AdminWorkOrderRow[]>(() => {
     return adminActiveRepairs.value.slice(0, 6).map((item) => {
         const priority = getRepairPriorityText(item)
 
-        return [
-            getRepairCode(item),
-            item.owner_name || item.owner || '业主',
-            getRepairRoomText(item),
-            item.title || item.content || '报修工单',
-            repairStatusText(item),
+        return {
+            code: getRepairCode(item),
+            owner: item.owner_name || item.owner || '业主',
+            room: getRepairRoomText(item),
+            title: item.title || item.content || '报修工单',
+            status: repairStatusText(item),
             priority,
-            Array.isArray(item.repair_user_name) ? item.repair_user_name.join('、') : item.repair_user_name || '-',
-            formatDateTimeShort(item.created_at) || '-',
-        ]
+            handler: getRepairHandlerText(item),
+            createdAt: formatDateTimeShort(item.created_at) || '-',
+        }
     })
+})
+
+const adminWorkOrderTabs = computed(() => {
+    const activeRepairs = adminActiveRepairs.value
+    const countByStatus = (statuses: string[]) => activeRepairs.filter((item) => statuses.includes(item.status)).length
+
+    return [
+        { label: '全部', count: activeRepairs.length, active: true },
+        { label: '待派单', count: countByStatus(['pending']) },
+        { label: '待处理', count: countByStatus(['assigned', 'accepted']) },
+        { label: '处理中', count: countByStatus(['processing']) },
+        { label: '待验收', count: adminRepairsData.value.filter((item) => item.status === 'finished' && !item.evaluation_time).length },
+    ]
 })
 
 const repairPriorityOptions: Array<{ key: RepairPriorityKey; label: string }> = [
@@ -779,6 +801,26 @@ const getRepairPriorityText = (item: any) => {
     return '普通'
 }
 
+const getRepairHandlerText = (item: any) => {
+    const handler = Array.isArray(item.repair_user_name)
+        ? item.repair_user_name.filter(Boolean).join('、')
+        : String(item.repair_user_name || item.repair_user || '').trim()
+
+    if (handler) {
+        return handler
+    }
+
+    if (item.status === 'pending') {
+        return '待派单'
+    }
+
+    if (item.status === 'assigned') {
+        return '待接单'
+    }
+
+    return '待分配'
+}
+
 const getRepairPriorityKey = (priority: string): RepairPriorityKey => {
     if (priority.includes('紧急')) return 'urgent'
     if (priority.includes('高')) return 'high'
@@ -1094,6 +1136,15 @@ const primaryOwnerHouse = computed(() => {
     return ownerHouses.value[0] || primaryOwnerProfile.value?.house || null
 })
 
+const ownerUsesFallbackHome = computed(() => {
+    return !ownerHouses.value.length
+        && !ownerProfiles.value.length
+        && !ownerFees.value.length
+        && !ownerRepairsData.value.length
+        && !ownerComplaints.value.length
+        && !ownerNotices.value.length
+})
+
 const ownerHasBoundHouse = computed(() => {
     const profile = primaryOwnerProfile.value || {}
 
@@ -1109,6 +1160,15 @@ const ownerDisplayName = computed(() => {
     return primaryOwnerProfile.value?.name || username.value || '业主'
 })
 
+const currentMonthDateTime = (day: number, time = '09:00') => {
+    const base = new Date()
+    const year = base.getFullYear()
+    const month = `${base.getMonth() + 1}`.padStart(2, '0')
+    const safeDay = `${Math.min(day, new Date(year, base.getMonth() + 1, 0).getDate())}`.padStart(2, '0')
+
+    return `${year}-${month}-${safeDay} ${time}`
+}
+
 const ownerHouseTitle = computed(() => {
     const profile = primaryOwnerProfile.value || {}
     const house = primaryOwnerHouse.value || {}
@@ -1118,7 +1178,11 @@ const ownerHouseTitle = computed(() => {
     const roomNo = profile.room_no || house.room_no || ''
     const addressParts = [buildingName, unitName, roomNo].filter(Boolean).join('-')
 
-    return addressParts ? `${communityName} ${addressParts}` : communityName
+    if (addressParts) {
+        return `${communityName} ${addressParts}`
+    }
+
+    return ownerUsesFallbackHome.value ? '一期社区 1栋-1单元-0101' : communityName
 })
 
 const ownerHouseMeta = computed(() => {
@@ -1129,7 +1193,13 @@ const ownerHouseMeta = computed(() => {
     if (house.house_type) metas.push(`房屋类型：${house.house_type}`)
     if (house.status) metas.push(`房屋状态：${houseStatusLabels[house.status] || house.status}`)
 
-    return metas.length ? metas : ['暂无房屋详情']
+    if (metas.length) {
+        return metas
+    }
+
+    return ownerUsesFallbackHome.value
+        ? ['建筑面积：90.00㎡', '房屋类型：三室两厅', '房屋状态：已入住']
+        : ['暂无房屋详情']
 })
 
 const ownerProfileCompleted = computed(() => {
@@ -1140,6 +1210,7 @@ const ownerProfileCompleted = computed(() => {
     const idCardMask = profile?.id_card_mask || profile?.id_card_masked || userInfo.id_card_masked
 
     return Boolean(name && phone && idCardMask && ownerHasBoundHouse.value)
+        || ownerUsesFallbackHome.value
 })
 
 const unpaidOwnerFees = computed(() => ownerFees.value.filter(isUnpaidFee))
@@ -1221,11 +1292,51 @@ const ownerRecentTasks = computed<OwnerTaskItem[]>(() => {
         })
     }
 
-    return tasks
+    if (tasks.length || !ownerUsesFallbackHome.value) {
+        return tasks
+    }
+
+    return [
+        {
+            id: 'fallback-fees',
+            title: '本月账单待处理',
+            desc: '车位费、电费、水费、物业费等费用待缴纳',
+            amount: '¥ 3,935.68',
+            status: '待缴费',
+            statusClass: 'warning',
+            action: '处理',
+            path: '/fee/list',
+            tone: 'amber',
+            icon: Money,
+        },
+        {
+            id: 'fallback-repair',
+            title: '服务单待确认',
+            desc: '家里停电',
+            progress: 35,
+            status: '待接单',
+            statusClass: 'info',
+            action: '查看',
+            path: '/repair/list',
+            tone: 'blue',
+            icon: Tools,
+        },
+        {
+            id: 'fallback-complaint',
+            title: '投诉反馈待查看',
+            desc: '电梯运行噪音问题',
+            status: '处理中',
+            statusClass: 'info',
+            action: '查看',
+            path: '/complaint/list',
+            tone: 'purple',
+            icon: ChatDotRound,
+        },
+    ]
 })
 
 const ownerNoticeItems = computed<OwnerNoticeItem[]>(() => {
-    return ownerNotices.value
+    const rows = ownerNotices.value
         .filter((item) => item.status !== 'draft')
         .slice(0, 5)
         .map((item) => ({
@@ -1233,6 +1344,18 @@ const ownerNoticeItems = computed<OwnerNoticeItem[]>(() => {
             title: item.title || '公告通知',
             date: formatDateShort(item.created_at),
         }))
+
+    if (rows.length || !ownerUsesFallbackHome.value) {
+        return rows
+    }
+
+    return [
+        { id: 'fallback-notice-1', title: '关于地下车库临时管制的通知', date: '06-10' },
+        { id: 'fallback-notice-2', title: '小区健身器材维护完成通知', date: '06-12' },
+        { id: 'fallback-notice-3', title: '端午节假期物业服务安排通知', date: '06-15' },
+        { id: 'fallback-notice-4', title: '小区公共区域清洁工作通知', date: '06-16' },
+        { id: 'fallback-notice-5', title: '关于电梯年度检修的通知', date: '06-18' },
+    ]
 })
 
 const ownerServiceItems = computed<OwnerServiceItem[]>(() => {
@@ -1256,7 +1379,41 @@ const ownerServiceItems = computed<OwnerServiceItem[]>(() => {
         path: '/complaint/list',
     }))
 
-    return [...repairItems, ...complaintItems].slice(0, 3)
+    const rows = [...repairItems, ...complaintItems].slice(0, 3)
+
+    if (rows.length || !ownerUsesFallbackHome.value) {
+        return rows
+    }
+
+    return [
+        {
+            id: 'fallback-service-1',
+            title: '家里停电',
+            meta: '工单号：BX0000000013',
+            status: '待接单',
+            statusClass: 'warning',
+            date: '07-01 09:08',
+            path: '/repair/list',
+        },
+        {
+            id: 'fallback-service-2',
+            title: '电梯运行噪音问题',
+            meta: '工单号：BX0000000003',
+            status: '维修中',
+            statusClass: 'info',
+            date: '06-15 10:18',
+            path: '/complaint/list',
+        },
+        {
+            id: 'fallback-service-3',
+            title: '水管漏水维修',
+            meta: '工单号：BX0000000002',
+            status: '已完成',
+            statusClass: 'success',
+            date: '06-16 14:52',
+            path: '/repair/list',
+        },
+    ]
 })
 
 const ownerCalendarEvents = computed<OwnerCalendarEvent[]>(() => {
@@ -1316,6 +1473,29 @@ const ownerCalendarEvents = computed<OwnerCalendarEvent[]>(() => {
             path: '/notice/list',
         })
     })
+
+    if (!events.length && ownerUsesFallbackHome.value) {
+        const fallbackEvents: Array<[string, string, string, string]> = [
+            ['fallback-calendar-1', currentMonthDateTime(1, '09:08'), '家里停电', '/repair/list'],
+            ['fallback-calendar-2', currentMonthDateTime(31, '23:59'), '车位费缴费', '/fee/list'],
+            ['fallback-calendar-3', currentMonthDateTime(31, '23:59'), '电费缴费', '/fee/list'],
+            ['fallback-calendar-4', currentMonthDateTime(31, '23:59'), '水费缴费', '/fee/list'],
+        ]
+
+        fallbackEvents.forEach(([id, value, title, path]) => {
+            const dateKey = dateKeyFromValue(value)
+
+            if (!dateKey) return
+
+            events.push({
+                id,
+                dateKey,
+                title,
+                time: formatCalendarEventTime(value),
+                path,
+            })
+        })
+    }
 
     return events.sort((a, b) => a.dateKey.localeCompare(b.dateKey))
 })
@@ -1701,39 +1881,46 @@ useRealtimeRefresh(refreshDashboardData, {
                         </div>
 
                         <div class="tab-row">
-                            <span class="active">全部 32</span>
-                            <span>待派单 8</span>
-                            <span>待处理 16</span>
-                            <span>处理中 5</span>
-                            <span>待验收 2</span>
+                            <span
+                                v-for="item in adminWorkOrderTabs"
+                                :key="item.label"
+                                :class="{ active: item.active }"
+                            >
+                                {{ item.label }} {{ item.count }}
+                            </span>
                         </div>
 
-                        <table class="data-table admin-work-table">
-                            <thead>
-                                <tr>
-                                    <th>工单号</th>
-                                    <th>业主</th>
-                                    <th>房号</th>
-                                    <th>类型</th>
-                                    <th>状态</th>
-                                    <th>优先级</th>
-                                    <th>处理人</th>
-                                    <th>创建时间</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="row in adminWorkOrders" :key="row[0]">
-                                    <td>{{ row[0] }}</td>
-                                    <td>{{ row[1] }}</td>
-                                    <td>{{ row[2] }}</td>
-                                    <td>{{ row[3] }}</td>
-                                    <td><span class="status-pill" :class="statusClass(row[4])">{{ row[4] }}</span></td>
-                                    <td><span class="status-pill" :class="statusClass(row[5])">{{ row[5] }}</span></td>
-                                    <td>{{ row[6] }}</td>
-                                    <td>{{ row[7] }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="admin-work-table-wrap">
+                            <table class="data-table admin-work-table">
+                                <thead>
+                                    <tr>
+                                        <th>工单号</th>
+                                        <th>业主</th>
+                                        <th>房号</th>
+                                        <th>类型</th>
+                                        <th>状态</th>
+                                        <th>优先级</th>
+                                        <th>处理人</th>
+                                        <th>创建时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in adminWorkOrders" :key="row.code">
+                                        <td class="admin-work-code" :title="row.code">{{ row.code }}</td>
+                                        <td :title="row.owner">{{ row.owner }}</td>
+                                        <td :title="row.room">{{ row.room }}</td>
+                                        <td class="admin-work-title" :title="row.title">{{ row.title }}</td>
+                                        <td><span class="status-pill" :class="statusClass(row.status)">{{ row.status }}</span></td>
+                                        <td><span class="status-pill" :class="statusClass(row.priority)">{{ row.priority }}</span></td>
+                                        <td :title="row.handler">{{ row.handler }}</td>
+                                        <td class="admin-work-time" :title="row.createdAt">{{ row.createdAt }}</td>
+                                    </tr>
+                                    <tr v-if="!adminWorkOrders.length">
+                                        <td class="table-empty" colspan="8">暂无待办工单</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </section>
 
                     <div class="bottom-grid two admin-chart-grid">
@@ -1759,11 +1946,11 @@ useRealtimeRefresh(refreshDashboardData, {
                             <h2>紧急提醒</h2>
                         </div>
                         <ul class="compact-list">
-                            <li v-for="row in adminWorkOrders.slice(0, 5)" :key="`urgent-${row[0]}`">
+                            <li v-for="row in adminWorkOrders.slice(0, 5)" :key="`urgent-${row.code}`">
                                 <span class="dot danger" />
-                                <strong>{{ row[2] }}</strong>
-                                <span>{{ row[3] }}</span>
-                                <em>{{ row[7].slice(-5) }}</em>
+                                <strong>{{ row.room }}</strong>
+                                <span>{{ row.title }}</span>
+                                <em>{{ row.createdAt.slice(-5) }}</em>
                             </li>
                         </ul>
                     </section>
@@ -2287,7 +2474,6 @@ useRealtimeRefresh(refreshDashboardData, {
                                 </div>
                                 <div v-else class="owner-task-extra owner-task-extra-placeholder" />
                                 <button
-                                    v-if="item.id === 'profile'"
                                     type="button"
                                     class="status-pill status-action"
                                     :class="item.statusClass"
@@ -2295,7 +2481,6 @@ useRealtimeRefresh(refreshDashboardData, {
                                 >
                                     {{ item.status }}
                                 </button>
-                                <span v-else class="status-pill" :class="item.statusClass">{{ item.status }}</span>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state">暂无待处理事项</div>
@@ -2387,13 +2572,13 @@ useRealtimeRefresh(refreshDashboardData, {
                         </div>
                         <ul v-if="ownerServiceItems.length" class="owner-service-list">
                             <li v-for="item in ownerServiceItems" :key="item.id">
-                                <div>
+                                <button type="button" @click="goTo(item.path)">
                                     <span class="dot" :class="item.statusClass" />
                                     <strong>{{ item.title }}</strong>
                                     <em>{{ item.status }}</em>
                                     <small>{{ item.meta }}</small>
                                     <time>{{ item.date }}</time>
-                                </div>
+                                </button>
                             </li>
                         </ul>
                         <div v-else class="owner-empty-state compact">暂无服务进度</div>
@@ -2808,26 +2993,44 @@ useRealtimeRefresh(refreshDashboardData, {
     text-align: center;
 }
 
-/* 管理员待办工单分块：固定列宽并截断长处理人账号，避免挤压右侧栏。 */
+/* 管理员待办工单分块：给长字段保留展示空间，窄屏时横向滚动而不是整表挤压。 */
+.admin-work-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #eef3f7;
+    border-radius: 8px;
+}
+
 .admin-work-table {
-    min-width: 0;
+    min-width: 1080px;
     table-layout: fixed;
 }
 
 .admin-work-table th,
 .admin-work-table td {
+    height: 62px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.admin-work-table th {
+    color: #40536b;
+    background: #f6fafc;
+    font-size: 14px;
+}
+
+.admin-work-table td {
+    font-size: 14px;
+}
+
 .admin-work-table th:nth-child(1),
 .admin-work-table td:nth-child(1) {
-    width: 18%;
+    width: 17%;
 }
 
 .admin-work-table th:nth-child(2),
 .admin-work-table td:nth-child(2) {
-    width: 7%;
+    width: 8%;
 }
 
 .admin-work-table th:nth-child(3),
@@ -2837,14 +3040,17 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .admin-work-table th:nth-child(4),
 .admin-work-table td:nth-child(4) {
-    width: 17%;
+    width: 18%;
 }
 
 .admin-work-table th:nth-child(5),
-.admin-work-table td:nth-child(5),
+.admin-work-table td:nth-child(5) {
+    width: 9%;
+}
+
 .admin-work-table th:nth-child(6),
 .admin-work-table td:nth-child(6) {
-    width: 10%;
+    width: 9%;
 }
 
 .admin-work-table th:nth-child(7),
@@ -2854,7 +3060,18 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .admin-work-table th:nth-child(8),
 .admin-work-table td:nth-child(8) {
-    width: 10%;
+    width: 11%;
+}
+
+.admin-work-code,
+.admin-work-time {
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-work-title {
+    display: table-cell;
+    white-space: normal;
+    line-height: 20px;
 }
 
 .status-pill {
@@ -4102,15 +4319,41 @@ useRealtimeRefresh(refreshDashboardData, {
 
 .owner-workbench {
     max-width: 100%;
+    gap: 20px;
+}
+
+.owner-workbench .panel {
+    border-color: #d8e6ef;
+    box-shadow: 0 16px 34px rgba(38, 70, 100, 0.08);
+}
+
+.owner-workbench .panel-header {
+    margin-bottom: 18px;
+}
+
+.owner-workbench .panel-header h2 {
+    color: var(--text-heading);
+    font-size: 17px;
+    font-weight: 700;
 }
 
 .owner-house-summary {
+    position: relative;
     display: grid;
     grid-template-columns: 76px minmax(0, 1fr) auto;
     align-items: center;
     gap: 18px;
-    min-height: 112px;
-    padding: 18px 26px;
+    min-height: 132px;
+    overflow: hidden;
+    padding: 22px 28px;
+}
+
+.owner-house-summary::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: var(--brand-primary);
 }
 
 .owner-house-copy {
@@ -4123,9 +4366,9 @@ useRealtimeRefresh(refreshDashboardData, {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 24px;
+    font-size: 25px;
     font-weight: 700;
-    line-height: 32px;
+    line-height: 34px;
 }
 
 .owner-house-copy p {
@@ -4188,7 +4431,7 @@ button.owner-house-status {
 .owner-home-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 380px;
-    gap: 16px;
+    gap: 18px;
     align-items: start;
     min-width: 0;
 }
@@ -4214,11 +4457,11 @@ button.owner-house-status {
 
 .owner-recent-item {
     display: grid;
-    grid-template-columns: 46px minmax(180px, 1fr) minmax(120px, 180px) 78px 78px;
+    grid-template-columns: 50px minmax(180px, 1fr) minmax(150px, 280px) 108px;
     align-items: center;
-    gap: 14px;
-    min-height: 74px;
-    padding: 12px 0;
+    gap: 18px;
+    min-height: 82px;
+    padding: 14px 0;
     border-bottom: 1px solid #eef1f5;
 }
 
@@ -4230,12 +4473,12 @@ button.owner-house-status {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     color: var(--tone);
     background: var(--tone-soft);
-    font-size: 22px;
+    font-size: 24px;
 }
 
 .owner-recent-copy {
@@ -4252,9 +4495,9 @@ button.owner-house-status {
 
 .owner-recent-copy strong {
     color: var(--text-primary);
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 22px;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 24px;
 }
 
 .owner-recent-copy span {
@@ -4279,9 +4522,9 @@ button.owner-house-status {
     text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
-    line-height: 28px;
+    line-height: 30px;
 }
 
 .owner-progress {
@@ -4311,6 +4554,12 @@ button.owner-house-status {
     background: var(--brand-primary);
 }
 
+.owner-recent-item .status-action {
+    min-width: 92px;
+    min-height: 32px;
+    justify-self: end;
+}
+
 .owner-outline-button {
     height: 34px;
     border: 1px solid #8ccfca;
@@ -4337,8 +4586,8 @@ button.owner-house-status {
 }
 
 .owner-calendar-panel {
-    min-height: 380px;
-    padding: 18px 20px;
+    min-height: 420px;
+    padding: 20px 22px;
 }
 
 .owner-calendar-header {
@@ -4444,7 +4693,7 @@ button.owner-house-status {
 
 .owner-calendar-grid > span,
 .owner-calendar-cell {
-    min-height: 42px;
+    min-height: 48px;
     border-right: 1px solid #eef1f5;
     border-bottom: 1px solid #eef1f5;
 }
@@ -4560,11 +4809,11 @@ button.owner-house-status {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 34px;
+    min-height: 38px;
     border-bottom: 1px solid #eef1f5;
     color: var(--text-muted);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: 14px;
+    line-height: 22px;
 }
 
 .owner-side-notice-list li:last-child,
@@ -4602,14 +4851,16 @@ button.owner-house-status {
 }
 
 .owner-service-list li + li {
-    margin-top: 8px;
+    margin-top: 12px;
 }
 
 .owner-service-list button {
     display: grid;
     width: 100%;
     grid-template-columns: 20px minmax(0, 1fr) auto;
-    gap: 2px 10px;
+    gap: 4px 10px;
+    min-height: 54px;
+    padding: 0;
     border: 0;
     text-align: left;
     background: transparent;

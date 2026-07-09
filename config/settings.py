@@ -84,6 +84,17 @@ raw_secret_key = os.environ.get("DJANGO_SECRET_KEY")
 if not DEBUG and not IS_TESTING and not raw_secret_key:
     raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG=false")
 
+if (
+    not DEBUG
+    and not IS_TESTING
+    and raw_secret_key
+    and (
+        raw_secret_key == "replace-with-a-long-random-local-secret"
+        or len(raw_secret_key) < 50
+    )
+):
+    raise RuntimeError("DJANGO_SECRET_KEY is too weak for production")
+
 SECRET_KEY = raw_secret_key or get_random_secret_key()
 
 # 允许的主机由环境变量控制，默认只放开本机和测试客户端。
@@ -153,6 +164,9 @@ CORS_ALLOWED_ORIGINS = env_list(
         "http://localhost:5173",
     ],
 )
+
+if not DEBUG and not IS_TESTING and CORS_ALLOW_ALL_ORIGINS:
+    raise RuntimeError("DJANGO_CORS_ALLOW_ALL_ORIGINS cannot be true in production")
 
 REST_FRAMEWORK = {
     # JWT 认证
@@ -294,6 +308,13 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=secure_default)
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=secure_default)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=secure_default)
+SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = os.environ.get(
+    "DJANGO_SECURE_REFERRER_POLICY",
+    "same-origin",
+)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 X_FRAME_OPTIONS = "DENY"
 

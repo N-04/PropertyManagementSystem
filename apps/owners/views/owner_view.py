@@ -110,7 +110,9 @@ class OwnerListView(APIView):
     def get(self, request):
 
         keyword = request.GET.get("keyword")
-        queryset = Owner.objects.all().order_by("-id")
+        queryset = Owner.objects.select_related(
+            "house__unit__building__community"
+        ).order_by("-id")
 
         # 业主列表先按身份收窄，再执行关键字搜索和分页，避免搜索其他业主资料。
         if is_owner_user(request.user):

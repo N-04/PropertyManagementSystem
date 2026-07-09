@@ -43,8 +43,7 @@ onMounted(() => {
             <el-descriptions-item label="手机号">{{ ownerDetail.data.phone }}</el-descriptions-item>
 
             <el-descriptions-item label="身份证号">
-                <!-- 身份证只做脱敏展示，避免详情页暴露完整证件号。 -->
-                {{ ownerDetail.data.id_card?.replace(/^(.{6}).*(.{4})$/, '$1********$2') }}
+                {{ ownerDetail.data.id_card_mask || ownerDetail.data.id_card_masked || '' }}
             </el-descriptions-item>
 
             <el-descriptions-item label="性别">

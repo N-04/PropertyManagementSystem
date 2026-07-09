@@ -1,6 +1,6 @@
 # 文件说明：处理 apps/dashboard/views/dashboard_view.py 对应接口请求，编排查询、创建、修改和删除等业务流程。
 
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework.views import APIView
 
@@ -29,13 +29,6 @@ VISITOR_MANAGER_ROLE_CODES = {
 }
 
 
-# 金额聚合工具分块：避免空查询集把 None 传给前端图表。
-def _money_total(queryset):
-    """汇总金额字段，空结果统一返回 0，避免前端出现 null。"""
-
-    return queryset.aggregate(total=Sum("amount"))["total"] or 0
-
-
 def _owner_queryset_for_user(user):
     """按当前登录账号手机号定位业主资料，作为业主端数据隔离边界。"""
 
@@ -46,26 +39,41 @@ def _owner_queryset_for_user(user):
 def _build_dashboard_data(house_qs, owner_qs, parking_qs, repair_qs, fee_qs):
     """按传入查询集组装首页统计，确保所有统计都继承同一权限范围。"""
 
-    paid_fee_qs = fee_qs.filter(status="paid")
-    unpaid_fee_qs = fee_qs.filter(status__in=["unpaid", "overdue"])
+    fee_summary = fee_qs.aggregate(
+        fee_total=Sum("amount"),
+        fee_paid=Sum("amount", filter=Q(status="paid")),
+        fee_unpaid=Sum("amount", filter=Q(status__in=["unpaid", "overdue"])),
+        paid_count=Count("id", filter=Q(status="paid"), distinct=True),
+        unpaid_count=Count(
+            "id",
+            filter=Q(status__in=["unpaid", "overdue"]),
+            distinct=True,
+        ),
+    )
+    repair_summary = repair_qs.aggregate(
+        repair_count=Count("id", distinct=True),
+        repair_pending=Count("id", filter=Q(status="pending"), distinct=True),
+        repair_processing=Count(
+            "id",
+            filter=Q(status__in=["assigned", "accepted", "processing"]),
+            distinct=True,
+        ),
+        repair_finished=Count("id", filter=Q(status="finished"), distinct=True),
+    )
 
     return {
         "house_count": house_qs.distinct().count(),
         "owner_count": owner_qs.distinct().count(),
         "parking_count": parking_qs.distinct().count(),
-        "repair_count": repair_qs.distinct().count(),
-        "fee_total": _money_total(fee_qs),
-        "fee_paid": _money_total(paid_fee_qs),
-        "fee_unpaid": _money_total(unpaid_fee_qs),
-        "repair_pending": repair_qs.filter(status="pending").distinct().count(),
-        "repair_processing": repair_qs.filter(
-            status__in=["assigned", "accepted", "processing"]
-        )
-        .distinct()
-        .count(),
-        "repair_finished": repair_qs.filter(status="finished").distinct().count(),
-        "paid_count": paid_fee_qs.distinct().count(),
-        "unpaid_count": unpaid_fee_qs.distinct().count(),
+        "repair_count": repair_summary["repair_count"],
+        "fee_total": fee_summary["fee_total"] or 0,
+        "fee_paid": fee_summary["fee_paid"] or 0,
+        "fee_unpaid": fee_summary["fee_unpaid"] or 0,
+        "repair_pending": repair_summary["repair_pending"],
+        "repair_processing": repair_summary["repair_processing"],
+        "repair_finished": repair_summary["repair_finished"],
+        "paid_count": fee_summary["paid_count"],
+        "unpaid_count": fee_summary["unpaid_count"],
     }
 
 

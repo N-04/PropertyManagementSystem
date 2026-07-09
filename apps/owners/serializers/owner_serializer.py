@@ -51,3 +51,7 @@ class OwnerSerializer(serializers.ModelSerializer):
         model = Owner
         # 业主资料字段随注册/认证流程变化较多，保持模型字段全量输出。
         fields = "__all__"
+        extra_kwargs = {
+            # 完整身份证号只允许写入，不再通过列表/详情接口明文返回。
+            "id_card": {"write_only": True},
+        }

@@ -119,11 +119,7 @@ useRealtimeRefresh(() => getList(false), {
 
             <el-table-column label="身份证">
                 <template #default="scope">
-                    {{
-                        scope.row.id_card
-                            ? scope.row.id_card.replace(/^(.{6}).*(.{4})$/, '$1********$2')
-                            : ''
-                    }}
+                    {{ scope.row.id_card_mask || scope.row.id_card_masked || '' }}
                 </template>
             </el-table-column>
             <el-table-column label="身份证照片" width="180">

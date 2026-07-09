@@ -13,6 +13,7 @@ type RealtimeRefreshOptions = {
     scope?: string | string[]
     immediate?: boolean
     intervalMs?: number
+    minRefreshGapMs?: number
     refreshWhenVisible?: boolean
     refreshOnWindowFocus?: boolean
     events?: string[]
@@ -35,9 +36,18 @@ export function useRealtimeRefresh(
     const immediate = options.immediate !== false
     const refreshWhenVisible = options.refreshWhenVisible !== false
     const refreshOnWindowFocus = options.refreshOnWindowFocus !== false
+    const minRefreshGapMs = options.minRefreshGapMs ?? 1000
     let timer: ReturnType<typeof window.setInterval> | null = null
     let destroyed = false
     let activeRequestId = 0
+    let running = false
+    let queuedRefresh: { reason: RefreshReason; event?: Event } | null = null
+    let lastRefreshStartedAt = 0
+
+    const shouldThrottleRefresh = (reason: RefreshReason) => {
+        return ['interval', 'visible', 'focus'].includes(reason)
+            && Date.now() - lastRefreshStartedAt < minRefreshGapMs
+    }
 
     const runRefresh = async (reason: RefreshReason = 'manual', event?: Event) => {
         // 组件卸载后忽略后续刷新，避免异步请求回写已经销毁的页面状态。
@@ -45,8 +55,22 @@ export function useRealtimeRefresh(
             return
         }
 
+        if (shouldThrottleRefresh(reason)) {
+            return
+        }
+
+        if (running) {
+            // 高频事件合并成一次尾随刷新，避免同一页面同时打出多组重复请求。
+            if (!['interval', 'focus'].includes(reason)) {
+                queuedRefresh = { reason, event }
+            }
+            return
+        }
+
         // 只接受最后一次请求结果，防止频繁刷新时旧响应覆盖新数据。
         const requestId = ++activeRequestId
+        lastRefreshStartedAt = Date.now()
+        running = true
         loading.value = true
 
         try {
@@ -63,6 +87,14 @@ export function useRealtimeRefresh(
         } finally {
             if (requestId === activeRequestId) {
                 loading.value = false
+            }
+
+            running = false
+
+            if (queuedRefresh && !destroyed) {
+                const nextRefresh = queuedRefresh
+                queuedRefresh = null
+                runRefresh(nextRefresh.reason, nextRefresh.event)
             }
         }
     }

@@ -42,11 +42,22 @@ const loadHouseList = async () => {
 const loadDetail = async () => {
     const res = await getOwnerDetail(Number(route.query.id))
 
-    form.value = res.data.data
+    form.value = {
+        ...res.data.data,
+        id_card: '',
+    }
 }
 
 const submitForm = async () => {
-    await updateOwner(Number(route.query.id), form.value)
+    const payload = {
+        ...form.value,
+    }
+
+    if (!payload.id_card) {
+        delete (payload as Partial<typeof form.value>).id_card
+    }
+
+    await updateOwner(Number(route.query.id), payload)
 
     ElMessage.success('修改成功')
 
@@ -105,7 +116,7 @@ onMounted(() => {
             </el-form-item>
 
             <el-form-item label="身份证">
-                <el-input v-model="form.id_card" />
+                <el-input v-model="form.id_card" placeholder="留空则不修改身份证号" />
             </el-form-item>
             <el-form-item label="身份证照片">
                 <Upload
