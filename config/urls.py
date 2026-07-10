@@ -3,10 +3,44 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.http import JsonResponse
+from django.urls import include, path, re_path
+
+
+def api_root(_request):
+    return JsonResponse(
+        {
+            "name": "Property Management System API",
+            "status": "ok",
+            "endpoints": {
+                "auth": "/api/auth/",
+                "menu": "/api/menu/",
+                "notice": "/api/notice/",
+                "permission": "/api/permission/",
+                "role": "/api/role/",
+                "user": "/api/user/",
+                "community": "/api/community/",
+                "building": "/api/building/",
+                "unit": "/api/unit/",
+                "house": "/api/house/",
+                "owner": "/api/owner/",
+                "parking": "/api/parking/",
+                "car": "/api/car/",
+                "repair": "/api/repair/",
+                "fee": "/api/fee/",
+                "dashboard": "/api/dashboard/",
+                "log": "/api/log/",
+                "upload": "/api/upload/",
+                "visitor": "/api/visitor/",
+                "complaint": "/api/complaint/",
+                "chat": "/api/chat/",
+            },
+        }
+    )
 
 urlpatterns = [
     path("admin/", admin.site.urls),  # Django 管理后台入口。
+    re_path(r"^api/?$", api_root),  # API 根路径，便于浏览器直接访问和部署健康检查。
     # 认证路由使用 /api/auth/ 作为唯一前端调用前缀。
     path("api/auth/", include("apps.users.urls.auth_urls")),
     # RBAC 分块：菜单、权限、角色和用户管理按资源独立挂载。
