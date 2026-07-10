@@ -12,8 +12,6 @@
 - 前端本地默认地址：`http://127.0.0.1:5173`
 - 初始化数据：`wyglxx2026.sql`
 
-> 公网地址用于项目展示和接口联调；公网 IP 可用于云服务器部署、数据库白名单、接口访问白名单或面试 Demo 环境说明。正式上线时建议绑定域名并启用 HTTPS。
-
 ## 项目重点
 
 - 前后端分离架构：Django 负责业务接口和权限控制，Vue 负责管理端交互与数据展示。
@@ -136,7 +134,7 @@ mysql -u root -p property_management < wyglxx2026.sql
 ```env
 MYSQL_DATABASE=property_management
 MYSQL_USER=root
-MYSQL_PASSWORD=你的数据库密码
+MYSQL_PASSWORD=数据库密码
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 ```
