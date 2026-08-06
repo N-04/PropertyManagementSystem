@@ -1,6 +1,6 @@
 # 物业管理系统｜Django + Vue 前后端分离项目
 
-面向物业公司日常管理场景开发的后台管理系统，覆盖小区房产、业主档案、车辆车位、物业收费、报修工单、访客登记、公告投诉、角色权限和日志审计等核心业务。项目采用 Django REST Framework + Vue 3 前后端分离架构，适合作为 Python/Web 后端或全栈方向面试作品展示。
+面向物业公司日常管理场景开发的后台管理系统，覆盖小区房产、业主档案、车辆车位、物业收费、报修工单、访客登记、公告投诉、角色权限和日志审计等核心业务。项目采用 Django REST Framework + Vue 3 前后端分离架构。
 
 ## 快速入口
 
@@ -16,10 +16,10 @@
 
 | 角色 | 用户名 | 密码 |
 | --- | --- | --- |
-| 物业管理员 | `property_admin_demo` |  |
-| 财务人员 | `finance_demo` |  |
-| 维修员 | `repairer_demo` |  |
-| 业主 | `owner_dem` |  |
+| 物业管理员 | `property_admin_demo` | Wy@HMAR48GK2026 |
+| 财务人员 | `finance_demo` | Wy@pXPhQuB12026 |
+| 维修员 | `repairer_demo` | Wy@H64u2IXI2026 |
+| 业主 | `owner_dem` | Wy@Pli2hPZO2026 |
 
 ## 项目亮点
 
