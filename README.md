@@ -16,10 +16,10 @@
 
 | 角色 | 用户名 | 密码 |
 | --- | --- | --- |
-| 物业管理员 | `property_admin_demo` | Wy@HMAR48GK2026 |
-| 财务人员 | `finance_demo` | Wy@pXPhQuB12026 |
-| 维修员 | `repairer_demo` | Wy@H64u2IXI2026 |
-| 业主 | `owner_dem` | Wy@Pli2hPZO2026 |
+| 物业管理员 | `property_admin_demo` |  |
+| 财务人员 | `finance_demo` |  |
+| 维修员 | `repairer_demo` |  |
+| 业主 | `owner_dem` |  |
 
 ## 项目亮点
 
