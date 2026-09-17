@@ -7,7 +7,6 @@
 - 项目公网地址：http://123.57.75.124
 - 公网 API 根地址：[http://123.57.75.124/api](http://123.57.75.124/api/auth/captcha/)
 - GitHub 仓库：https://github.com/N-04/PropertyManagementSystem
-- Apifox 测试报告：[查看核心接口回归报告](docs/apifox/reports/apifox-core-regression-2026-09-17.html)
 - 公网 IP：`123.57.75.124`
 - 初始化数据：`wyglxx2026.sql`
 
@@ -39,7 +38,7 @@
 - 测试日期：2026-09-17
 - 测试环境：本地 Django API（`http://127.0.0.1:8000`）
 - 测试范围：验证码登录、JWT、房产与业主、收费、报修、访客、数据看板等核心接口
-- HTML 报告：[Apifox 核心接口回归报告](docs/apifox/reports/apifox-core-regression-2026-09-17.html)
+- HTML 报告：[Apifox 核心接口回归报告](apifox-core-regression-2026-09-17.html)
 
 ## 技术栈
 
