@@ -7,6 +7,7 @@
 - 项目公网地址：http://123.57.75.124
 - 公网 API 根地址：[http://123.57.75.124/api](http://123.57.75.124/api/auth/captcha/)
 - GitHub 仓库：https://github.com/N-04/PropertyManagementSystem
+- Apifox 测试报告：[查看核心接口回归报告](docs/apifox/reports/apifox-core-regression-2026-09-17.html)
 - 公网 IP：`123.57.75.124`
 - 初始化数据：`wyglxx2026.sql`
 
@@ -30,6 +31,15 @@
 - 部署友好：支持环境变量配置数据库、密钥、跨域、Allowed Hosts、HTTPS 和 Gunicorn。
 - 演示数据可恢复：提供 MySQL 初始化 SQL，便于本地部署、云服务器部署和面试现场演示。
 - 工程结构清晰：Django 按业务 app 拆分，Vue 按 api、views、components、router、stores 分层。
+
+## 接口测试
+
+项目使用 Apifox 对登录鉴权、权限校验以及核心业务流程执行自动化回归测试。本次报告共执行 43 个 HTTP 请求和 125 条断言，失败数均为 0，通过率为 100%。
+
+- 测试日期：2026-09-17
+- 测试环境：本地 Django API（`http://127.0.0.1:8000`）
+- 测试范围：验证码登录、JWT、房产与业主、收费、报修、访客、数据看板等核心接口
+- HTML 报告：[Apifox 核心接口回归报告](docs/apifox/reports/apifox-core-regression-2026-09-17.html)
 
 ## 技术栈
 
