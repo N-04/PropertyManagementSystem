@@ -7,7 +7,7 @@
 - 项目公网地址：http://123.57.75.124
 - 公网 API 根地址：[http://123.57.75.124/api](http://123.57.75.124/api/auth/captcha/)
 - GitHub 仓库：https://github.com/N-04/PropertyManagementSystem
-- APIFOX报告：[Apifox 核心接口回归报告](docs/apifox/reports/apifox-core-regression-2026-09-17.html)
+- APIFOX报告：(docs/apifox/reports/apifox-core-regression-2026-09-17.html)
 - 公网 IP：`123.57.75.124`
 - 初始化数据：`wyglxx2026.sql`
 
